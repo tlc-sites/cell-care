@@ -145,6 +145,9 @@ nav.tabs button[aria-current=page] { color: var(--accent); border-top-color: var
 }
 .center { text-align: center; }
 .empty { text-align: center; color: var(--muted); padding: 24px 8px; }
+details.cellbox { border-top: 1px solid var(--line); padding: 10px 0; }
+details.cellbox:first-of-type { border-top: 0; }
+details.cellbox summary { cursor: pointer; min-height: 32px; }
 .loading { text-align: center; color: var(--muted); padding: 48px 8px; }
 .sel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } h1 { font-size: 23px; } }
@@ -273,7 +276,7 @@ async function render() {
     if (v.name === 'detail') return await viewReportDetail(app, v);
     if (v.name === 'dashboard') return await viewDashboard(app, v);
     if (v.name === 'group') return await viewGroup(app, v);
-    if (v.name === 'adminHome') return viewAdminHome(app);
+    if (v.name === 'adminHome') return await viewAdminHome(app);
   } catch (e) {
     console.error(e);
     setTop('', S.stack.length > 0); renderTabs(true);
@@ -285,11 +288,12 @@ async function render() {
 /* =====================================================================
    로그인
    ===================================================================== */
-const LOGIN = { email: '', sent: false, busy: false, msg: '' };
+const LOGIN = { email: '', sent: false, busy: false, msg: '', mode: 'login', regName: '', regDone: false, notApproved: false };
 
 function viewLogin() {
   S.ctx = null; setTop(''); renderTabs(false);
   const app = $('#app');
+  if (LOGIN.mode === 'register') return viewRegister(app);
   app.innerHTML = `
     <h1>주님의교회 셀 케어</h1>
     <p class="sub">셀 모임 보고와 목양 기록을 함께 나누는 공간입니다.</p>
@@ -310,7 +314,48 @@ function viewLogin() {
         <button class="link" data-act="login-reset">다른 이메일로 다시 받기</button>
       `}
       ${LOGIN.msg ? `<div class="banner warn" role="alert">${esc(LOGIN.msg)}</div>` : ''}
+    </div>
+    ${!LOGIN.sent ? `<div class="card stack" style="margin-top:16px">
+      <p style="margin:0"><b>처음 오셨나요?</b></p>
+      <p class="small muted" style="margin:0">이름과 이메일을 적어 등록을 신청해 주세요. 확인을 마치면 그 이메일로 로그인하실 수 있습니다.</p>
+      <button class="btn ghost" data-act="reg-open">등록 신청하기</button>
+    </div>` : ''}`;
+}
+
+/* 등록 신청 (로그인 전) — 명단에 미리 있는 이름과 맞춰 관리자가 승인 */
+function viewRegister(app) {
+  app.innerHTML = `
+    <h1>셀 케어 등록 신청</h1>
+    <p class="sub">셀리더·Leadership으로 섬기시는 분이 처음 한 번만 신청하시면 됩니다.</p>
+    <div class="card stack" style="margin-top:16px">
+      ${LOGIN.regDone ? `
+        <div class="banner"><b>신청이 접수되었습니다</b>담당자가 확인한 뒤 승인해 드립니다. 승인되면 ${esc(LOGIN.email)} 주소로 로그인하실 수 있어요.</div>
+        <p class="small muted" style="margin:0">이미 등록된 이메일이라면 바로 로그인하셔도 됩니다.</p>
+        <button class="btn" data-act="reg-close">로그인 화면으로</button>
+      ` : `
+        <label class="field">이름
+          <input id="reg-name" type="text" autocomplete="name" maxlength="40" placeholder="예) 홍길동" value="${esc(LOGIN.regName)}">
+        </label>
+        <label class="field">이메일
+          <input id="reg-email" type="email" inputmode="email" autocomplete="email" maxlength="200" placeholder="자주 확인하시는 이메일" value="${esc(LOGIN.email)}">
+        </label>
+        <p class="tiny muted" style="margin:0">적어 주신 이름과 이메일은 셀 케어 로그인에만 쓰이고, 담당 관리자만 볼 수 있습니다.</p>
+        <button class="btn" data-act="reg-send" ${LOGIN.busy ? 'disabled' : ''}>${LOGIN.busy ? '보내는 중…' : '신청하기'}</button>
+        <button class="link" data-act="reg-close">로그인 화면으로 돌아가기</button>
+      `}
+      ${LOGIN.msg ? `<div class="banner warn" role="alert">${esc(LOGIN.msg)}</div>` : ''}
     </div>`;
+}
+async function sendRegister() {
+  const name = ($('#reg-name')?.value || '').trim();
+  const email = ($('#reg-email')?.value || '').trim().toLowerCase();
+  LOGIN.regName = name; LOGIN.email = email; LOGIN.msg = '';
+  if (name.length < 2) { LOGIN.msg = '이름을 적어 주세요.'; return viewLogin(); }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { LOGIN.msg = '이메일 주소를 다시 확인해 주세요.'; return viewLogin(); }
+  LOGIN.busy = true; viewLogin();
+  try { await rpc('request_access', { p_name: name, p_email: email }); LOGIN.regDone = true; }
+  catch (e) { LOGIN.msg = errText(e); }
+  LOGIN.busy = false; viewLogin();
 }
 async function sendLogin() {
   const email = ($('#login-email')?.value || '').trim().toLowerCase();
@@ -318,12 +363,13 @@ async function sendLogin() {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { LOGIN.msg = '이메일 주소를 다시 확인해 주세요.'; return viewLogin(); }
   LOGIN.busy = true; viewLogin();
   const { error } = await sb.auth.signInWithOtp({
-    email, options: { shouldCreateUser: false, emailRedirectTo: location.origin + location.pathname }
+    email, options: { shouldCreateUser: true, emailRedirectTo: location.origin + location.pathname }
   });
   LOGIN.busy = false;
   if (error) {
     const m = error.message || ''; const code = error.code || '';
-    if (code === 'signup_disabled' || /for this instance/i.test(m)) LOGIN.msg = '등록은 되어 있지만 아직 초대를 수락하지 않으셨어요. 받으신 초대 메일의 링크를 먼저 눌러 주세요. 메일이 없다면 담당 교역자에게 초대를 다시 요청해 주세요.';
+    if (code === 'unexpected_failure' || /Database error|NOT_APPROVED/i.test(m)) LOGIN.msg = '아직 승인되지 않은 이메일입니다. 아래 「등록 신청하기」로 먼저 신청해 주세요. 이미 신청하셨다면 승인 후 다시 시도해 주세요.';
+    else if (code === 'signup_disabled' || /for this instance/i.test(m)) LOGIN.msg = '등록은 되어 있지만 아직 초대를 수락하지 않으셨어요. 받으신 초대 메일의 링크를 먼저 눌러 주세요. 메일이 없다면 담당 교역자에게 초대를 다시 요청해 주세요.';
     else if (code === 'otp_disabled' || /signup|not allowed|not found|Signups/i.test(m)) LOGIN.msg = '아직 등록되지 않은 이메일입니다. 담당 교역자에게 문의해 주세요.';
     else if (/rate|security purposes|seconds/i.test(m)) LOGIN.msg = '메일을 너무 자주 요청했습니다. 잠시 후 다시 시도해 주세요.';
     else LOGIN.msg = '메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요. (' + m + ')';
@@ -1020,14 +1066,125 @@ async function viewGroup(app, v) {
 }
 
 /* =====================================================================
-   관리 (1차: 안내만)
+   관리 — 등록 승인, 등록 현황, 셀 명단 (보고서·목양 기록은 보이지 않음)
    ===================================================================== */
-function viewAdminHome(app) {
+const ADMIN = { open: 'requests', pick: {} };
+async function loadAdminData() {
+  const today = S.ctx.today;
+  const cur = (x) => x.start_date <= today && (!x.end_date || x.end_date >= today);
+  const [reqs, people, roles, cells, leaders, asg, members] = await Promise.all([
+    q(sb.from('access_requests').select('id, name, email, matched_profile_id, status, created_at').eq('status', 'pending').order('created_at')),
+    q(sb.from('profiles').select('id, name, email, auth_user_id, active').order('name')),
+    q(sb.from('user_roles').select('user_id, role')),
+    q(sb.from('cells').select('id, name, campus, review_mode, active').eq('active', true).order('name')),
+    q(sb.from('cell_leaders').select('cell_id, user_id, start_date, end_date, is_primary')),
+    q(sb.from('leadership_assignments').select('cell_id, leadership_user_id, start_date, end_date')),
+    q(sb.from('cell_members').select('cell_id, name, member_type, active, joined_at, left_at').eq('active', true))
+  ]);
+  const P = new Map(people.map(p => [p.id, { ...p, roles: [], leads: [], oversees: [] }]));
+  roles.forEach(r => P.get(r.user_id)?.roles.push(r.role));
+  const C = new Map(cells.map(c => [c.id, { ...c, leaders: [], resp: null, members: [] }]));
+  leaders.filter(cur).sort((a, b) => b.is_primary - a.is_primary).forEach(l => { const c = C.get(l.cell_id), p = P.get(l.user_id); if (c && p) { c.leaders.push(p); p.leads.push(c); } });
+  asg.filter(cur).forEach(a => { const c = C.get(a.cell_id), p = P.get(a.leadership_user_id); if (c && p) { c.resp = p; p.oversees.push(c); } });
+  members.filter(m => m.member_type === 'member' && (!m.left_at || m.left_at >= today) && (!m.joined_at || m.joined_at <= today))
+    .forEach(m => C.get(m.cell_id)?.members.push(m.name));
+  return { reqs, P, C };
+}
+const ROLE_KO = { leadership: 'Leadership', senior_pastor: 'Senior Pastor', samonim: 'Samonim', admin: '관리자' };
+function personSummary(p) {
+  const bits = [];
+  if (p.leads.length) bits.push(p.leads.map(c => c.name).join(', ') + ' 셀리더');
+  if (p.oversees.length) bits.push('Leadership · 담당 셀 ' + p.oversees.length + '개');
+  const extra = p.roles.filter(r => r !== 'leadership').map(r => ROLE_KO[r]);
+  if (extra.length) bits.push(extra.join(', '));
+  return bits.join(' · ') || '맡은 셀·역할 없음';
+}
+function isRegistered(p) { return !!p.email; }
+async function viewAdminHome(app) {
   setTop('관리', false); renderTabs(true);
-  app.innerHTML = `<h1>관리</h1>
-    <div class="card stack"><p style="margin:0">명단·셀·담당 배정을 관리하는 화면은 2차에서 만듭니다.</p>
-    <p class="muted small" style="margin:0">지금은 Supabase 대시보드에서 관리합니다. 대시보드에서 직접 고친 내용은 변경 기록에 “누가”가 남지 않으니, 정정 기록표에 날짜·작업자·사유를 함께 적어 주세요.</p>
-    <p class="muted small" style="margin:0">관리자 역할만으로는 보고서와 목양 기록을 볼 수 없습니다.</p></div>`;
+  const { reqs, P, C } = await loadAdminData();
+  const people = [...P.values()].filter(p => p.active);
+  const waiting = people.filter(p => !isRegistered(p));
+  const done = people.filter(isRegistered);
+  const unclaimed = waiting.slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  const sec = (id, title, count, body) => `
+    <button class="listitem" data-act="ad-section" data-v="${id}" aria-expanded="${ADMIN.open === id}" style="margin-top:12px">
+      <span class="top"><b>${title}</b><span class="pill ${id === 'requests' && count ? 'warn' : ''}">${count}</span></span></button>
+    ${ADMIN.open === id ? '<div class="stack" style="margin-top:8px">' + body + '</div>' : ''}`;
+
+  let h = `<h1>관리</h1>
+    <div class="stats" style="margin-top:12px">
+      <div class="stat ${reqs.length ? 'warn' : ''}"><div class="v">${reqs.length}</div><div class="k">승인 대기</div></div>
+      <div class="stat"><div class="v">${done.length} / ${people.length}</div><div class="k">등록 완료</div></div>
+      <div class="stat"><div class="v">${C.size}</div><div class="k">셀</div></div></div>`;
+
+  // 1) 등록 신청
+  const reqBody = reqs.length ? reqs.map(r => {
+    const m = r.matched_profile_id && P.get(r.matched_profile_id);
+    const ok = m && !isRegistered(m);
+    const sel = ADMIN.pick[r.id] || (ok ? m.id : '');
+    return `<div class="card stack">
+      <div class="row"><b style="font-size:1.1em">${esc(r.name)}</b><span class="spacer"></span><span class="tiny muted">${new Date(r.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span></div>
+      <div class="small">${esc(r.email)}</div>
+      ${ok ? `<div class="banner small"><b>명단에서 찾았습니다: ${esc(m.name)}</b>${esc(personSummary(m))}</div>`
+           : `<div class="banner warn small"><b>명단에서 같은 이름을 찾지 못했습니다</b>아래에서 이 분이 누구인지 골라 주세요. 모르는 분이면 거절해 주세요.</div>`}
+      <label class="field small">이 신청을 연결할 사람
+        <select data-adpick="${r.id}">
+          <option value="">— 골라 주세요 —</option>
+          ${unclaimed.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)} · ${esc(personSummary(p))}</option>`).join('')}
+        </select></label>
+      <div class="row" style="gap:8px">
+        <button class="btn sm" data-act="ad-approve" data-id="${r.id}" ${sel ? '' : 'disabled'}>승인</button>
+        <button class="btn sm ghost" data-act="ad-reject" data-id="${r.id}">거절</button></div>
+    </div>`;
+  }).join('') : '<p class="empty">지금 승인을 기다리는 신청이 없습니다.</p>';
+  h += sec('requests', '등록 신청', reqs.length, reqBody);
+
+  // 2) 등록 현황
+  const line = (p) => `<div class="member"><div class="row"><b>${esc(p.name)}</b><span class="spacer"></span>${isRegistered(p) ? `<span class="pill ok">${p.auth_user_id ? '로그인함' : '승인됨'}</span>` : '<span class="pill">아직</span>'}</div>
+    <div class="tiny muted">${esc(personSummary(p))}${isRegistered(p) ? ' · ' + esc(p.email) : ''}</div></div>`;
+  h += sec('people', '등록 현황', `${done.length} / ${people.length}`,
+    `<div class="card">${waiting.length ? '<h3 style="margin-top:0">아직 등록하지 않은 분 ' + waiting.length + '명</h3>' + waiting.map(line).join('') : '<p style="margin:0">모든 분이 등록을 마치셨습니다.</p>'}</div>` +
+    (done.length ? `<div class="card"><h3 style="margin-top:0">등록을 마친 분 ${done.length}명</h3>${done.map(line).join('')}</div>` : ''));
+
+  // 3) 셀 명단 (담당별)
+  const groups = new Map();
+  for (const c of C.values()) {
+    const key = c.review_mode === 'leadership' ? (c.resp ? c.resp.name : '담당 Leadership 없음') : c.review_mode === 'senior_direct' ? 'Senior Pastor / Samonim 직접 확인' : '검토 없음';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c);
+  }
+  const gsorted = [...groups.entries()].sort((a, b) => (a[0].startsWith('Senior') ? 1 : 0) - (b[0].startsWith('Senior') ? 1 : 0) || a[0].localeCompare(b[0], 'ko'));
+  const cellBody = gsorted.map(([g, cs]) => `<div class="card"><h3 style="margin-top:0">${esc(g)} <span class="tiny muted">셀 ${cs.length}개 · 셀원 ${cs.reduce((n, c) => n + c.members.length, 0)}명</span></h3>
+    ${cs.map(c => `<details class="cellbox"><summary><b>${esc(c.name)}</b> <span class="tiny muted">셀원 ${c.members.length}명</span></summary>
+      <div class="small" style="margin:6px 0">셀리더: ${c.leaders.map(p => esc(p.name)).join(', ') || '배정 전'}</div>
+      <div class="small muted">${c.members.map(esc).join(' · ') || '셀원 없음'}</div></details>`).join('')}</div>`).join('');
+  h += sec('cells', '셀 명단', C.size + '개', cellBody);
+
+  h += `<div class="card stack" style="margin-top:20px">
+    <p class="small muted" style="margin:0">셀원 이동, 셀리더·담당 변경은 아직 Supabase 대시보드에서 합니다. 대시보드에서 고친 내용은 변경 기록에 “누가”가 남지 않으니, 정정 기록표에 날짜·작업자·사유를 함께 적어 주세요.</p>
+    <p class="small muted" style="margin:0">관리자 역할만으로는 보고서와 목양 기록을 볼 수 없습니다.</p></div>`;
+  app.innerHTML = h;
+}
+document.addEventListener('change', (e) => {
+  const el = e.target.closest('[data-adpick]'); if (!el) return;
+  ADMIN.pick[el.dataset.adpick] = el.value;
+  const btn = document.querySelector(`[data-act=ad-approve][data-id="${el.dataset.adpick}"]`); if (btn) btn.disabled = !el.value;
+});
+async function adminDecide(id, approve) {
+  try {
+    if (approve) {
+      const pid = document.querySelector(`[data-adpick="${id}"]`)?.value;
+      if (!pid) return toast('연결할 사람을 골라 주세요.');
+      await rpc('admin_approve_request', { p_request: id, p_profile: pid });
+      toast('승인했습니다. 이제 그 이메일로 로그인하실 수 있습니다.');
+    } else {
+      await rpc('admin_reject_request', { p_request: id });
+      toast('거절했습니다.');
+    }
+    delete ADMIN.pick[id];
+  } catch (e) { toast(errText(e), 4500); }
+  render();
 }
 
 /* =====================================================================
@@ -1045,6 +1202,12 @@ document.addEventListener('click', async (e) => {
     case 'send-login': return sendLogin();
     case 'verify-code': return verifyCode();
     case 'login-reset': Object.assign(LOGIN, { sent: false, msg: '' }); return viewLogin();
+    case 'reg-open': Object.assign(LOGIN, { mode: 'register', msg: '', regDone: false }); return viewLogin();
+    case 'reg-close': Object.assign(LOGIN, { mode: 'login', msg: '', regDone: false }); return viewLogin();
+    case 'reg-send': return sendRegister();
+    case 'ad-approve': return adminDecide(d.id, true);
+    case 'ad-reject': return adminDecide(d.id, false);
+    case 'ad-section': ADMIN.open = ADMIN.open === d.v ? '' : d.v; return render();
     case 'start-report': return startReport(d.cell, d.week);
     case 'open-report': return go({ name: 'report', id: d.id });
     case 'open-editor': return go({ name: 'report', id: d.id }, { replace: true });
