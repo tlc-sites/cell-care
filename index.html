@@ -302,9 +302,9 @@ function viewLogin() {
         <p class="tiny muted" style="margin:0">비밀번호 없이, 메일로 받은 링크나 코드로 로그인합니다.</p>
       ` : `
         <div class="banner"><b>메일을 보냈습니다</b>${esc(LOGIN.email)} 메일함을 확인해 주세요.</div>
-        <p class="small" style="margin:0">메일 속 <b>로그인 링크</b>를 누르면 바로 들어옵니다. 링크는 이 휴대폰(또는 컴퓨터)의 인터넷 앱에서 열어 주세요.</p>
-        <label class="field">메일에 6자리 코드가 있다면 여기에 입력해 주세요
-          <input id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456">
+        <p class="small" style="margin:0">메일에 있는 <b>숫자 코드</b>를 아래에 입력하거나, 메일 속 <b>로그인 링크</b>를 눌러 주세요. 링크는 이 휴대폰(또는 컴퓨터)의 인터넷 앱에서 열어 주세요.</p>
+        <label class="field">메일에 숫자 코드가 있다면 여기에 입력해 주세요
+          <input id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="메일로 받은 숫자">
         </label>
         <button class="btn" data-act="verify-code" ${LOGIN.busy ? 'disabled' : ''}>코드로 로그인</button>
         <button class="link" data-act="login-reset">다른 이메일로 다시 받기</button>
@@ -333,7 +333,7 @@ async function sendLogin() {
 }
 async function verifyCode() {
   const token = ($('#login-code')?.value || '').replace(/\D/g, '');
-  if (token.length !== 6) { LOGIN.msg = '6자리 숫자를 입력해 주세요.'; return viewLogin(); }
+  if (token.length < 6 || token.length > 10) { LOGIN.msg = '메일로 받은 숫자 코드를 그대로 입력해 주세요.'; return viewLogin(); }
   LOGIN.busy = true; LOGIN.msg = ''; viewLogin();
   const { error } = await sb.auth.verifyOtp({ email: LOGIN.email, token, type: 'email' });
   LOGIN.busy = false;
