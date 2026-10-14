@@ -321,6 +321,7 @@ async function render() {
     if (v.name === 'noteEdit') return viewNoteEdit(app, v);
     if (v.name === 'lrEdit') return await viewLrEdit(app, v);
     if (v.name === 'lrRead') return await viewLrRead(app, v);
+    if (v.name === 'issues') return await viewIssues(app, v);
   } catch (e) {
     console.error(e);
     setTop('', S.stack.length > 0); renderTabs(true);
@@ -642,6 +643,12 @@ async function startReport(cell, week) {
    보고서 작성 (5단계) — 제출 전에는 수정, 제출 후에는 읽기 화면
    ===================================================================== */
 const STEPS = ['모임', '출석', '셀 케어', '은혜', '확인'];
+/* 관계 기록: 서로 어려워함 / 이 분이 상대 때문에 어려워함 */
+function relText(subject, other, kind) {
+  if (!other) return '';
+  return kind === 'one_way' ? tr(subject + ' → ' + other + ' (' + other + ' 때문에 어려워함)', subject + ' → ' + other + ' (troubled by ' + other + ')')
+    : tr(subject + ' ↔ ' + other + ' (서로 어려워함)', subject + ' ↔ ' + other + ' (mutual difficulty)');
+}
 let E = null; // 편집 중인 보고서
 
 async function loadEditor(id) {
@@ -666,7 +673,7 @@ async function loadEditor(id) {
       meeting_held: rep.meeting_held, meeting_date: rep.meeting_date || '', meeting_cancel_reason: rep.meeting_cancel_reason || '',
       grace_notes: rep.grace_notes || '', grace_none: false, leader_message: rep.leader_message === 'share_up' ? 'none' : (rep.leader_message || 'none'),
       att, pu,
-      notes: notes.map(n => ({ member_id: n.member_id, category: n.category, content: n.content, attention: n.leadership_attention_required })),
+      notes: notes.map(n => ({ member_id: n.member_id, category: n.category, content: n.content, attention: n.leadership_attention_required, related_member_id: n.related_member_id || '', related_name: n.related_name || '', related_mode: n.related_member_id ? 'member' : n.related_name ? 'other' : '', relation_kind: n.relation_kind || 'mutual' })),
       hasCare: notes.length ? true : (rep.version > 2 ? false : null)
     },
     version: rep.version, dirty: false, saving: false, saveMsg: '', conflict: false, confirm: false, newName: '', newReg: false, showAdd: false
@@ -764,6 +771,13 @@ function renderEditor() {
             ${people.map(p => `<option value="${p.member_id}" ${p.member_id === n.member_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
           <div><div style="font-weight:500;margin-bottom:6px">유형</div><div class="chips">${Object.keys(L.care).map(k =>
             `<button class="chip" data-act="ed-cat" data-i="${i}" data-v="${k}" aria-pressed="${n.category === k}">${LX('care', k)}</button>`).join('')}</div></div>
+          ${n.category === 'relationship' ? `<div class="stack" style="gap:8px;background:var(--accent-soft);border-radius:12px;padding:10px 12px">
+            <label class="field" style="margin:0">누구와의 관계인가요? <span class="tiny muted" style="font-weight:400">알면 골라 주세요</span><select data-note="${i}" data-f="related"><option value="">고르지 않음</option>
+              ${people.filter(p => p.member_id !== n.member_id).map(p => `<option value="${p.member_id}" ${p.member_id === n.related_member_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+              <option value="__other" ${n.related_mode === 'other' ? 'selected' : ''}>다른 셀·교회 밖 (이름 직접 적기)</option></select></label>
+            ${n.related_mode === 'other' ? `<input type="text" data-note="${i}" data-f="related_name" maxlength="60" placeholder="상대 이름 (예: 홍길동 집사)" value="${esc(n.related_name || '')}">` : ''}
+            ${n.related_member_id || n.related_mode === 'other' ? `<div class="seg" style="--n:2"><button data-act="ed-relkind" data-i="${i}" data-v="mutual" aria-pressed="${n.relation_kind !== 'one_way'}">서로 어려워함</button><button data-act="ed-relkind" data-i="${i}" data-v="one_way" aria-pressed="${n.relation_kind === 'one_way'}">이 분이 상대 때문에 어려워함</button></div>` : ''}
+          </div>` : ''}
           <label class="field">내용<textarea data-note="${i}" data-f="content" rows="4" placeholder="${n.category === 'prayer' ? '기도제목을 적어 주세요. 다음 주부터 “지난 기도제목”으로 이어집니다.' : '나누고 싶은 내용을 적어 주세요.'}">${esc(n.content)}</textarea></label>
           <label class="check"><input type="checkbox" data-note-attn="${i}" ${n.attention ? 'checked' : ''}><span>Leadership 확인 필요</span></label>
         </div>`).join('') + '</div>' +
@@ -784,7 +798,7 @@ function renderEditor() {
       <div class="card"><div class="row"><h3 style="margin:0">출석</h3><span class="spacer"></span><button class="link" data-act="ed-step" data-v="1">고치기</button></div>
         참석 ${present}명 · 결석 ${absent.length}명${absent.length ? '<div class="small muted">' + absent.map(([id, a]) => esc(name(id)) + (a.absence_reason ? ' (' + esc(a.absence_reason) + ')' : '')).join(', ') + '</div>' : ''}</div>
       <div class="card"><div class="row"><h3 style="margin:0">셀 케어</h3><span class="spacer"></span><button class="link" data-act="ed-step" data-v="2">고치기</button></div>
-        ${m.notes.filter(n => n.content.trim()).length ? m.notes.filter(n => n.content.trim()).map(n => `<div class="note ${n.attention ? 'attn' : ''}"><b>${esc(name(n.member_id))}</b> · ${LX('care', n.category) || ''}${n.attention ? ' · <span style="color:var(--warn)">Leadership 확인 필요</span>' : ''}<div class="small">${nl2br(n.content)}</div></div>`).join('') : '<span class="muted">나눌 셀원 없음</span>'}
+        ${m.notes.filter(n => n.content.trim()).length ? m.notes.filter(n => n.content.trim()).map(n => `<div class="note ${n.attention ? 'attn' : ''}"><b>${esc(name(n.member_id))}</b> · ${LX('care', n.category) || ''}${n.attention ? ' · <span style="color:var(--warn)">Leadership 확인 필요</span>' : ''}${n.category === 'relationship' && (n.related_member_id || (n.related_mode === 'other' && n.related_name)) ? '<div class="tiny muted">' + esc(relText(name(n.member_id), n.related_member_id ? name(n.related_member_id) : n.related_name, n.relation_kind)) + '</div>' : ''}<div class="small">${nl2br(n.content)}</div></div>`).join('') : '<span class="muted">나눌 셀원 없음</span>'}
         ${Object.keys(m.pu).length ? '<div class="small muted" style="margin-top:6px">지난 기도제목 ' + Object.keys(m.pu).length + '건 업데이트</div>' : ''}</div>
       <div class="card"><div class="row"><h3 style="margin:0">은혜와 나눔</h3><span class="spacer"></span><button class="link" data-act="ed-step" data-v="3">고치기</button></div>
         ${m.grace_none ? '<span class="muted">특별히 나눌 내용이 없습니다</span>' : m.grace_notes ? nl2br(m.grace_notes) : '<span class="muted">비어 있음</span>'}</div>
@@ -824,7 +838,8 @@ function payload() {
       return { member_id: x.member_id, status: a.status, absence_reason: a.status === 'absent' ? (a.absence_reason || '') : '' };
     }),
     care_notes: m.hasCare ? m.notes.filter(n => n.member_id && n.category && n.content.trim())
-      .map(n => ({ member_id: n.member_id, category: n.category, content: n.content.trim(), leadership_attention_required: !!n.attention })) : [],
+      .map(n => ({ member_id: n.member_id, category: n.category, content: n.content.trim(), leadership_attention_required: !!n.attention,
+        related_member_id: n.category === 'relationship' ? (n.related_member_id || '') : '', related_name: n.category === 'relationship' && n.related_mode === 'other' ? (n.related_name || '') : '', relation_kind: n.relation_kind || 'mutual' })) : [],
     prayer_updates: Object.entries(m.pu).filter(([, u]) => u.status).map(([id, u]) => ({ prayer_id: id, status: u.status, note: u.note || '' }))
   };
 }
@@ -887,13 +902,17 @@ document.addEventListener('input', (e) => {
   else if (t.dataset.attReason) { (E.m.att[t.dataset.attReason] ||= { status: 'absent' }).absence_reason = t.value; markDirty(false); }
   else if (t.dataset.puNote) { (E.m.pu[t.dataset.puNote] ||= {}).note = t.value; markDirty(false); }
   else if (t.dataset.note !== undefined && t.dataset.f === 'content') { E.m.notes[+t.dataset.note].content = t.value; markDirty(false); }
+  else if (t.dataset.note !== undefined && t.dataset.f === 'related_name') { E.m.notes[+t.dataset.note].related_name = t.value; markDirty(false); }
   else if (t.id === 'new-name') E.newName = t.value;
 });
 document.addEventListener('change', (e) => {
   if (!E) return; const t = e.target;
   if (t.dataset.bindCheck) { E.m[t.dataset.bindCheck] = t.checked; markDirty(true); }
   else if (t.dataset.noteAttn !== undefined) { E.m.notes[+t.dataset.noteAttn].attention = t.checked; markDirty(false); }
-  else if (t.dataset.note !== undefined && t.dataset.f === 'member_id') { E.m.notes[+t.dataset.note].member_id = t.value; markDirty(false); }
+  else if (t.dataset.note !== undefined && t.dataset.f === 'member_id') { E.m.notes[+t.dataset.note].member_id = t.value; markDirty(E.m.notes[+t.dataset.note].category === 'relationship'); }
+  else if (t.dataset.note !== undefined && t.dataset.f === 'related') { const n = E.m.notes[+t.dataset.note];
+    if (t.value === '__other') { n.related_mode = 'other'; n.related_member_id = ''; } else { n.related_mode = t.value ? 'member' : ''; n.related_member_id = t.value; n.related_name = ''; }
+    markDirty(true); }
   else if (t.id === 'new-reg') E.newReg = t.checked;
 });
 
@@ -967,7 +986,7 @@ async function viewReportDetail(app, v) {
       ${pres.length ? '<div class="small muted">' + tr('참석', 'Present') + ': ' + pres.map(x => esc(x.name)).join(', ') + '</div>' : ''}
       ${abs.length ? '<div class="small" style="margin-top:4px">' + tr('결석', 'Absent') + ': ' + abs.map(x => esc(x.name) + (x.absence_reason ? ' (' + (TRANS.map && TRANS.map['absence:' + x.member_id] && EN() ? esc(TRANS.map['absence:' + x.member_id]) : esc(x.absence_reason)) + ')' : '')).join(', ') + '</div>' : ''}
       ${visitors.length ? '<div class="small muted" style="margin-top:4px">' + tr('방문', 'Visitors') + ': ' + visitors.map(x => esc(x.name) + (x.member_type_now === 'member' ? tr(' → 지금은 셀원', ' → now a member') : '')).join(', ') + '</div>' : ''}</div>
-    <div class="card"><h3>${tr('셀 케어', 'Member care')}</h3>${notes.length ? notes.map(n => `<div class="note ${n.leadership_attention_required ? 'attn' : ''}"><b>${esc(memName(n.member_id))}</b> · ${LX('care', n.category)}${n.leadership_attention_required ? ' · <span style="color:var(--warn)">' + tr('Leadership 확인 필요', 'Flagged for Leadership') + '</span>' : ''}<div class="small">${TX('care:' + n.id, n.content)}</div></div>`).join('') : '<span class="muted">' + tr('나눌 셀원 없음', 'No care notes') + '</span>'}</div>
+    <div class="card"><h3>${tr('셀 케어', 'Member care')}</h3>${notes.length ? notes.map(n => `<div class="note ${n.leadership_attention_required ? 'attn' : ''}"><b>${esc(memName(n.member_id))}</b> · ${LX('care', n.category)}${n.leadership_attention_required ? ' · <span style="color:var(--warn)">' + tr('Leadership 확인 필요', 'Flagged for Leadership') + '</span>' : ''}${n.relation_kind && (n.related_member_id || n.related_name) ? '<div class="tiny muted">' + esc(relText(memName(n.member_id), n.related_member_id ? (memName(n.related_member_id) || n.related_name || '') : n.related_name, n.relation_kind)) + '</div>' : ''}<div class="small">${TX('care:' + n.id, n.content)}</div></div>`).join('') : '<span class="muted">' + tr('나눌 셀원 없음', 'No care notes') + '</span>'}</div>
     <div class="card"><h3>${tr('기도제목', 'Prayer requests')}</h3>${prayers.length || newPrayers.length ? '' : '<span class="muted">' + tr('없음', 'None') + '</span>'}
       ${newPrayers.map(p => `<div class="note"><b>${esc(memName(p.member_id))}</b> · <span class="pill accent">${tr('새 기도제목', 'New')}</span><div class="small">${TX('newprayer:' + p.id, p.content)}</div></div>`).join('')}
       ${prayers.map(p => `<div class="note"><b>${esc(p.member_name)}</b> · ${p.this_week_status ? LX('prayer', p.this_week_status) : '<span class="muted">' + tr('업데이트 없음', 'No update') + '</span>'}<div class="small">${TX('prayer:' + p.prayer_id, p.content)}${p.this_week_note ? '<br><span class="muted">' + tr('이번 주: ', 'This week: ') + (TRANS.map && TRANS.map['prayernote:' + p.prayer_id] && EN() ? esc(TRANS.map['prayernote:' + p.prayer_id]) : esc(p.this_week_note)) + '</span>' : ''}</div></div>`).join('')}</div>
@@ -1112,7 +1131,8 @@ async function viewLeadershipHome(app, v) {
     const st = !lr ? ['pill warn', '아직 작성 전'] : lr.status === 'submitted' ? ['pill ok', '제출 완료 · ' + (lr.items || []).length + '명'] : ['pill accent', '작성 중'];
     h += `<div class="card stack" style="margin-bottom:12px"><div class="row"><h3 style="margin:0">교역자 보고</h3><span class="spacer"></span><span class="${st[0]}">${st[1]}</span></div>
       <p class="muted small" style="margin:0">${lr && lr.status === 'submitted' ? dateTime(lr.submitted_at) + ' 제출 · 담임 목사님·사모님께서 보고 계십니다.' : '맡으신 분들 가운데 목사님께 전할 소식을 직접 정리해 주세요. 제출하면 바로 목사님·사모님께 보입니다.'}</p>
-      <button class="btn ${lr && lr.status === 'submitted' ? 'ghost' : ''}" data-act="lr-edit-open" data-week="${week}">${!lr ? '교역자 보고 쓰기' : lr.status === 'submitted' ? '보고 보기 · 고치기' : '이어서 쓰기'}</button></div>`;
+      <button class="btn ${lr && lr.status === 'submitted' ? 'ghost' : ''}" data-act="lr-edit-open" data-week="${week}">${!lr ? '교역자 보고 쓰기' : lr.status === 'submitted' ? '보고 보기 · 고치기' : '이어서 쓰기'}</button></div>
+      <button class="listitem" data-act="open-issues" style="margin-bottom:12px"><span class="top"><b>셀원 이슈 보기</b><span class="small muted">내 분파 · 교회 전체 →</span></span><span class="small muted">관계, 장기결석, 건강 등 이슈별로, 사람별로 모아 봅니다.</span></button>`;
   }
   h += need.length
     ? `<div class="banner warn"><b>확인이 필요한 보고서가 ${need.length}건 있습니다</b><div style="margin-top:10px"><button class="btn warn sm" data-act="open-detail" data-id="${need[0].report_id}">확인하러 가기</button></div></div>`
@@ -1238,6 +1258,7 @@ async function viewDashboard(app, v) {
     h += `<h2>${tr('이 주 성도 동정', 'Pastoral notes this week')} <span class="muted" style="font-weight:400">${wkNotes.length}</span></h2>
       <button class="listitem" data-act="lr-notes" data-week="${week}"><span class="top"><b>${wkNotes.length ? tr(wkNotes.length + '건의 동정이 있습니다', wkNotes.length + ' note(s)') : tr('이 주에 올라온 동정이 없습니다', 'No notes this week')}</b>${needs ? `<span class="pill warn">${tr('목사님 확인 필요 ' + needs, needs + ' need you')}</span>` : ''}</span><span class="small muted">${tr('주간 정리 보기 →', 'Open weekly view →')}</span></button>`;
   }
+  h += `<button class="listitem" data-act="open-issues" style="margin-top:8px"><span class="top"><b>${tr('셀원 이슈 보기', 'Member issues')}</b><span class="small muted">${tr('이슈별 · 사람별 →', 'By topic · by person →')}</span></span><span class="small muted">${tr('관계, 장기결석, 건강 등 교회 전체 셀원의 이슈를 모아 봅니다.', 'Relationships, long absences, health and more across the church.')}</span></button>`;
   h += `<h2>${tr('셀리더 보고서', 'Cell reports')}</h2>`;
   if (pending.length) h += `<div class="banner warn"><b>${tr('Leadership 확인 대기 ' + pending.length + '건', pending.length + ' report(s) awaiting Leadership review')}</b><div style="margin-top:10px"><button class="btn warn sm" data-act="db-filter" data-v="unreviewed">${tr('미확인 보기', 'Show unreviewed')}</button></div></div>`;
   h += `<div class="stats" style="margin-top:12px">
@@ -1284,6 +1305,77 @@ async function viewGroup(app, v) {
     <div class="stat"><div class="v num">${g.mode === 'none' ? '-' : g.rev + ' / ' + g.sub}</div><div class="k">${tr('확인', 'Reviewed')}</div></div>
     <div class="stat ${g.concern ? 'warn' : ''}"><div class="v">${g.concern}</div><div class="k">${tr('목양 관심', 'Attention')}</div></div></div>`;
   h += '<h2>' + tr('셀 목록', 'Cells') + '</h2><div class="stack">' + g.rows.map(r => cellItem(r)).join('') + '</div>';
+  app.innerHTML = h;
+}
+
+/* =====================================================================
+   셀원 이슈 보기 — 분파리더·목사님·사모님
+   내 분파 / 교회 전체, 기간·이슈 구분별, 사람별 묶음. 관계는 누구와 어려운지 한눈에.
+   (셀보고서 셀 케어 기록 + 내가 볼 수 있는 성도 동정)
+   ===================================================================== */
+const ISS = { scope: 'mine', weeks: 8, cat: '', view: 'person', open: {} };
+async function viewIssues(app, v) {
+  setTop(tr('셀원 이슈', 'Member issues'), true); renderTabs(true);
+  const senior = isSenior();
+  const scope = senior ? 'all' : ISS.scope;
+  const rows = await rpc('issue_board', { p_weeks: ISS.weeks, p_scope: scope });
+  const list = ISS.cat ? rows.filter(r => r.category === ISS.cat || (ISS.cat === 'relationship' && r.relation_kind)) : rows;
+  const cnt = {}; rows.forEach(r => { cnt[r.category] = (cnt[r.category] || 0) + 1; });
+  let h = `<h1>${tr('셀원 이슈 보기', 'Member issues')}</h1><p class="sub">${tr('셀보고서의 셀 케어 기록과 볼 수 있는 성도 동정을 모았습니다.', 'Care notes from cell reports and the pastoral notes you can see.')}</p>`;
+  if (!senior) h += `<div class="seg" style="--n:2;margin-top:12px"><button data-act="iss-scope" data-v="mine" aria-pressed="${ISS.scope === 'mine'}">내 분파</button><button data-act="iss-scope" data-v="all" aria-pressed="${ISS.scope === 'all'}">교회 전체</button></div>`;
+  h += `<div class="chips" style="margin-top:10px">${[4, 8, 12].map(w => `<button class="chip" data-act="iss-weeks" data-v="${w}" aria-pressed="${ISS.weeks === w}">${tr('최근 ' + w + '주', 'Last ' + w + ' wks')}</button>`).join('')}</div>`;
+  h += `<div class="chips" style="margin-top:6px"><button class="chip" data-act="iss-cat" data-v="" aria-pressed="${!ISS.cat}">${tr('전체', 'All')} ${rows.length}</button>${NOTE_CAT_KEYS.filter(k => cnt[k]).map(k => `<button class="chip" data-act="iss-cat" data-v="${k}" aria-pressed="${ISS.cat === k}">${noteCat(k)} ${cnt[k]}</button>`).join('')}</div>`;
+  h += `<div class="seg" style="--n:2;margin-top:10px"><button data-act="iss-view" data-v="person" aria-pressed="${ISS.view === 'person'}">${tr('사람별', 'By person')}</button><button data-act="iss-view" data-v="recent" aria-pressed="${ISS.view === 'recent'}">${tr('최근 순', 'Latest')}</button></div>`;
+
+  const who = (r) => r.source === 'report' ? 'm:' + r.person_id : 'n:' + r.person_name;
+  const relOther = (r) => r.related_name || '';
+  const item = (r, asOther) => `<div class="note${r.attention ? ' attn' : ''}" style="margin-top:8px">
+      <div class="row" style="flex-wrap:wrap;gap:6px"><span class="pill">${noteCat(r.category)}</span>${r.source === 'note' ? `<span class="pill accent">${tr('성도 동정', 'Pastoral note')}</span>` : ''}${asOther ? `<span class="pill warn">${tr('상대로 언급됨', 'Mentioned as the other person')}</span>` : ''}<span class="spacer"></span><span class="tiny muted">${dayLabel(r.on_date)}</span></div>
+      ${r.relation_kind && relOther(r) ? `<div class="small" style="margin-top:4px"><b>${esc(relText(r.person_name, relOther(r), r.relation_kind))}</b></div>` : ''}
+      <div class="small" style="margin-top:4px">${nl2br(r.content)}</div>
+      <div class="tiny muted" style="margin-top:2px">${r.source === 'report' ? esc(r.cell_name || '') + (r.resp_name ? ' · ' + esc(r.resp_name) : '') + ' · ' + tr('셀리더 ', 'by ') + esc(r.author_name || '') : tr('쓴 분: ', 'By ') + esc(r.author_name || '')}</div></div>`;
+
+  // 관계 한눈에: 누가 누구와
+  const rels = list.filter(r => r.relation_kind && relOther(r));
+  if (rels.length && (!ISS.cat || ISS.cat === 'relationship')) {
+    const pairs = new Map();
+    for (const r of rels) {
+      const a = r.person_name, b = relOther(r);
+      const key = r.relation_kind === 'mutual' ? 'M:' + [a, b].sort().join('|') : 'O:' + a + '|' + b;
+      if (!pairs.has(key)) pairs.set(key, { a, b, kind: r.relation_kind, n: 0, last: r.on_date, cell: r.cell_name });
+      const x = pairs.get(key); x.n++; if (r.on_date > x.last) x.last = r.on_date;
+    }
+    h += `<h2>${tr('관계 한눈에', 'Relationships at a glance')} <span class="muted" style="font-weight:400">${pairs.size}</span></h2><div class="card" style="padding:6px 14px">` +
+      [...pairs.values()].sort((x, y) => (y.last > x.last ? 1 : -1)).map(x => `<div class="row" style="padding:10px 0;border-bottom:1px solid var(--line);gap:8px;flex-wrap:wrap">
+        <b>${esc(x.a)} ${x.kind === 'mutual' ? '↔' : '→'} ${esc(x.b)}</b><span class="tiny muted">${x.kind === 'mutual' ? tr('서로 어려워함', 'mutual') : tr(x.b + ' 때문에 어려워함', 'troubled by ' + x.b)}</span>
+        <span class="spacer"></span><span class="tiny muted">${x.cell ? esc(x.cell) + ' · ' : ''}${tr(x.n + '번', x.n + '×')} · ${dayLabel(x.last)}</span></div>`).join('') + '</div>';
+  }
+
+  if (!list.length) { h += `<p class="empty" style="margin-top:16px">${tr('이 기간에 기록된 이슈가 없습니다.', 'No issues in this period.')}</p>`; app.innerHTML = h; return; }
+  if (ISS.view === 'recent') {
+    h += `<h2>${tr('최근 순', 'Latest')} <span class="muted" style="font-weight:400">${list.length}</span></h2><div class="stack" style="gap:0">` +
+      list.map(r => `<div class="card" style="margin-top:8px"><b>${esc(r.person_name)}</b>${item(r, false)}</div>`).join('') + '</div>';
+  } else {
+    const groups = new Map();
+    const add = (k, name, cell, r, asOther) => { if (!groups.has(k)) groups.set(k, { name, cell, items: [] }); groups.get(k).items.push({ r, asOther }); };
+    for (const r of list) add(who(r), r.person_name, r.cell_name, r, false);
+    // 관계 상대도 그 사람 묶음에 함께 보이게
+    for (const r of rels) {
+      const k = r.related_member_id ? 'm:' + r.related_member_id : 'n:' + relOther(r);
+      const k2 = groups.has(k) ? k : [...groups.keys()].find(g => groups.get(g).name === relOther(r)) || k;
+      add(k2, relOther(r), groups.get(k2)?.cell || (r.related_member_id ? r.cell_name : ''), r, true);
+    }
+    const arr = [...groups.entries()].map(([k, g]) => ({ k, ...g, last: g.items.reduce((m, x) => x.r.on_date > m ? x.r.on_date : m, '') }))
+      .sort((a, b) => b.items.length - a.items.length || (b.last > a.last ? 1 : -1));
+    h += `<h2>${tr('사람별', 'By person')} <span class="muted" style="font-weight:400">${arr.length}${tr('명', '')}</span></h2><div class="stack">` + arr.map(g => {
+      const cats = [...new Set(g.items.map(x => x.r.category))];
+      const open = ISS.open[g.k];
+      return `<div class="card"><button class="row" data-act="iss-open" data-k="${esc(g.k)}" style="all:unset;display:flex;width:100%;gap:8px;align-items:center;flex-wrap:wrap;cursor:pointer">
+          <b style="font-size:1.05em">${esc(g.name)}</b><span class="tiny muted">${esc(g.cell || '')}</span><span class="spacer"></span>
+          ${cats.map(c => `<span class="pill">${noteCat(c)}</span>`).join('')}<span class="tiny muted">${tr(g.items.length + '건', g.items.length + '')} ${open ? '▲' : '▼'}</span></button>
+        ${open ? g.items.sort((a, b) => (b.r.on_date > a.r.on_date ? 1 : -1)).map(x => item(x.r, x.asOther)).join('') : ''}</div>`;
+    }).join('') + '</div>';
+  }
   app.innerHTML = h;
 }
 
@@ -1746,6 +1838,12 @@ document.addEventListener('click', async (e) => {
     case 'tx-report': return translateReport(d.id);
     case 'lr-edit-open': LR.week = null; return go({ name: 'lrEdit', week: d.week });
     case 'lr-open': return go({ name: 'lrRead', id: d.id });
+    case 'open-issues': return go({ name: 'issues' });
+    case 'iss-scope': ISS.scope = d.v; return render();
+    case 'iss-weeks': ISS.weeks = +d.v; return render();
+    case 'iss-cat': ISS.cat = d.v; return render();
+    case 'iss-view': ISS.view = d.v; return render();
+    case 'iss-open': ISS.open[d.k] = !ISS.open[d.k]; return render();
     case 'lr-notes': NOTE.filter = 'week'; NOTE.week = d.week; return switchTab('notes');
     case 'lr-cat': LR.cat = d.v; document.querySelectorAll('[data-act=lr-cat]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === d.v))); return;
     case 'lr-add': return lrAdd();
@@ -1816,6 +1914,7 @@ document.addEventListener('click', async (e) => {
     case 'ed-addnote': m.notes.push({ member_id: '', category: '', content: '', attention: false }); return markDirty(true);
     case 'ed-delnote': m.notes.splice(+d.i, 1); if (!m.notes.length) m.hasCare = false; return markDirty(true);
     case 'ed-cat': m.notes[+d.i].category = d.v; return markDirty(true);
+    case 'ed-relkind': m.notes[+d.i].relation_kind = d.v; return markDirty(true);
     case 'ed-addopen': E.showAdd = true; renderEditor(); setTimeout(() => $('#new-name')?.focus(), 0); return;
     case 'ed-addcancel': E.showAdd = false; E.newName = ''; return renderEditor();
     case 'ed-addnew': {
