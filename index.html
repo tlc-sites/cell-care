@@ -317,6 +317,8 @@ async function render() {
     if (v.name === 'members') return await viewMembers(app, v);
     if (v.name === 'notesHome') return await viewNotesHome(app, v);
     if (v.name === 'noteEdit') return viewNoteEdit(app, v);
+    if (v.name === 'lrEdit') return await viewLrEdit(app, v);
+    if (v.name === 'lrRead') return await viewLrRead(app, v);
   } catch (e) {
     console.error(e);
     setTop('', S.stack.length > 0); renderTabs(true);
@@ -481,6 +483,13 @@ async function viewLeaderHome(app) {
   const revs = (ctx.my_open_reports || []).filter(r => r.status === 'revision_requested' && !(cellIds.includes(r.cell_id) && (r.week_start === thisWeek || r.week_start === lastWeek)));
   const otherOpen = (ctx.my_open_reports || []).filter(r => !(cellIds.includes(r.cell_id) && (r.week_start === thisWeek || r.week_start === lastWeek)) && r.status !== 'revision_requested');
 
+  const DL = {};
+  await Promise.all(ctx.leader_cells.flatMap(c => [thisWeek, lastWeek].map(w => rpc('cell_deadline', { p_cell: c.cell_id, p_week: w }).then(x => { DL[c.cell_id + w] = x; }).catch(() => {}))));
+  const dlText = (cell, w, r) => {
+    if (r && r.status === 'submitted') return '';
+    const d = DL[cell + w]; if (!d) return '';
+    return Date.now() > new Date(d).getTime() ? ' 마감이 지났지만 지금이라도 작성해 주세요.' : ' 마감: ' + dayLabel(kstDate(d)) + ' 낮 12시까지';
+  };
   let h = `<h1>안녕하세요, ${esc(honorific(S.me.name))}</h1>`;
   if (revs.length) {
     h += '<div class="stack" style="margin-top:12px">' + revs.map(r => `
@@ -501,7 +510,7 @@ async function viewLeaderHome(app) {
       h += `<div class="card stack">
         <div class="row"><h3 style="margin:0">${w === thisWeek ? '이번 주' : '지난주'} · ${weekLabel(w, true)}</h3><span class="spacer"></span>${st.pill}</div>
         ${r && r.status === 'revision_requested' ? (() => { const o = (ctx.my_open_reports || []).find(x => x.report_id === r.id); return o && o.revision_reason ? '<div class="banner warn small"><b>수정 요청 사유</b>' + nl2br(o.revision_reason) + '</div>' : ''; })() : ''}
-        <p class="muted small" style="margin:0">${st.text}${w === lastWeek && (!r || r.status !== 'submitted') ? (ctx.today > addDays(w, 7) ? ' 마감이 지났지만 지금이라도 작성해 주세요.' : ' 마감: ' + dayLabel(addDays(w, 7)) + '까지') : ''}</p>
+        <p class="muted small" style="margin:0">${st.text}${dlText(c.cell_id, w, r)}</p>
         <button class="btn ${st.cls}" data-act="${r ? 'open-report' : 'start-report'}" data-id="${r ? r.id : ''}" data-cell="${c.cell_id}" data-week="${w}">${st.btn}</button>
       </div>`;
     }
@@ -1079,9 +1088,10 @@ function ownCellItem(r, week) {
 async function viewLeadershipHome(app, v) {
   setTop('Leadership', false); renderTabs(true);
   const week = v.week || S.ctx.this_week;
-  const [rows, asg] = await Promise.all([
+  const [rows, asg, lr] = await Promise.all([
     rpc('get_week_status', { p_week_start: week }),
-    q(sb.from('leadership_assignments').select('cell_id, start_date, end_date').eq('leadership_user_id', S.me.id))
+    q(sb.from('leadership_assignments').select('cell_id, start_date, end_date').eq('leadership_user_id', S.me.id)),
+    rpc('lr_get', { p_week: week }).catch(() => null)
   ]);
   const today = S.ctx.today;
   const current = new Set(asg.filter(a => a.start_date <= today && (!a.end_date || a.end_date >= today)).map(a => a.cell_id));
@@ -1095,6 +1105,12 @@ async function viewLeadershipHome(app, v) {
   mine.sort((a, b) => order(a) - order(b) || a.cell_name.localeCompare(b.cell_name, 'ko'));
 
   let h = `<h1>${esc(S.me.name)}</h1>` + weekNav(week, 'lh-week');
+  {
+    const st = !lr ? ['pill warn', '아직 작성 전'] : lr.status === 'submitted' ? ['pill ok', '제출 완료 · ' + (lr.items || []).length + '명'] : ['pill accent', '작성 중'];
+    h += `<div class="card stack" style="margin-bottom:12px"><div class="row"><h3 style="margin:0">교역자 보고</h3><span class="spacer"></span><span class="${st[0]}">${st[1]}</span></div>
+      <p class="muted small" style="margin:0">${lr && lr.status === 'submitted' ? dateTime(lr.submitted_at) + ' 제출 · 담임 목사님·사모님께서 보고 계십니다.' : '맡으신 분들 가운데 목사님께 전할 소식을 직접 정리해 주세요. 제출하면 바로 목사님·사모님께 보입니다.'}</p>
+      <button class="btn ${lr && lr.status === 'submitted' ? 'ghost' : ''}" data-act="lr-edit-open" data-week="${week}">${!lr ? '교역자 보고 쓰기' : lr.status === 'submitted' ? '보고 보기 · 고치기' : '이어서 쓰기'}</button></div>`;
+  }
   h += need.length
     ? `<div class="banner warn"><b>확인이 필요한 보고서가 ${need.length}건 있습니다</b><div style="margin-top:10px"><button class="btn warn sm" data-act="open-detail" data-id="${need[0].report_id}">확인하러 가기</button></div></div>`
     : mine.length ? '<div class="banner"><b>지금 확인할 보고서가 없습니다</b>제출되는 대로 여기에 표시됩니다.</div>' : '';
@@ -1176,7 +1192,11 @@ async function signals(week) {
 async function viewDashboard(app, v) {
   setTop(tr('전체 현황', 'Overview'), false); renderTabs(true);
   const week = v.week || S.ctx.this_week;
-  const allRows = await rpc('get_week_status', { p_week_start: week });
+  const [allRows, lrs, wkNotes] = await Promise.all([
+    rpc('get_week_status', { p_week_start: week }),
+    rpc('lr_overview', { p_week: week }).catch(() => []),
+    rpc('pastoral_note_list', { p_limit: 200, p_only_needs: false }).then(x => x.filter(n => n.met_on >= week && n.met_on <= addDays(week, 6))).catch(() => [])
+  ]);
   const campusList = [...new Set(allRows.map(r => r.campus || '분당'))].sort();
   const rows = campusList.length > 1 && DASH.campus ? allRows.filter(r => (r.campus || '분당') === DASH.campus) : allRows;
   const N = rows.length;
@@ -1203,6 +1223,19 @@ async function viewDashboard(app, v) {
   let h = `<h1>${tr('전체 현황', 'Overview')}</h1>` + weekNav(week, 'db-week');
   if (campusList.length > 1) h += `<div class="chips" style="margin-bottom:8px">${[['', tr('모든 캠퍼스', 'All campuses')], ...campusList.map(c => [c, campusLabel(c)])].map(([k, t]) =>
     `<button class="chip" data-act="db-campus" data-v="${k}" aria-pressed="${DASH.campus === k}">${t}</button>`).join('')}</div>`;
+  if (lrs.length) {
+    const done = lrs.filter(x => x.status === 'submitted');
+    h += `<h2 style="margin-top:8px">${tr('교역자 보고', 'Pastoral reports')} <span class="muted" style="font-weight:400">${done.length} / ${lrs.length}</span></h2><div class="stack" style="gap:8px">` +
+      lrs.map(x => x.status === 'submitted'
+        ? `<button class="listitem" data-act="lr-open" data-id="${x.report_id}"><span class="top"><b>${esc(x.author_name)}</b><span class="pill ok">${tr('보고 완료 · ' + x.items + '명', 'Submitted · ' + x.items)}</span></span><span class="small muted">${dateTime(x.submitted_at)}</span></button>`
+        : `<div class="listitem" style="cursor:default"><span class="top"><b>${esc(x.author_name)}</b><span class="pill warn">${tr('아직 작성 전', 'Not yet')}</span></span></div>`).join('') + '</div>';
+  }
+  {
+    const needs = wkNotes.filter(n => n.needs_pastor && !n.acknowledged_at).length;
+    h += `<h2>${tr('이 주 성도 동정', 'Pastoral notes this week')} <span class="muted" style="font-weight:400">${wkNotes.length}</span></h2>
+      <button class="listitem" data-act="lr-notes" data-week="${week}"><span class="top"><b>${wkNotes.length ? tr(wkNotes.length + '건의 동정이 있습니다', wkNotes.length + ' note(s)') : tr('이 주에 올라온 동정이 없습니다', 'No notes this week')}</b>${needs ? `<span class="pill warn">${tr('목사님 확인 필요 ' + needs, needs + ' need you')}</span>` : ''}</span><span class="small muted">${tr('주간 정리 보기 →', 'Open weekly view →')}</span></button>`;
+  }
+  h += `<h2>${tr('셀리더 보고서', 'Cell reports')}</h2>`;
   if (pending.length) h += `<div class="banner warn"><b>${tr('Leadership 확인 대기 ' + pending.length + '건', pending.length + ' report(s) awaiting Leadership review')}</b><div style="margin-top:10px"><button class="btn warn sm" data-act="db-filter" data-v="unreviewed">${tr('미확인 보기', 'Show unreviewed')}</button></div></div>`;
   h += `<div class="stats" style="margin-top:12px">
     <div class="stat"><div class="v num">${N}</div><div class="k">${tr('전체 셀', 'Cells')}</div></div>
@@ -1249,6 +1282,145 @@ async function viewGroup(app, v) {
     <div class="stat ${g.concern ? 'warn' : ''}"><div class="v">${g.concern}</div><div class="k">${tr('목양 관심', 'Attention')}</div></div></div>`;
   h += '<h2>' + tr('셀 목록', 'Cells') + '</h2><div class="stack">' + g.rows.map(r => cellItem(r)).join('') + '</div>';
   app.innerHTML = h;
+}
+
+/* =====================================================================
+   교역자 보고 — 분파리더가 한 주에 하나, 빈칸에서 직접 작성
+   (셀리더 보고서 내용은 참고로만 보이고 복사되지 않음, 제출하면 목사님·사모님께 바로 보임)
+   ===================================================================== */
+const LR = { week: null, data: null, people: [], items: [], summary: '', pick: '', cat: 'update', content: '', editing: null, busy: false, ind: '' };
+const lrKey = (kind, id) => kind + ':' + id;
+async function lrLoad(week) {
+  const [data, people] = await Promise.all([rpc('lr_get', { p_week: week }), rpc('lr_people', { p_week: week })]);
+  Object.assign(LR, { week, data, people: people || [], summary: data?.summary || '', pick: '', cat: 'update', content: '', editing: null,
+    items: (data?.items || []).map(i => ({ kind: i.kind, person_id: i.person_id, person_name: i.person_name, group_name: i.group_name, category: i.category, content: i.content })) });
+}
+function lrRefHtml() {
+  const p = LR.people.find(x => lrKey(x.kind, x.id) === LR.pick);
+  if (!p) return '';
+  if (!p.ref_content) return `<div class="ref tiny muted">${p.kind === 'individual' ? '개별 케어로 돌보시는 분입니다.' : '최근 2주 셀리더 보고서에 이 분에 대한 기록이 없습니다.'}</div>`;
+  return `<div class="ref small"><b>참고 · 셀리더 보고 (${weekLabel(p.ref_week)}, ${noteCat(p.ref_category)})</b><div>${nl2br(p.ref_content)}</div><div class="tiny muted">참고용이며 내용 칸에 복사되지 않습니다.</div></div>`;
+}
+async function viewLrEdit(app, v) {
+  setTop('교역자 보고', true); renderTabs(false);
+  if (LR.week !== v.week) await lrLoad(v.week);
+  const sub = LR.data && LR.data.status === 'submitted';
+  const used = new Set(LR.items.map(i => lrKey(i.kind, i.person_id)));
+  const groups = [...new Set(LR.people.map(p => p.group_name))];
+  const inds = LR.people.filter(p => p.kind === 'individual');
+  let h = `<h1>교역자 보고</h1><p class="sub">${weekLabel(LR.week, true)} · 맡으신 분들 가운데 목사님께 전할 소식을 직접 정리해 주세요.</p>`;
+  if (sub) h += `<div class="banner" style="margin-top:8px"><b>제출한 보고입니다 · ${dateTime(LR.data.submitted_at)}</b>고친 뒤 「고친 내용 저장」을 누르시면 목사님·사모님께 바로 반영됩니다.</div>`;
+  h += `<div class="card stack" style="margin-top:12px"><label class="field">한 주 요약 <span class="tiny muted" style="font-weight:400">쓰고 싶을 때만</span>
+      <textarea id="lr-sum" rows="3" maxlength="4000" placeholder="예) 전반적으로 셀 모임이 잘 진행되었고, 두 가정에 돌봄이 필요합니다.">${esc(LR.summary)}</textarea></label></div>`;
+  h += `<h2>적은 분 ${LR.items.length}명</h2>`;
+  h += LR.items.length ? '<div class="stack">' + LR.items.map((it, i) => `<div class="card stack" style="gap:6px">
+      <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.05em">${esc(it.person_name)}</b><span class="tiny muted">${esc(it.group_name || '')}</span><span class="spacer"></span><span class="pill">${noteCat(it.category)}</span></div>
+      <div>${nl2br(it.content)}</div>
+      <div class="row" style="gap:14px"><button class="link" data-act="lr-item-edit" data-i="${i}">고치기</button><button class="link" data-act="lr-item-del" data-i="${i}">빼기</button></div></div>`).join('') + '</div>'
+    : '<p class="empty">아직 적은 분이 없습니다. 아래에서 한 분씩 골라 적어 주세요.</p>';
+  h += `<div class="card stack" style="margin-top:12px" id="lr-form"><b>${LR.editing ? '고치는 중' : '한 분 더 적기'}</b>
+    <label class="field">셀원 고르기<select id="lr-pick"><option value="">— 고르세요 —</option>${groups.map(g => `<optgroup label="${esc(g)}">${LR.people.filter(p => p.group_name === g).map(p => {
+      const k = lrKey(p.kind, p.id); const taken = used.has(k) && k !== LR.editing;
+      return `<option value="${k}" ${LR.pick === k ? 'selected' : ''} ${taken ? 'disabled' : ''}>${esc(p.name)}${taken ? ' (적음)' : ''}</option>`; }).join('')}</optgroup>`).join('')}</select></label>
+    <div id="lr-ref">${lrRefHtml()}</div>
+    <div><div style="font-weight:500;margin-bottom:6px">이슈 구분</div><div class="chips">${NOTE_CAT_KEYS.map(k => `<button class="chip" data-act="lr-cat" data-v="${k}" aria-pressed="${LR.cat === k}">${noteCat(k)}</button>`).join('')}</div></div>
+    <label class="field">내용<textarea id="lr-content" rows="5" maxlength="4000" placeholder="목사님께 전할 내용을 직접 적어 주세요.">${esc(LR.content)}</textarea></label>
+    <button class="btn ghost" data-act="lr-add">${LR.editing ? '고친 내용 반영' : '+ 이 분 추가'}</button></div>`;
+  h += `<details class="cellbox" style="margin-top:12px"><summary class="small">개별 케어 명단 (${inds.length}명)</summary><div class="stack" style="margin-top:8px;gap:6px">
+    <p class="tiny muted" style="margin:0">셀에 속하지 않고 따로 돌보시는 분입니다. 본인만 보고 고를 수 있습니다.</p>
+    ${inds.map(p => `<div class="row"><span>${esc(p.name)}</span><span class="spacer"></span><button class="link" data-act="lr-ind-del" data-id="${p.id}">명단에서 빼기</button></div>`).join('')}
+    <div class="row" style="gap:8px"><input type="text" id="lr-ind" maxlength="60" placeholder="이름 (예: 홍길동 집사)" value="${esc(LR.ind)}" style="flex:1"><button class="btn sm" data-act="lr-ind-add">추가</button></div></div></details>`;
+  h += `<div class="stack" style="margin-top:20px">
+    <button class="btn" data-act="lr-submit" ${LR.busy ? 'disabled' : ''}>${sub ? '고친 내용 저장' : '교역자 보고 제출하기'}</button>
+    ${sub ? '' : `<button class="btn quiet" data-act="lr-save" ${LR.busy ? 'disabled' : ''}>임시 저장</button>`}
+    <p class="tiny muted" style="margin:0">교역자 보고는 쓰신 분과 담임 목사님·사모님만 볼 수 있습니다.</p></div>`;
+  app.innerHTML = h;
+}
+function lrSync() {
+  const s1 = $('#lr-sum'); if (s1) LR.summary = s1.value;
+  const c = $('#lr-content'); if (c) LR.content = c.value;
+  const pk = $('#lr-pick'); if (pk) LR.pick = pk.value;
+}
+document.addEventListener('change', (e) => { if (e.target.id === 'lr-pick') { LR.pick = e.target.value; const b = $('#lr-ref'); if (b) b.innerHTML = lrRefHtml(); } });
+document.addEventListener('input', (e) => { if (e.target.id === 'lr-sum') LR.summary = e.target.value; if (e.target.id === 'lr-content') LR.content = e.target.value; if (e.target.id === 'lr-ind') LR.ind = e.target.value; });
+function lrAdd() {
+  lrSync();
+  const p = LR.people.find(x => lrKey(x.kind, x.id) === LR.pick);
+  if (!p) return toast('셀원을 골라 주세요.');
+  if (!LR.content.trim()) return toast('내용을 적어 주세요.');
+  const item = { kind: p.kind, person_id: p.id, person_name: p.name, group_name: p.group_name, category: LR.cat, content: LR.content.trim() };
+  const at = LR.editing ? LR.items.findIndex(i => lrKey(i.kind, i.person_id) === LR.editing) : -1;
+  if (at >= 0) LR.items[at] = item; else LR.items.push(item);
+  Object.assign(LR, { pick: '', cat: 'update', content: '', editing: null });
+  lrAutosave();
+}
+function lrItemEdit(i) {
+  lrSync(); const it = LR.items[i]; if (!it) return;
+  Object.assign(LR, { pick: lrKey(it.kind, it.person_id), cat: it.category, content: it.content, editing: lrKey(it.kind, it.person_id) });
+  render(); setTimeout(() => { const f = $('#lr-form'); if (f) f.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+}
+async function lrAutosave() {
+  // 작성 중일 때만 자동으로 임시 저장 (제출한 보고는 「고친 내용 저장」을 눌러야 반영)
+  if (!(LR.data && LR.data.status === 'submitted')) {
+    try { LR.data = await rpc('lr_save', { p_week: LR.week, p_summary: LR.summary, p_items: LR.items, p_submit: false }); } catch (e) { toast(errText(e), 5000); }
+  }
+  render();
+}
+async function lrSave(submit) {
+  lrSync();
+  if (LR.content.trim() && LR.pick) return toast('적고 계신 내용이 있습니다. 「' + (LR.editing ? '고친 내용 반영' : '+ 이 분 추가') + '」을 먼저 눌러 주세요.', 4000);
+  LR.busy = true; render();
+  try {
+    LR.data = await rpc('lr_save', { p_week: LR.week, p_summary: LR.summary, p_items: LR.items, p_submit: submit });
+    toast(submit ? (LR.data.status === 'submitted' ? '교역자 보고를 제출했습니다. 목사님·사모님께 바로 보입니다.' : '저장했습니다.') : '임시 저장했습니다.');
+    if (submit) { LR.week = null; LR.busy = false; return back(); }
+  } catch (e) { toast(errText(e), 5000); }
+  LR.busy = false; render();
+}
+async function lrIndAdd() {
+  const nm = (LR.ind || '').trim(); if (!nm) return toast('이름을 적어 주세요.');
+  lrSync();
+  try { await rpc('individual_care_add', { p_name: nm }); LR.ind = ''; LR.people = await rpc('lr_people', { p_week: LR.week }); toast(nm + '님을 개별 케어 명단에 넣었습니다.'); } catch (e) { toast(errText(e), 5000); }
+  render();
+}
+async function lrIndDel(id) {
+  lrSync();
+  try { await rpc('individual_care_remove', { p_id: id }); LR.people = await rpc('lr_people', { p_week: LR.week }); toast('개별 케어 명단에서 뺐습니다. 이미 적은 보고 내용은 그대로 남습니다.'); } catch (e) { toast(errText(e), 5000); }
+  render();
+}
+const LRT = { id: null, map: null, busy: false, err: '' };
+function TXL(key, ko) {
+  const en = LRT.map && LRT.map[key];
+  if (!EN() || !en) return nl2br(ko);
+  return nl2br(en) + '<div class="tiny muted" style="margin-top:2px">' + nl2br(ko) + '</div>';
+}
+async function viewLrRead(app, v) {
+  setTop(tr('교역자 보고', 'Pastoral report'), true); renderTabs(true);
+  const r = await rpc('lr_read', { p_id: v.id });
+  if (!r) { app.innerHTML = '<p class="empty">' + tr('볼 수 없는 보고입니다.', 'This report is not available.') + '</p>'; return; }
+  if (LRT.id !== r.id) { LRT.id = r.id; LRT.map = null; LRT.err = ''; }
+  let h = `<h1>${esc(r.author_name)}</h1><p class="sub">${weekLabel(r.week_start, true)} · ${tr(dateTime(r.submitted_at) + ' 제출', 'Submitted ' + dateTime(r.submitted_at))} · ${tr(r.items.length + '명', r.items.length + ' people')}</p>`;
+  if (EN() && isSenior()) {
+    h += LRT.map ? '<p class="tiny muted" style="margin:8px 0 0">Translated by AI · the Korean original is shown in small text.</p>'
+      : `<div style="margin-top:8px"><button class="btn sm ghost" data-act="lr-tx" data-id="${r.id}" ${LRT.busy ? 'disabled' : ''}>${LRT.busy ? 'Translating…' : 'Translate to English'}</button></div>`;
+    if (LRT.err) h += `<div class="banner warn small" style="margin-top:8px">${esc(LRT.err)}</div>`;
+  }
+  if (r.summary) h += `<div class="card" style="margin-top:12px"><b>${tr('한 주 요약', 'Summary')}</b><div style="margin-top:4px">${TXL('lr:sum', r.summary)}</div></div>`;
+  h += '<div class="stack" style="margin-top:12px">' + (r.items.length ? r.items.map(it => `<div class="card stack" style="gap:6px">
+      <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.05em">${esc(it.person_name)}</b><span class="tiny muted">${esc(it.group_name === '개별 케어' ? tr('개별 케어', 'Individual care') : it.group_name || '')}</span><span class="spacer"></span><span class="pill">${noteCat(it.category)}</span></div>
+      <div>${TXL('lri:' + it.id, it.content)}</div></div>`).join('') : '<p class="empty">' + tr('적은 분이 없습니다.', 'No one listed.') + '</p>') + '</div>';
+  app.innerHTML = h;
+}
+async function lrTranslate(id) {
+  LRT.busy = true; LRT.err = ''; render();
+  try {
+    const { data } = await sb.auth.getSession();
+    const r = await fetch('api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ lr: id }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    LRT.id = id; LRT.map = j.translations || {};
+  } catch (e) { LRT.err = 'Could not translate: ' + (e.message || e); }
+  finally { LRT.busy = false; render(); }
 }
 
 /* =====================================================================
@@ -1569,6 +1741,18 @@ document.addEventListener('click', async (e) => {
     case 'reg-send': return sendRegister();
     case 'push-on': return pushOn();
     case 'tx-report': return translateReport(d.id);
+    case 'lr-edit-open': LR.week = null; return go({ name: 'lrEdit', week: d.week });
+    case 'lr-open': return go({ name: 'lrRead', id: d.id });
+    case 'lr-notes': NOTE.filter = 'week'; NOTE.week = d.week; return switchTab('notes');
+    case 'lr-cat': LR.cat = d.v; document.querySelectorAll('[data-act=lr-cat]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === d.v))); return;
+    case 'lr-add': return lrAdd();
+    case 'lr-item-edit': return lrItemEdit(+d.i);
+    case 'lr-item-del': LR.items.splice(+d.i, 1); return lrAutosave();
+    case 'lr-save': return lrSave(false);
+    case 'lr-submit': return lrSave(true);
+    case 'lr-ind-add': return lrIndAdd();
+    case 'lr-ind-del': return lrIndDel(d.id);
+    case 'lr-tx': return lrTranslate(d.id);
     case 'note-new': NOTE.form = { id: null, met_on: S.ctx.today, person_name: '', category: 'update', visit_method: 'in_person', campus: '분당', content: '', prayer: '', needs_pastor: false, visibility: 'all', viewers: [] }; return go({ name: 'noteEdit' });
     case 'note-edit': { const n = NOTE.list.find(x => x.id === d.id); if (!n) return; NOTE.form = { id: n.id, met_on: n.met_on, person_name: n.person_name, category: n.category, content: n.content, prayer: n.prayer || '', needs_pastor: n.needs_pastor, visibility: n.visibility || 'all', viewers: n.viewer_ids || [], visit_method: n.visit_method || 'in_person', campus: n.campus || '분당' }; return go({ name: 'noteEdit' }); }
     case 'note-filter': NOTE.filter = d.v; return render();
