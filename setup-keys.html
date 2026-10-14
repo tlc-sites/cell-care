@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>셀 케어 알림 키 만들기</title>
+<style>
+  :root { --bg:#F3F5F9; --card:#fff; --ink:#1A2436; --muted:#586378; --line:#D8DEE9; --accent:#20365B; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 "Apple SD Gothic Neo","Malgun Gothic",sans-serif; }
+  .wrap { max-width:640px; margin:0 auto; padding:24px 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-top:16px; }
+  label { display:block; font-weight:600; margin-top:14px; }
+  code, textarea { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; }
+  textarea { width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:10px; resize:none; background:#FAFBFD; }
+  button { min-height:48px; padding:0 18px; border:0; border-radius:12px; background:var(--accent); color:#fff; font-size:16px; font-weight:600; cursor:pointer; }
+  button.ghost { background:#fff; color:var(--accent); border:1px solid var(--accent); min-height:36px; font-size:14px; margin-top:6px; }
+  .muted { color:var(--muted); font-size:14px; }
+  .warn { background:#FBEEDF; border-radius:10px; padding:10px 12px; font-size:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>셀 케어 알림 키 만들기</h1>
+  <p class="muted">Vercel에 넣을 값 4개를 만듭니다. 키는 <b>이 브라우저 안에서만</b> 만들어지고 어디로도 보내지지 않습니다.</p>
+  <div class="card">
+    <button id="gen">키 만들기</button>
+    <div id="out" hidden>
+      <p class="warn">아래 값을 Vercel → 프로젝트 → Settings → Environment Variables에 <b>이름 그대로</b> 하나씩 붙여 넣어 주세요. 이 창을 닫으면 다시 볼 수 없으니, 다 넣을 때까지 열어 두세요. 다른 사람이나 채팅에는 보내지 마세요.</p>
+      <div id="rows"></div>
+    </div>
+  </div>
+</div>
+<script>
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function row(name, value, note) {
+  return `<label>${name}</label><textarea rows="2" readonly>${value}</textarea>
+    <div class="muted">${note}</div><button class="ghost" data-v="${value}">복사</button>`;
+}
+document.getElementById('gen').onclick = async () => {
+  const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const pub = b64url(await crypto.subtle.exportKey('raw', kp.publicKey));
+  const priv = (await crypto.subtle.exportKey('jwk', kp.privateKey)).d;
+  const secret = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  document.getElementById('rows').innerHTML =
+    row('VAPID_PUBLIC_KEY', pub, '알림 공개 키 (공개돼도 괜찮은 값)') +
+    row('VAPID_PRIVATE_KEY', priv, '알림 서명 키 (비밀)') +
+    row('CRON_SECRET', secret, '매주 알림을 Vercel만 부를 수 있게 하는 암호 (비밀)') +
+    `<label>SUPABASE_SECRET_KEY</label><div class="muted">이 값은 여기서 만들지 않습니다. Supabase → Project Settings → API Keys에서 <b>Secret key</b>(sb_secret_로 시작)를 복사해 넣어 주세요. (비밀)</div>`;
+  document.getElementById('out').hidden = false;
+  document.getElementById('gen').disabled = true;
+};
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]'); if (!b) return;
+  navigator.clipboard.writeText(b.dataset.v).then(() => { b.textContent = '복사했습니다'; setTimeout(() => b.textContent = '복사', 1500); });
+});
+</script>
+</body>
+</html>

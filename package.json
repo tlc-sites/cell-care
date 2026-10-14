@@ -1,0 +1,7 @@
+{
+  "name": "cell-care",
+  "private": true,
+  "description": "주님의교회 셀 케어 — 화면(index.html)과 알림 보내기(api/)",
+  "engines": { "node": ">=18" },
+  "dependencies": { "web-push": "3.6.7" }
+}

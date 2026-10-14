@@ -1,0 +1,15 @@
+{
+  "name": "주님의교회 셀 케어",
+  "short_name": "셀 케어",
+  "description": "셀 모임 보고와 목양 기록을 함께 나누는 공간",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F3F5F9",
+  "theme_color": "#20365B",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
