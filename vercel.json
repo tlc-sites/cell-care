@@ -1,12 +1,36 @@
 {
   "crons": [
-    { "path": "/api/cron-reminder", "schedule": "0 11 * * 0,1" }
+    {
+      "path": "/api/cron-reminder",
+      "schedule": "0 0 * * 1"
+    },
+    {
+      "path": "/api/cron-reminder",
+      "schedule": "0 9 * * 6"
+    }
   ],
   "headers": [
-    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
-    { "source": "/(.*)", "headers": [
-      { "key": "X-Content-Type-Options", "value": "nosniff" },
-      { "key": "Referrer-Policy", "value": "same-origin" }
-    ] }
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "same-origin"
+        }
+      ]
+    }
   ]
 }
