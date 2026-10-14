@@ -1094,7 +1094,7 @@ async function viewLeadershipHome(app, v) {
   const order = (r) => r.i_can_review ? 0 : r.status === 'revision_requested' ? 1 : !r.report_id || r.status === 'draft' ? 2 : 3;
   mine.sort((a, b) => order(a) - order(b) || a.cell_name.localeCompare(b.cell_name, 'ko'));
 
-  let h = `<h1>${esc(S.me.name)} Leadership</h1>` + weekNav(week, 'lh-week');
+  let h = `<h1>${esc(S.me.name)}</h1>` + weekNav(week, 'lh-week');
   h += need.length
     ? `<div class="banner warn"><b>확인이 필요한 보고서가 ${need.length}건 있습니다</b><div style="margin-top:10px"><button class="btn warn sm" data-act="open-detail" data-id="${need[0].report_id}">확인하러 가기</button></div></div>`
     : mine.length ? '<div class="banner"><b>지금 확인할 보고서가 없습니다</b>제출되는 대로 여기에 표시됩니다.</div>' : '';
@@ -1124,7 +1124,7 @@ const DASH = { sort: 'unreviewed', filter: 'all', campus: '' };
 function groupKey(r) {
   if (r.review_mode === 'none') return { key: 'none', name: tr('검토 없음 셀', 'Cells without review'), mode: 'none' };
   if (r.review_mode === 'senior_direct') return { key: 'senior', name: tr('스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인', 'Reviewed by Pastor Scott Brenner & Mrs. Sunghee Brenner'), mode: 'senior' };
-  return { key: r.responsible_leadership_id || 'unassigned', name: r.responsible_leadership_name ? r.responsible_leadership_name + ' Leadership' : tr('담당 Leadership 없음', 'No Leadership assigned'), mode: 'leadership' };
+  return { key: r.responsible_leadership_id || 'unassigned', name: r.responsible_leadership_name ? r.responsible_leadership_name : tr('담당 Leadership 없음', 'No Leadership assigned'), mode: 'leadership' };
 }
 function groupRows(rows) {
   const g = new Map();
