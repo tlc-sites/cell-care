@@ -52,7 +52,8 @@ module.exports = async (req, res) => {
     if (!key) return res.status(503).json({ error: 'Translation is not set up yet (ANTHROPIC_API_KEY).' });
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
     const id = body.report || '';
-    if (!body.notes && !UUID.test(id)) return res.status(400).json({ error: 'report' });
+    const lrId = body.lr || '';
+    if (!body.notes && !UUID.test(id) && !UUID.test(lrId)) return res.status(400).json({ error: 'report' });
 
     // 본인 권한 확인: Senior Pastor · Samonim 만
     const ctx = await asUser(token, 'rpc/get_my_context', {});
@@ -62,7 +63,12 @@ module.exports = async (req, res) => {
     const items = {};
     const add = (k, v) => { if (v && String(v).trim()) items[k] = String(v).slice(0, 4000); };
 
-    if (body.notes) {
+    if (UUID.test(lrId)) {
+      const lr = await asUser(token, 'rpc/lr_read', { p_id: lrId });
+      if (!lr) return res.status(404).json({ error: 'Report not found' });
+      add('lr:sum', lr.summary);
+      (lr.items || []).forEach(i => add('lri:' + i.id, i.content));
+    } else if (body.notes) {
       const notes = await asUser(token, 'rpc/pastoral_note_list', { p_limit: 30, p_only_needs: false });
       notes.forEach(n => { add('note:' + n.id, n.content); add('noteprayer:' + n.id, n.prayer); });
     } else {
