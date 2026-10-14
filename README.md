@@ -1,6 +1,6 @@
 # 주님의교회 셀 케어
 
-셀리더 → Leadership → Senior Pastor / Samonim 순서로 올라가는 주간 셀 케어 보고 웹앱입니다.
+셀리더 → Leadership → 스캇 브래너 담임 목사님 / 성희 브래너 사모님 순서로 올라가는 주간 셀 케어 보고 웹앱입니다.
 
 - 주소: https://tlc-sites.github.io/cell-care/
 - 화면: `index.html` 한 파일 (CSS·JavaScript 포함)
