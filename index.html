@@ -289,6 +289,7 @@ async function render() {
     if (v.name === 'dashboard') return await viewDashboard(app, v);
     if (v.name === 'group') return await viewGroup(app, v);
     if (v.name === 'adminHome') return await viewAdminHome(app);
+    if (v.name === 'members') return await viewMembers(app, v);
   } catch (e) {
     console.error(e);
     setTop('', S.stack.length > 0); renderTabs(true);
@@ -367,7 +368,7 @@ async function sendRegister() {
   if (name.length < 2) { LOGIN.msg = '이름을 적어 주세요.'; return viewLogin(); }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { LOGIN.msg = '이메일 주소를 다시 확인해 주세요.'; return viewLogin(); }
   LOGIN.busy = true; viewLogin();
-  try { await rpc('request_access', { p_name: name, p_email: email }); LOGIN.regDone = true; }
+  try { await rpc('request_access', { p_name: name, p_email: email }); LOGIN.regDone = true; fetch('api/notify-request', { method: 'POST' }).catch(() => {}); }
   catch (e) { LOGIN.msg = errText(e); }
   LOGIN.busy = false; viewLogin();
 }
@@ -441,9 +442,9 @@ async function viewLeaderHome(app) {
   await refreshContext();
   const ctx = S.ctx; const thisWeek = ctx.this_week; const lastWeek = addDays(thisWeek, -7);
   const cellIds = ctx.leader_cells.map(c => c.cell_id);
-  let reports = [], created = {};
+  let reports = [], pastWeeks = [];
   if (cellIds.length) {
-    (await q(sb.from('cells').select('id, created_at').in('id', cellIds))).forEach(c => { created[c.id] = kstDate(c.created_at); });
+    pastWeeks = await rpc('my_report_weeks').catch(() => []);
     reports = await q(sb.from('weekly_reports')
       .select('id, cell_id, week_start, status, review_status, submitted_at')
       .in('cell_id', cellIds).order('week_start', { ascending: false }).limit(30));
@@ -462,10 +463,11 @@ async function viewLeaderHome(app) {
   for (const c of ctx.leader_cells) {
     const leadershipLine = c.review_mode === 'leadership' ? ('담당 Leadership: ' + esc(c.leadership || '배정 전'))
       : c.review_mode === 'senior_direct' ? 'Senior Pastor / Samonim 직접 확인' : '검토 없이 제출만 하는 셀';
-    h += `<h2>${esc(c.name)}</h2><p class="sub">${leadershipLine}${c.leaders && c.leaders.length > 1 ? ' · 공동 셀리더: ' + esc(c.leaders.join(', ')) : ''}</p><div class="stack">`;
+    h += `<div class="row" style="margin-top:28px;align-items:center"><h2 style="margin:0">${esc(c.name)}</h2><span class="spacer"></span><button class="btn sm ghost" data-act="open-members" data-cell="${c.cell_id}" data-name="${esc(c.name)}">셀원 관리</button></div><p class="sub">${leadershipLine}${c.leaders && c.leaders.length > 1 ? ' · 공동 셀리더: ' + esc(c.leaders.join(', ')) : ''}</p><div class="stack">`;
     const weeks = [thisWeek];
     const lw = find(c.cell_id, lastWeek);
-    if ((!lw || lw.status !== 'submitted') && (lw || !created[c.cell_id] || created[c.cell_id] <= addDays(lastWeek, 6))) weeks.push(lastWeek);
+    const wasLeaderLast = pastWeeks.some(x => x.cell_id === c.cell_id && x.week_start === lastWeek);
+    if ((!lw || lw.status !== 'submitted') && (lw || wasLeaderLast)) weeks.push(lastWeek);
     for (const w of weeks) {
       const r = find(c.cell_id, w); const st = leaderCardState(r);
       h += `<div class="card stack">
@@ -476,6 +478,13 @@ async function viewLeaderHome(app) {
       </div>`;
     }
     h += '</div>';
+    const older = pastWeeks.filter(x => x.cell_id === c.cell_id && x.week_start < lastWeek && x.status !== 'submitted');
+    if (older.length) {
+      h += `<details class="cellbox" style="margin-top:8px"><summary class="small">지난 보고서 쓰기 (${older.length}주)</summary><div class="stack" style="margin-top:8px">` +
+        older.map(x => `<button class="listitem" data-act="${x.report_id ? 'open-report' : 'start-report'}" data-id="${x.report_id || ''}" data-cell="${c.cell_id}" data-week="${x.week_start}">
+          <span class="top"><b>${weekLabel(x.week_start)}</b><span class="pill">${x.report_id ? L.status[x.status] : '작성 전'}</span></span></button>`).join('') +
+        '</div><p class="tiny muted" style="margin:6px 0 0">4주 전까지 작성할 수 있습니다.</p></details>';
+    }
   }
   if (otherOpen.length) {
     h += '<h2>마무리할 보고서</h2><div class="stack">' + otherOpen.map(r => `
@@ -1031,6 +1040,8 @@ async function viewLeadershipHome(app, v) {
     <div class="stat ${need.length ? 'warn' : ''}"><div class="v">${need.length}</div><div class="k">확인 필요</div></div>
     <div class="stat ${concern.length ? 'warn' : ''}"><div class="v">${concern.length}</div><div class="k">목양 관심</div></div></div>`;
   h += '<h2>담당 셀</h2>' + (mine.length ? '<div class="stack">' + mine.map(r => cellItem(r)).join('') + '</div>' : '<p class="empty">이 주에 담당한 셀이 없습니다.</p>');
+  const manage = mine.filter(r => current.has(r.cell_id));
+  if (manage.length) h += '<h3 style="margin:20px 0 8px">셀원 관리</h3><div class="chips">' + manage.map(r => `<button class="chip" data-act="open-members" data-cell="${r.cell_id}" data-name="${esc(r.cell_name)}">${esc(r.cell_name)}</button>`).join('') + '</div>';
   if (own.length) {
     h += '<h2>내 셀</h2><p class="sub">직접 인도하는 셀입니다. 확인은 ' + (own.some(r => r.review_mode === 'senior_direct') ? 'Senior Pastor / Samonim' : '담당 Leadership') + '께서 하십니다.</p>';
     h += '<div class="stack">' + own.map(r => ownCellItem(r, week)).join('') + '</div>';
@@ -1170,6 +1181,53 @@ async function viewGroup(app, v) {
 }
 
 /* =====================================================================
+   셀원 관리 — 추가 · 이름 고치기 · 이번 주부터 빼기 · 다시 넣기
+   (그 셀의 셀리더, 담당 Leadership, 관리자. 바꾼 내용은 기록으로 남음)
+   ===================================================================== */
+const MEM = { edit: null, confirm: null, busy: false };
+async function viewMembers(app, v) {
+  setTop('셀원 관리', true); renderTabs(false);
+  const rows = await rpc('member_list', { p_cell: v.cell });
+  const label = { member: ['정식 셀원', ''], visitor: ['방문자', 'accent'], left: ['뺀 셀원', ''], hidden: ['목록에서 숨김', ''] };
+  const item = (m) => {
+    const [t, c] = label[m.state];
+    const editing = MEM.edit === m.id, confirming = MEM.confirm === m.id;
+    let actions = '';
+    if (editing) {
+      actions = `<div class="row" style="gap:8px;margin-top:8px"><input type="text" id="mem-rename" maxlength="40" value="${esc(m.name)}" style="flex:1">
+        <button class="btn sm" data-act="mem-rename-save" data-id="${m.id}">저장</button><button class="link" data-act="mem-cancel">취소</button></div>`;
+    } else if (confirming) {
+      actions = `<div class="banner warn small" style="margin-top:8px"><b>${esc(m.name)}님을 ${m.state === 'visitor' ? '목록에서 숨길까요?' : '이번 주부터 명단에서 뺄까요?'}</b>지난 출석 기록은 그대로 남고, 언제든 다시 넣을 수 있습니다.
+        <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="mem-leave" data-id="${m.id}">빼기</button><button class="btn sm ghost" data-act="mem-cancel">취소</button></div></div>`;
+    } else if (m.state === 'left' || m.state === 'hidden') {
+      actions = `<div class="row" style="gap:12px;margin-top:6px"><button class="link" data-act="mem-restore" data-id="${m.id}">다시 넣기</button></div>`;
+    } else {
+      actions = `<div class="row" style="gap:12px;margin-top:6px;flex-wrap:wrap">
+        <button class="link" data-act="mem-edit" data-id="${m.id}">이름 고치기</button>
+        ${m.state === 'visitor' ? `<button class="link" data-act="mem-register" data-id="${m.id}">정식 셀원으로</button>` : ''}
+        <button class="link" data-act="mem-confirm" data-id="${m.id}">${m.state === 'visitor' ? '숨기기' : '이번 주부터 빼기'}</button></div>`;
+    }
+    return `<div class="member"><div class="row"><b style="font-size:1.05em">${esc(m.name)}</b><span class="spacer"></span><span class="pill ${c}">${t}</span></div>
+      ${m.state === 'left' && m.left_at ? `<div class="tiny muted">${dayLabel(addDays(m.left_at, 1))}부터 명단에서 빠짐</div>` : ''}${actions}</div>`;
+  };
+  const now = rows.filter(m => m.state === 'member' || m.state === 'visitor');
+  const gone = rows.filter(m => m.state === 'left' || m.state === 'hidden');
+  let h = `<h1>${esc(v.cellName)} · 셀원 관리</h1><p class="sub">이번 주 출석 명단에 나오는 분들입니다. 바꾼 내용은 기록으로 남습니다.</p>
+    <div class="card stack" style="margin-top:12px"><label class="field">새 셀원 추가
+      <input type="text" id="mem-new" maxlength="40" placeholder="이름 (동명이인은 김민수A처럼)"></label>
+      <button class="btn" data-act="mem-add" ${MEM.busy ? 'disabled' : ''}>이번 주부터 셀원으로 추가</button></div>
+    <h2>지금 셀원 ${now.length}명</h2><div class="card">${now.length ? now.map(item).join('') : '<p class="empty">셀원이 없습니다.</p>'}</div>`;
+  if (gone.length) h += `<h2>최근에 뺀 분</h2><div class="card">${gone.map(item).join('')}</div>`;
+  app.innerHTML = h;
+}
+async function memAct(fn, args, okMsg) {
+  if (MEM.busy) return; MEM.busy = true;
+  try { await rpc(fn, args); MEM.edit = null; MEM.confirm = null; if (okMsg) toast(okMsg); }
+  catch (e) { toast(errText(e), 4500); }
+  finally { MEM.busy = false; render(); }
+}
+
+/* =====================================================================
    관리 — 등록 승인, 등록 현황, 셀 명단 (보고서·목양 기록은 보이지 않음)
    ===================================================================== */
 const ADMIN = { open: 'requests', pick: {} };
@@ -1262,7 +1320,8 @@ async function viewAdminHome(app) {
   const cellBody = gsorted.map(([g, cs]) => `<div class="card"><h3 style="margin-top:0">${esc(g)} <span class="tiny muted">셀 ${cs.length}개 · 셀원 ${cs.reduce((n, c) => n + c.members.length, 0)}명</span></h3>
     ${cs.map(c => `<details class="cellbox"><summary><b>${esc(c.name)}</b> <span class="tiny muted">셀원 ${c.members.length}명</span></summary>
       <div class="small" style="margin:6px 0">셀리더: ${c.leaders.map(p => esc(p.name)).join(', ') || '배정 전'}</div>
-      <div class="small muted">${c.members.map(esc).join(' · ') || '셀원 없음'}</div></details>`).join('')}</div>`).join('');
+      <div class="small muted">${c.members.map(esc).join(' · ') || '셀원 없음'}</div>
+      <button class="btn sm ghost" style="margin-top:8px" data-act="open-members" data-cell="${c.id}" data-name="${esc(c.name)}">셀원 관리</button></details>`).join('')}</div>`).join('');
   h += sec('cells', '셀 명단', C.size + '개', cellBody);
   try {
     const ps = await rpc('admin_push_stats');
@@ -1272,8 +1331,9 @@ async function viewAdminHome(app) {
 
   h += `<div class="card stack" style="margin-top:20px">
     <p class="small muted" style="margin:0">셀원 이동, 셀리더·담당 변경은 아직 Supabase 대시보드에서 합니다. 대시보드에서 고친 내용은 변경 기록에 “누가”가 남지 않으니, 정정 기록표에 날짜·작업자·사유를 함께 적어 주세요.</p>
-    <p class="small muted" style="margin:0">관리자 역할만으로는 보고서와 목양 기록을 볼 수 없습니다.</p></div>`;
+    <p class="small muted" style="margin:0">관리자 역할만으로는 보고서와 목양 기록을 볼 수 없습니다.</p></div><div id="pushbox"></div>`;
   app.innerHTML = h;
+  renderPushBox();
 }
 document.addEventListener('change', (e) => {
   const el = e.target.closest('[data-adpick]'); if (!el) return;
@@ -1315,6 +1375,15 @@ document.addEventListener('click', async (e) => {
     case 'reg-close': Object.assign(LOGIN, { mode: 'login', msg: '', regDone: false }); return viewLogin();
     case 'reg-send': return sendRegister();
     case 'push-on': return pushOn();
+    case 'open-members': Object.assign(MEM, { edit: null, confirm: null }); return go({ name: 'members', cell: d.cell, cellName: d.name });
+    case 'mem-add': { const nm = ($('#mem-new')?.value || '').trim(); if (!nm) return toast('이름을 적어 주세요.'); return memAct('member_add', { p_cell: S.view.cell, p_name: nm }, nm + '님을 셀원으로 추가했습니다.'); }
+    case 'mem-edit': MEM.edit = d.id; MEM.confirm = null; return render();
+    case 'mem-confirm': MEM.confirm = d.id; MEM.edit = null; return render();
+    case 'mem-cancel': MEM.edit = null; MEM.confirm = null; return render();
+    case 'mem-rename-save': { const nm = ($('#mem-rename')?.value || '').trim(); if (!nm) return toast('이름을 적어 주세요.'); return memAct('member_rename', { p_member: d.id, p_name: nm }, '이름을 고쳤습니다.'); }
+    case 'mem-leave': return memAct('member_leave', { p_member: d.id }, '명단에서 뺐습니다.');
+    case 'mem-restore': return memAct('member_restore', { p_member: d.id }, '다시 넣었습니다.');
+    case 'mem-register': return memAct('register_member', { p_member: d.id }, '정식 셀원으로 등록했습니다.');
     case 'push-off': return pushOff();
     case 'push-test': return pushTest();
     case 'ad-approve': return adminDecide(d.id, true);
