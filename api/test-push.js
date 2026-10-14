@@ -7,7 +7,9 @@ module.exports = async (req, res) => {
     if (!user || !user.id) return res.status(401).json({ error: '로그인이 필요합니다.' });
     const targets = await serviceRpc('push_targets_for_auth_user', { p_auth_user: user.id });
     if (!targets.length) return res.status(200).json({ targets: 0, sent: 0 });
-    const result = await sendAll(targets, { title: '셀 케어 테스트 알림', body: '알림이 잘 도착했습니다. 월요일 아침과 토요일 저녁에 알려 드릴게요.', tag: 'test' });
+    const result = await sendAll(targets, (x) => x.lang === 'en'
+      ? { title: 'Cell Care test', body: 'Notifications are working.', tag: 'test' }
+      : { title: '셀 케어 테스트 알림', body: '알림이 잘 도착했습니다.', tag: 'test' });
     res.status(200).json(result);
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });

@@ -14,7 +14,11 @@ module.exports = async (req, res) => {
     if (!targets.length) return res.status(200).json({ targets: 0 });
     const t = targets[0];
     const again = t.submission_no > 1;
-    const result = await sendAll(targets, {
+    const result = await sendAll(targets, (x) => x.lang === 'en' ? {
+      title: '📋 ' + (again ? 'Cell report resubmitted' : 'New cell report submitted'),
+      body: t.submitter + (again ? ' revised and resubmitted the ' : ' submitted the ') + t.cell_name + ' report.\nPlease take a look.',
+      tag: 'submit-' + body.report + '-' + t.submission_no
+    } : {
       title: '📋 ' + (again ? '셀보고서가 다시 제출되었습니다' : '새로운 셀보고서가 작성되었습니다'),
       body: honor(t.submitter) + '이 ' + (again ? '셀보고서를 고쳐서 다시 제출했습니다.' : '셀보고서를 작성했습니다.') + '\n내용을 확인해 주세요.',
       tag: 'submit-' + body.report + '-' + t.submission_no
