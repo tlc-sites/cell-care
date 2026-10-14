@@ -365,7 +365,8 @@ function viewLogin() {
       <p style="margin:0"><b>${tr('처음 오셨나요?', 'First time here?')}</b></p>
       <p class="small muted" style="margin:0">${tr('이름과 이메일을 적어 등록을 신청해 주세요. 확인을 마치면 그 이메일로 로그인하실 수 있습니다.', 'Request access with your name and email. Once approved, you can sign in with that email.')}</p>
       <button class="btn ghost" data-act="reg-open">${tr('등록 신청하기', 'Request access')}</button>
-    </div>` : ''}`;
+    </div>` : ''}
+    <p style="text-align:center;margin-top:18px"><a href="guide.html" style="color:var(--accent);font-weight:500">${tr('📖 처음 쓰시는 분을 위한 사용 안내', '📖 How to get started')}</a></p>`;
 }
 
 /* 등록 신청 (로그인 전) — 명단에 미리 있는 이름과 맞춰 관리자가 승인 */
@@ -489,7 +490,7 @@ async function viewLeaderHome(app) {
   await Promise.all(ctx.leader_cells.flatMap(c => [thisWeek, lastWeek].map(w => rpc('cell_deadline', { p_cell: c.cell_id, p_week: w }).then(x => { DL[c.cell_id + w] = x; }).catch(() => {}))));
   const dlText = (cell, w, r) => {
     if (r && r.status === 'submitted') return '';
-    const d = DL[cell + w]; if (!d) return '';
+    const d = DL[cell + w]; if (!d || isNaN(new Date(d).getTime())) return '';
     return Date.now() > new Date(d).getTime() ? ' 마감이 지났지만 지금이라도 작성해 주세요.' : ' 마감: ' + dayLabel(kstDate(d)) + ' 낮 12시까지';
   };
   let h = `<h1>안녕하세요, ${esc(honorific(S.me.name))}</h1>`;
