@@ -531,6 +531,13 @@ async function renderPushBox() {
     <p class="small muted" style="margin:0">오른쪽 위 메뉴에서 <b>다른 브라우저로 열기</b>(크롬·사파리)를 눌러 주세요.</p>`);
   box.innerHTML = card(`<p style="margin:0">이 인터넷 앱에서는 알림을 받을 수 없어요.</p><p class="small muted" style="margin:0">휴대폰의 크롬(안드로이드) 또는 사파리(아이폰)로 열어 주세요.</p>`);
 }
+// 제출 알림: 확인할 분께 바로 알림 (실패해도 제출에는 영향 없음)
+async function notifySubmitted(id) {
+  try {
+    const { data } = await sb.auth.getSession();
+    await fetch('api/notify-submit', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ report: id }) });
+  } catch (_) { /* 토요일 확인 알림이 대신 챙김 */ }
+}
 async function pushOn() {
   PUSH.busy = true; PUSH.msg = ''; 
   try {
@@ -800,6 +807,7 @@ async function submitReport() {
   try {
     await rpc('submit_report', { p_report: E.id, p_version: E.version });
     const id = E.id; E = null; hideFooter();
+    notifySubmitted(id);
     toast('보고서를 제출했습니다. 수고 많으셨습니다.');
     S.stack = []; S.view = { name: 'detail', id, mine: true }; render();
   } catch (e) {
