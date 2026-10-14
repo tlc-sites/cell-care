@@ -1123,7 +1123,7 @@ async function viewLeadershipHome(app, v) {
 const DASH = { sort: 'unreviewed', filter: 'all', campus: '' };
 function groupKey(r) {
   if (r.review_mode === 'none') return { key: 'none', name: tr('검토 없음 셀', 'Cells without review'), mode: 'none' };
-  if (r.review_mode === 'senior_direct') return { key: 'senior', name: tr('스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인', 'Reviewed by Pastor Scott Brenner'), mode: 'senior' };
+  if (r.review_mode === 'senior_direct') return { key: 'senior', name: tr('스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인', 'Reviewed by Pastor Scott Brenner & Mrs. Sunghee Brenner'), mode: 'senior' };
   return { key: r.responsible_leadership_id || 'unassigned', name: r.responsible_leadership_name ? r.responsible_leadership_name + ' Leadership' : tr('담당 Leadership 없음', 'No Leadership assigned'), mode: 'leadership' };
 }
 function groupRows(rows) {
