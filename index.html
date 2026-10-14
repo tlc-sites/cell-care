@@ -604,7 +604,7 @@ async function loadEditor(id) {
     step: E && E.id === id ? E.step : 0,
     m: {
       meeting_held: rep.meeting_held, meeting_date: rep.meeting_date || '', meeting_cancel_reason: rep.meeting_cancel_reason || '',
-      grace_notes: rep.grace_notes || '', grace_none: !!rep.grace_none, leader_message: rep.leader_message || 'none',
+      grace_notes: rep.grace_notes || '', grace_none: false, leader_message: rep.leader_message === 'share_up' ? 'none' : (rep.leader_message || 'none'),
       att, pu,
       notes: notes.map(n => ({ member_id: n.member_id, category: n.category, content: n.content, attention: n.leadership_attention_required })),
       hasCare: notes.length ? true : (rep.version > 2 ? false : null)
@@ -679,8 +679,7 @@ function renderEditor() {
   if (E.step === 2) {
     h += `<h1>은혜와 나눔</h1>
       <label class="field">이번 셀모임 가운데 하나님께서 주신 은혜와 감사한 일을 나눠 주세요.
-        <textarea data-bind="grace_notes" rows="7" ${m.grace_none ? 'disabled' : ''}>${esc(m.grace_notes)}</textarea></label>
-      <label class="check"><input type="checkbox" data-bind-check="grace_none" ${m.grace_none ? 'checked' : ''}><span>특별히 나눌 내용이 없습니다</span></label>`;
+        <textarea data-bind="grace_notes" rows="7">${esc(m.grace_notes)}</textarea></label>`;
   }
 
   if (E.step === 3) {
@@ -730,7 +729,7 @@ function renderEditor() {
         ${Object.keys(m.pu).length ? '<div class="small muted" style="margin-top:6px">지난 기도제목 ' + Object.keys(m.pu).length + '건 업데이트</div>' : ''}</div>
     </div>
     <h2>Leadership에게 특별히 전달하고 싶은 내용이 있나요?</h2>
-    <div class="stack">${Object.keys(L.message).map(k => `<button class="btn ${m.leader_message === k ? '' : 'quiet'}" data-act="ed-set" data-k="leader_message" data-v="${k}" aria-pressed="${m.leader_message === k}">${L.message[k]}</button>`).join('')}</div>`;
+    <div class="stack">${Object.keys(L.message).filter(k => k !== 'share_up').map(k => `<button class="btn ${m.leader_message === k ? '' : 'quiet'}" data-act="ed-set" data-k="leader_message" data-v="${k}" aria-pressed="${m.leader_message === k}">${L.message[k]}</button>`).join('')}</div>`;
     if (E.confirm) h += `<div class="banner warn" style="margin-top:16px" role="alertdialog"><b>제출하시겠어요?</b>제출하면 ${E.cell.review_mode === 'none' ? '' : '확인 전까지 '}수정할 수 없습니다. 고칠 일이 생기면 Leadership께 수정 요청을 부탁해 주세요.
       <div class="row" style="margin-top:12px"><button class="btn sm" data-act="ed-submit">제출합니다</button><button class="btn quiet sm" data-act="ed-confirm-cancel">다시 볼게요</button></div></div>`;
   }
@@ -793,7 +792,7 @@ function validateForSubmit() {
   if (m.meeting_held === null || m.meeting_held === undefined) return [0, '이번 주 셀모임 진행 여부를 골라 주세요.'];
   if (m.meeting_held && !weekOK(m.meeting_date)) return [0, '셀모임 날짜를 ' + dayLabel(w) + '부터 ' + dayLabel(addDays(w, 6)) + ' 사이로 입력해 주세요.'];
   if (m.meeting_held === false && !m.meeting_cancel_reason.trim()) return [0, '모임을 진행하지 못한 이유를 적어 주세요.'];
-  if (m.meeting_held && !m.grace_none && !m.grace_notes.trim()) return [2, '은혜와 나눔을 적어 주시거나 “특별히 나눌 내용이 없습니다”를 선택해 주세요.'];
+  if (m.meeting_held && !m.grace_none && !m.grace_notes.trim()) return [2, '은혜와 나눔을 적어 주세요.'];
   if (m.hasCare && m.notes.some(n => (n.content.trim() || n.member_id) && (!n.member_id || !n.category || !n.content.trim()))) return [3, '셀 케어 기록마다 셀원, 유형, 내용을 모두 채워 주세요.'];
   return null;
 }
