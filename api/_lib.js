@@ -4,7 +4,7 @@ const SUPABASE_URL = 'https://mcbbhsvvzqvtrxlbdcks.supabase.co';
 const PUBLISHABLE = 'sb_publishable_hs84BPU44TEcr2wM6boXIw_Saktd9p3';
 
 function env(name) {
-  const v = process.env[name];
+  const v = (process.env[name] || '').trim().replace(/^["']|["']$/g, '');
   if (!v) throw new Error('환경 변수 ' + name + ' 이(가) 비어 있습니다.');
   return v;
 }
@@ -20,6 +20,7 @@ async function serviceRpc(fn, args) {
   if (key.split('.').length === 3) headers.Authorization = 'Bearer ' + key;   // 예전 형식(service_role JWT)
   const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, { method: 'POST', headers, body: JSON.stringify(args || {}) });
   const text = await r.text();
+  if (r.status === 401) throw new Error('SUPABASE_SECRET_KEY 값이 맞지 않습니다 (앞부분: ' + key.slice(0, 10) + '…, 길이 ' + key.length + '자)');
   if (!r.ok) throw new Error('Supabase ' + fn + ' ' + r.status + ' ' + text.slice(0, 200));
   return text ? JSON.parse(text) : null;
 }
