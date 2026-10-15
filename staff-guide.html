@@ -83,6 +83,7 @@ ul.dots li { margin: 4px 0; }
     <a href="#members">셀원 관리</a>
     <a href="#notes">성도 동정</a>
     <a href="#issues">셀원 이슈</a>
+    <a href="#install">설치</a>
     <a href="#faq">자주 묻는 질문</a>
   </nav>
 
@@ -186,6 +187,79 @@ ul.dots li { margin: 4px 0; }
     <div class="tip">셀보고서의 셀 케어 기록과, 내가 볼 수 있는 성도 동정이 함께 모입니다.</div>
   </section>
 
+  <section id="install">
+    <h2>휴대폰·PC에 설치하기</h2>
+    <p class="lead">앱처럼 아이콘을 눌러 바로 열 수 있고, 알림도 받을 수 있습니다. 쓰시는 기기를 골라 주세요.</p>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="t-ios" aria-selected="true" aria-controls="p-ios">아이폰</button>
+      <button role="tab" id="t-and" aria-selected="false" aria-controls="p-and">갤럭시 · 안드로이드</button>
+      <button role="tab" id="t-win" aria-selected="false" aria-controls="p-win">윈도우 PC</button>
+      <button role="tab" id="t-mac" aria-selected="false" aria-controls="p-mac">맥</button>
+    </div>
+
+    <div class="panel" id="p-ios" role="tabpanel" aria-labelledby="t-ios">
+      <ol class="steps">
+        <li><b>사파리(Safari)</b>로 셀 케어를 엽니다.<br><span style="color:var(--muted);font-size:.92em">카카오톡·네이버 앱 안에서는 추가할 수 없어요. 오른쪽 위 「⋯」에서 'Safari로 열기'를 눌러 주세요.</span></li>
+        <li>화면 아래의 <b>공유 버튼</b>
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#20365B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="공유 버튼"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>
+          을 누릅니다.<br><span style="color:var(--muted);font-size:.92em">공유 버튼이 안 보이면 주소창 옆 <b>「⋯」</b>를 먼저 누른 뒤 「공유」를 누르세요.</span></li>
+        <li>목록을 위로 밀어 <b class="key">홈 화면에 추가</b>를 누릅니다.</li>
+        <li>'웹 앱으로 열기'가 보이면 켜 둔 채로, 오른쪽 위 <b class="key">추가</b>를 누릅니다.</li>
+        <li>홈 화면에 생긴 <b>셀 케어 아이콘</b>을 눌러 열고, 한 번 더 로그인합니다.</li>
+      </ol>
+      <div class="warn">아이폰은 홈 화면 아이콘이 사파리와 따로 움직여서, <b>아이콘으로 처음 열 때 코드를 한 번 더</b> 받아야 합니다. 그 뒤로는 계속 아이콘으로 여시면 됩니다.</div>
+    </div>
+
+    <div class="panel" id="p-and" role="tabpanel" aria-labelledby="t-and" hidden>
+      <p class="sub">크롬(Chrome)으로 여실 때</p>
+      <ol class="steps">
+        <li><b>크롬</b>으로 셀 케어를 엽니다.</li>
+        <li>오른쪽 위 <b>「⋮」</b>(점 세 개)를 누릅니다.</li>
+        <li><b class="key">홈 화면에 추가</b> 또는 <b class="key">앱 설치</b>를 누릅니다.</li>
+        <li><b class="key">설치</b>(또는 <b class="key">추가</b>)를 누르면 홈 화면에 아이콘이 생깁니다.</li>
+      </ol>
+      <p class="sub">삼성 인터넷으로 여실 때</p>
+      <ol class="steps">
+        <li>아래쪽 <b>「≡」</b>(줄 세 개) 메뉴를 누릅니다.</li>
+        <li><b class="key">현재 페이지 추가</b> → <b class="key">홈 화면</b>을 누릅니다.</li>
+        <li><b class="key">추가</b>를 누르면 홈 화면에 아이콘이 생깁니다.</li>
+      </ol>
+      <div class="tip">메뉴 이름은 휴대폰마다 조금 다를 수 있어요. '홈 화면', '앱 설치'라는 말이 들어간 메뉴를 찾으시면 됩니다.</div>
+    </div>
+    <div class="panel" id="p-win" role="tabpanel" aria-labelledby="t-win" hidden>
+      <p class="sub">크롬(Chrome)으로 여실 때</p>
+      <ol class="steps">
+        <li><b>크롬</b>으로 셀 케어(tlc-cell-care.vercel.app)를 엽니다.</li>
+        <li>주소창 오른쪽 끝의 <b>설치 아이콘</b>
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#20365B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="설치 아이콘"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 7v6"/><path d="M9.5 10.5 12 13l2.5-2.5"/></svg>
+          을 누릅니다.<br><span style="color:var(--muted);font-size:.92em">안 보이면 오른쪽 위 <b>「⋮」</b> → 「전송, 저장 및 공유」 → <b>「페이지를 앱으로 설치」</b>(또는 「앱 설치」)를 누르세요.</span></li>
+        <li><b class="key">설치</b>를 누르면 셀 케어가 따로 창으로 열리고, 시작 메뉴에 아이콘이 생깁니다.</li>
+      </ol>
+      <p class="sub">엣지(Edge)로 여실 때</p>
+      <ol class="steps">
+        <li><b>엣지</b>로 셀 케어를 엽니다.</li>
+        <li>오른쪽 위 <b>「⋯」</b> → <b class="key">앱</b> → <b class="key">이 사이트를 앱으로 설치</b>를 누릅니다.</li>
+        <li><b class="key">설치</b>를 누릅니다.</li>
+      </ol>
+      <div class="tip">작업 표시줄의 셀 케어 아이콘을 마우스 오른쪽으로 누르고 <b>「작업 표시줄에 고정」</b>을 고르면 다음부터 한 번에 열립니다. 설치한 앱에서 처음 열 때는 로그인 코드를 한 번 더 받아야 할 수 있어요.</div>
+    </div>
+
+    <div class="panel" id="p-mac" role="tabpanel" aria-labelledby="t-mac" hidden>
+      <p class="sub">사파리(Safari)로 여실 때</p>
+      <ol class="steps">
+        <li><b>사파리</b>로 셀 케어(tlc-cell-care.vercel.app)를 엽니다.</li>
+        <li>화면 맨 위 메뉴 막대에서 <b class="key">파일</b> → <b class="key">Dock에 추가</b>를 누릅니다.<br><span style="color:var(--muted);font-size:.92em">공유 버튼 <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#20365B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="공유 버튼"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> 안에도 「Dock에 추가」가 있습니다. macOS Sonoma(14) 이상에서 됩니다.</span></li>
+        <li><b class="key">추가</b>를 누르면 Dock에 셀 케어 아이콘이 생깁니다.</li>
+      </ol>
+      <p class="sub">크롬(Chrome)으로 여실 때</p>
+      <ol class="steps">
+        <li>주소창 오른쪽 끝의 <b>설치 아이콘</b>을 누르거나, 「⋮」 → 「전송, 저장 및 공유」 → <b>「페이지를 앱으로 설치」</b>를 누릅니다.</li>
+        <li><b class="key">설치</b>를 누르면 Launchpad와 Dock에서 열 수 있습니다.</li>
+      </ol>
+      <div class="tip">Dock의 아이콘으로 처음 열 때는 로그인 코드를 한 번 더 받아야 할 수 있어요. 알림은 아이콘으로 연 셀 케어에서 「알림 받기」를 누르면 맥 알림으로 옵니다.</div>
+    </div>
+  </section>
+
   <section id="faq">
     <h2>자주 묻는 질문</h2>
     <details>
@@ -213,5 +287,21 @@ ul.dots li { margin: 4px 0; }
   <a class="cta" href="./">셀 케어 열기</a>
   <p class="foot">처음 쓰시는 셀리더께는 <a href="guide.html" style="color:var(--accent)">셀리더용 사용 안내</a>를 보내 주세요.</p>
 </div>
+<script>
+(function () {
+  var tabs = document.querySelectorAll('[role=tab]');
+  function pick(id) {
+    tabs.forEach(function (t) {
+      var on = t.id === id;
+      t.setAttribute('aria-selected', String(on));
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+  }
+  tabs.forEach(function (t) { t.addEventListener('click', function () { pick(t.id); }); });
+  if (/android/i.test(navigator.userAgent)) pick('t-and');
+  else if (/Windows/i.test(navigator.userAgent)) pick('t-win');
+  else if (/Macintosh/i.test(navigator.userAgent) && !('ontouchend' in document)) pick('t-mac');
+})();
+</script>
 </body>
 </html>
