@@ -676,6 +676,8 @@ async function loadEditor(id) {
     q(sb.from('cells').select('id, name, review_mode').eq('id', rep.cell_id)),
     rpc('pastor_msg_get', { p_report: id }).catch(() => [])
   ]).then(x => { PMSG_LOADED = (x[6] && x[6][0]) ? x[6][0].content : ''; return x; });
+  const sep = new Set(((await rpc('separate_members', { p_cell: rep.cell_id }).catch(() => [])) || []).map(x => x.member_id));
+  roster.forEach(x => { x.separate = sep.has(x.member_id); });
   const att = {};
   for (const m of roster) if (m.attendance) att[m.member_id] = { status: m.attendance, absence_reason: m.absence_reason || '' };
   const pu = {};
@@ -739,7 +741,8 @@ function renderEditor() {
   }
 
   if (E.step === 1) {
-    const listed = E.roster.filter(x => x.listed);
+    const listed = E.roster.filter(x => x.listed && !x.separate);
+    const separate = E.roster.filter(x => x.listed && x.separate);
     const others = E.roster.filter(x => !x.listed);
     h += `<h1>출석</h1><p class="sub">셀원마다 참석 여부를 골라 주세요.</p>
       <button class="btn quiet sm" data-act="ed-allpresent" style="margin-bottom:8px">정식 셀원 모두 참석으로</button>
@@ -753,6 +756,14 @@ function renderEditor() {
     };
     h += listed.length ? listed.map(memRow).join('') : '<p class="empty">등록된 셀원이 없습니다.</p>';
     h += '</div>';
+    if (separate.length) {
+      h += '<h2>따로 만나는 셀원</h2><p class="sub">셀모임과 따로 만나는 분입니다. 결석으로 세지 않습니다.</p><div class="card" style="padding-block:4px">' + separate.map(x => {
+        const a = m.att[x.member_id] || {};
+        return `<div class="member"><div class="nm">${esc(x.name)} <span class="pill">따로</span></div>
+          <div class="seg att" style="--n:2"><button data-act="ed-att" data-id="${x.member_id}" data-v="present" aria-pressed="${a.status === 'present'}">이번 주 만남</button>
+          <button data-act="ed-att" data-id="${x.member_id}" data-v="unknown" aria-pressed="${a.status !== 'present'}">못 만남</button></div></div>`;
+      }).join('') + '</div>';
+    }
     if (others.length) h += '<h2>이번 주 방문자</h2><div class="card" style="padding-block:4px">' + others.map(memRow).join('') + '</div>';
     const vis = E.visitors.filter(x => !E.roster.find(y => y.member_id === x.member_id));
     if (vis.length) h += '<h2>최근에 왔던 방문자</h2><p class="sub">이번 주에도 왔다면 눌러서 추가해 주세요.</p><div class="chips">' +
@@ -1004,7 +1015,9 @@ async function viewReportDetail(app, v) {
       attn.map(n => `<div><b>${esc(memName(n.member_id))}</b> · ${LX('care', n.category)}<div class="small">${TX('care:' + n.id, n.content)}</div></div>`).join('') + '</div>';
   }
 
-  const att = roster.filter(x => x.attendance);
+  const sepIds = new Set(((await rpc('separate_members', { p_cell: rep.cell_id }).catch(() => [])) || []).map(x => x.member_id));
+  const att = roster.filter(x => x.attendance && !sepIds.has(x.member_id));
+  const sepMet = roster.filter(x => sepIds.has(x.member_id) && x.attendance === 'present');
   const listedAtt = att.filter(x => x.type_in_week === 'member');
   const pres = listedAtt.filter(x => x.attendance === 'present');
   const abs = att.filter(x => x.attendance === 'absent');
@@ -1014,6 +1027,7 @@ async function viewReportDetail(app, v) {
     <div class="card"><h3>${tr('출석', 'Attendance')}</h3><div class="num">${tr('셀원 ' + listedAtt.length + '명 중 참석 ' + pres.length + '명', pres.length + ' of ' + listedAtt.length + ' members present')}${visitors.length ? tr(' · 방문 ' + visitors.length + '명', ' · ' + visitors.length + ' visitor(s)') : ''}</div>
       ${pres.length ? '<div class="small muted">' + tr('참석', 'Present') + ': ' + pres.map(x => esc(x.name)).join(', ') + '</div>' : ''}
       ${abs.length ? '<div class="small" style="margin-top:4px">' + tr('결석', 'Absent') + ': ' + abs.map(x => esc(x.name) + (x.absence_reason ? ' (' + (TRANS.map && TRANS.map['absence:' + x.member_id] && EN() ? esc(TRANS.map['absence:' + x.member_id]) : esc(x.absence_reason)) + ')' : '')).join(', ') + '</div>' : ''}
+      ${sepMet.length ? '<div class="small muted" style="margin-top:4px">' + tr('따로 만남', 'Met separately') + ': ' + sepMet.map(x => esc(x.name)).join(', ') + '</div>' : ''}
       ${visitors.length ? '<div class="small muted" style="margin-top:4px">' + tr('방문', 'Visitors') + ': ' + visitors.map(x => esc(x.name) + (x.member_type_now === 'member' ? tr(' → 지금은 셀원', ' → now a member') : '')).join(', ') + '</div>' : ''}</div>
     <div class="card"><h3>${tr('셀 케어', 'Member care')}</h3>${notes.length ? notes.map(n => `<div class="note ${n.leadership_attention_required ? 'attn' : ''}"><b>${esc(memName(n.member_id))}</b> · ${LX('care', n.category)}${n.leadership_attention_required ? ' · <span style="color:var(--warn)">' + tr('분파셀리더 확인 필요', 'Flagged for Leadership') + '</span>' : ''}${n.relation_kind && (n.related_member_id || n.related_name) ? '<div class="tiny muted">' + esc(relText(memName(n.member_id), n.related_member_id ? (memName(n.related_member_id) || n.related_name || '') : n.related_name, n.relation_kind)) + '</div>' : ''}<div class="small">${TX('care:' + n.id, n.content)}</div></div>`).join('') : '<span class="muted">' + tr('나눌 셀원 없음', 'No care notes') + '</span>'}</div>
     <div class="card"><h3>${tr('기도제목', 'Prayer requests')}</h3>${prayers.length || newPrayers.length ? '' : '<span class="muted">' + tr('없음', 'None') + '</span>'}
@@ -1708,10 +1722,11 @@ async function viewMembers(app, v) {
     } else {
       actions = `<div class="row" style="gap:12px;margin-top:6px;flex-wrap:wrap">
         ${m.state === 'visitor' ? `<button class="link" data-act="mem-register" data-id="${m.id}">정식 셀원으로</button>` : ''}
+        ${m.state === 'member' ? `<button class="link" data-act="mem-sep" data-id="${m.id}" data-v="${m.meets_separately ? '0' : '1'}">${m.meets_separately ? '모임 셀원으로' : '따로 만나는 셀원으로'}</button>` : ''}
         <button class="link" data-act="mem-confirm" data-id="${m.id}">${m.state === 'visitor' ? '목록에서 내리기' : '출석 명단에서 내리기'}</button>
         ${m.can_delete ? `<button class="link" data-act="mem-del-ask" data-id="${m.id}" style="color:var(--danger)">삭제</button>` : ''}</div>`;
     }
-    return `<div class="member"><div class="row"><b style="font-size:1.05em">${esc(m.name)}</b><span class="spacer"></span><span class="pill ${c}">${t}</span></div>
+    return `<div class="member"><div class="row"><b style="font-size:1.05em">${esc(m.name)}</b>${m.meets_separately ? ' <span class="pill" style="margin-left:6px">따로</span>' : ''}<span class="spacer"></span><span class="pill ${c}">${t}</span></div>
       ${m.state === 'left' && m.left_at ? `<div class="tiny muted">${dayLabel(addDays(m.left_at, 1))}부터 출석 명단에서 내림</div>` : ''}${actions}</div>`;
   };
   const now = rows.filter(m => m.state === 'member' || m.state === 'visitor');
@@ -1917,6 +1932,7 @@ document.addEventListener('click', async (e) => {
     case 'open-members': Object.assign(MEM, { edit: null, confirm: null }); return go({ name: 'members', cell: d.cell, cellName: d.name });
     case 'mem-add': { const nm = ($('#mem-new')?.value || '').trim(); if (!nm) return toast('이름을 적어 주세요.'); return memAct('member_add', { p_cell: S.view.cell, p_name: nm }, nm + '님을 셀원으로 추가했습니다.'); }
     case 'mem-confirm': MEM.confirm = d.id; MEM.del = null; return render();
+    case 'mem-sep': return memAct('member_set_separate', { p_member: d.id, p_on: d.v === '1' }, d.v === '1' ? '따로 만나는 셀원으로 바꿨습니다.' : '모임 셀원으로 바꿨습니다.');
     case 'mem-del-ask': MEM.del = d.id; MEM.confirm = null; return render();
     case 'mem-del': return memAct('member_delete', { p_member: d.id }, '셀원 명단에서 삭제했습니다.');
     case 'mem-cancel': MEM.confirm = null; MEM.del = null; return render();
@@ -1955,7 +1971,7 @@ document.addEventListener('click', async (e) => {
       return markDirty(true);
     }
     case 'ed-att': { const cur = m.att[d.id] || {}; m.att[d.id] = { status: d.v, absence_reason: d.v === 'absent' ? (cur.absence_reason || '') : '' }; return markDirty(true); }
-    case 'ed-allpresent': E.roster.filter(x => x.listed).forEach(x => { m.att[x.member_id] = { status: 'present', absence_reason: '' }; }); return markDirty(true);
+    case 'ed-allpresent': E.roster.filter(x => x.listed && !x.separate).forEach(x => { m.att[x.member_id] = { status: 'present', absence_reason: '' }; }); return markDirty(true);
     case 'ed-pu': { const cur = m.pu[d.id] || {}; m.pu[d.id] = { status: cur.status === d.v ? null : d.v, note: cur.note || '' }; if (!m.pu[d.id].status) delete m.pu[d.id]; return markDirty(true); }
     case 'ed-care': m.hasCare = d.v === 'true'; if (m.hasCare && !m.notes.length) m.notes.push({ member_id: '', category: '', content: '', attention: false }); return markDirty(true);
     case 'ed-addnote': m.notes.push({ member_id: '', category: '', content: '', attention: false }); return markDirty(true);
