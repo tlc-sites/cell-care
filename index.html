@@ -702,11 +702,11 @@ function renderEditor() {
 
   if (E.step === 0) {
     const ldr = E.cell.review_mode === 'leadership' ? 'Leadership 확인' : E.cell.review_mode === 'senior_direct' ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님 확인' : '검토 없음';
-    h += `<h1>이번 주 모임</h1>
+    h += `<h1>${weekLabel(r.week_start)} 셀모임</h1>
       <div class="card"><dl class="summary" style="margin:0">
         <dt>보고 주차</dt><dd>${weekLabel(r.week_start, true)} (${dayLabel(r.week_start)} ~ ${dayLabel(addDays(r.week_start, 6))})</dd>
         <dt>셀</dt><dd>${esc(E.cell.name)}</dd><dt>확인</dt><dd>${ldr}</dd></dl></div>
-      <h2>이번 주 셀모임을 진행하셨나요?</h2>
+      <h2>${weekLabel(r.week_start)} 셀모임을 진행하셨나요?</h2>
       <div class="seg" style="--n:2">
         <button data-act="ed-set" data-k="meeting_held" data-v="true" aria-pressed="${m.meeting_held === true}">진행함</button>
         <button data-act="ed-set" data-k="meeting_held" data-v="false" aria-pressed="${m.meeting_held === false}">진행하지 못함</button>
