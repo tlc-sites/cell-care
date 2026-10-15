@@ -1172,6 +1172,7 @@ async function viewLeadershipHome(app, v) {
     h += '<div class="stack">' + own.map(r => ownCellItem(r, week)).join('') + '</div>';
   }
   if (!S.ctx.leader_cells.length) h += '<div id="pushbox"></div>';
+  h += '<p style="text-align:center;margin-top:24px"><a href="staff-guide.html" style="color:var(--accent);font-weight:500">📖 교역자 사용 안내</a></p>';
   app.innerHTML = h;
   renderPushBox();
 }

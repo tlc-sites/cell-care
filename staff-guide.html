@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>셀 케어 교역자 안내</title>
+<meta name="theme-color" content="#20365B">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #F3F5F9; --card: #FFFFFF; --ink: #1A2436; --muted: #586378; --line: #D8DEE9;
+  --accent: #20365B; --accent-mid: #4E6285; --accent-soft: #E6EBF3;
+  --warn: #9C5212; --warn-soft: #FBEEDF; --ok: #2B7150; --ok-soft: #E2F1E7;
+  --font-display: "Gowun Batang", "Noto Serif KR", serif;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 18px; line-height: 1.65; }
+.wrap { max-width: 620px; margin: 0 auto; padding: 0 16px 48px; }
+header.top { background: var(--accent); color: #fff; padding: 28px 16px 24px; }
+header.top .wrap { padding-bottom: 0; }
+header.top img { width: 56px; height: 56px; border-radius: 14px; display: block; margin-bottom: 12px; background: #fff; }
+h1 { font-family: var(--font-display); font-size: 1.65em; line-height: 1.3; margin: 0 0 6px; }
+header.top p { margin: 0; opacity: .9; font-size: .95em; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 4px; }
+nav.toc a { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; color: var(--accent); text-decoration: none; font-weight: 500; font-size: .9em; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px 18px; margin-top: 18px; scroll-margin-top: 12px; }
+h2 { font-family: var(--font-display); font-size: 1.3em; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+h2 .no { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; font-family: var(--font-body); font-size: .75em; display: grid; place-items: center; }
+.lead { color: var(--muted); margin: 0 0 14px; font-size: .95em; }
+ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+ol.steps > li { counter-increment: s; position: relative; padding: 12px 0 12px 44px; border-top: 1px solid var(--line); }
+ol.steps > li:first-child { border-top: 0; }
+ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 12px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 600; display: grid; place-items: center; font-size: .9em; }
+b.btnlike { display: inline-block; background: var(--accent); color: #fff; border-radius: 8px; padding: 0 9px; font-weight: 600; font-size: .92em; white-space: nowrap; }
+b.key { display: inline-block; border: 1.5px solid var(--accent); color: var(--accent); border-radius: 8px; padding: 0 8px; font-weight: 600; font-size: .92em; white-space: nowrap; }
+.ico { display: inline-block; vertical-align: -5px; width: 24px; height: 24px; }
+.tip { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; margin-top: 12px; font-size: .95em; }
+.warn { background: var(--warn-soft); color: #5c3208; border-radius: 12px; padding: 12px 14px; margin-top: 12px; font-size: .95em; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--accent-soft); border-radius: 14px; padding: 5px; margin: 6px 0 14px; }
+.tabs button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 12px 6px; background: transparent; color: var(--accent); cursor: pointer; min-height: 48px; }
+.tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+.panel[hidden] { display: none; }
+.sub { font-weight: 600; margin: 16px 0 4px; }
+details { border-top: 1px solid var(--line); padding: 12px 0; }
+details:first-of-type { border-top: 0; }
+summary { font-weight: 600; cursor: pointer; min-height: 32px; }
+details p { margin: 8px 0 0; color: #2c3648; }
+.cta { display: block; text-align: center; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; border-radius: 14px; padding: 16px; margin-top: 22px; font-size: 1.05em; }
+.foot { text-align: center; color: var(--muted); font-size: .85em; margin-top: 18px; }
+</style>
+<style>
+.flow { list-style: none; margin: 0; padding: 0; }
+.flow li { display: grid; grid-template-columns: 104px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.flow li:first-child { border-top: 0; }
+.flow .when { white-space: nowrap; font-weight: 600; color: var(--accent); font-size: .92em; }
+.flow .what { font-size: .95em; }
+.who { display: inline-block; font-size: .78em; font-weight: 600; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 1px 9px; margin-left: 4px; vertical-align: 2px; }
+ul.dots { margin: 6px 0 0; padding-left: 1.1em; }
+ul.dots li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <img src="icon-192.png" alt="">
+  <h1>셀 케어 교역자 안내</h1>
+  <p>분파리더(교역자)께서 셀 케어로 셀원들을 돌보고 보고를 정리하시는 방법을 모았습니다. 가입과 로그인은 마치셨다는 전제로 안내합니다.</p>
+</div></header>
+
+<div class="wrap">
+  <nav class="toc" aria-label="목차">
+    <a href="#week">한 주 흐름</a>
+    <a href="#tabs">화면 구성</a>
+    <a href="#write">내 셀 보고서</a>
+    <a href="#review">보고서 확인</a>
+    <a href="#lr">교역자 보고</a>
+    <a href="#members">셀원 관리</a>
+    <a href="#notes">성도 동정</a>
+    <a href="#issues">셀원 이슈</a>
+    <a href="#faq">자주 묻는 질문</a>
+  </nav>
+
+  <section id="week">
+    <h2>한 주 흐름</h2>
+    <p class="lead">셀보고서는 월요일부터 주일까지를 한 주로 봅니다.</p>
+    <ul class="flow">
+      <li><span class="when">월 오전 9시</span><span class="what">셀리더들에게 한 주를 여는 격려 알림</span></li>
+      <li><span class="when">금 오전 10시</span><span class="what">아직 보고서를 내지 않은 셀리더에게 알림</span></li>
+      <li><span class="when">금 낮 12시</span><span class="what"><b>셀보고서 마감</b><br><span style="color:var(--muted);font-size:.92em">토요일에 모이는 셀(송재혁·허영숙·안성일 셀)은 다음 주 금요일 낮 12시</span></span></li>
+      <li><span class="when">금 오후 1시</span><span class="what"><b>분파리더</b> — 맡은 셀의 보고서를 확인하고 <b>교역자 보고</b>를 작성해 주세요</span></li>
+      <li><span class="when">금 오후 5시</span><span class="what">담임 목사님·사모님께 교역자 보고가 준비되었다는 알림</span></li>
+    </ul>
+    <div class="tip">셀리더가 보고서를 제출하면 그 셀의 담당 분파리더께 바로 알림이 갑니다.</div>
+  </section>
+
+  <section id="tabs">
+    <h2>화면 구성</h2>
+    <p class="lead">아래쪽 탭은 맡으신 일에 따라 보입니다.</p>
+    <ul class="dots">
+      <li><b>셀리더</b> — 직접 인도하시는 셀이 있을 때. 내 셀 보고서를 씁니다.</li>
+      <li><b>Leadership</b> — 맡은 셀들의 보고서 확인, 교역자 보고, 셀원 이슈 보기, 셀원 관리</li>
+      <li><b>성도 동정</b> — 특별히 만난 분들의 소식을 나누고 봅니다.</li>
+    </ul>
+  </section>
+
+  <section id="write">
+    <h2><span class="no">1</span>내 셀 보고서 쓰기</h2>
+    <p class="lead">직접 인도하시는 셀이 있다면 「셀리더」 탭에서 씁니다. 쓰는 동안 자동으로 저장됩니다.</p>
+    <ol class="steps">
+      <li><b>모임</b> — 셀모임을 진행했는지와 <b>모임 날짜</b>를 고릅니다.<br><span style="color:var(--muted);font-size:.92em">다른 주의 날짜를 고르면 "그 주차 보고서로 옮길까요?"가 나옵니다. 「옮기기」를 누르면 적은 내용 그대로 그 주 보고서가 됩니다.</span></li>
+      <li><b>출석</b> — 셀원마다 참석·결석을 누릅니다. 새로 온 분은 「+ 새 참석자 추가」로 넣습니다.</li>
+      <li><b>셀 케어</b> — 함께 나누며 애통하고 기도했던 일, 함께 기뻐하고 감사했던 일을 중심으로 적습니다.<br><span style="color:var(--muted);font-size:.92em">유형을 「관계」로 고르면 <b>누구와의 관계인지</b>와 <b>서로 어려워함 / 이 분이 상대 때문에 어려워함</b>을 함께 남길 수 있습니다.</span></li>
+      <li><b>은혜</b> — 셀모임 가운데 주신 은혜와 감사한 일을 나눕니다.</li>
+      <li><b>확인</b> — 내용을 한 번 살펴보고 <b class="btnlike">보고서 제출</b>을 누릅니다.<br><span style="color:var(--muted);font-size:.92em">「담임목사님께 드리는 말씀」은 쓰신 분과 목사님·사모님만 보며, 제출하면 영어로 번역되어 바로 전달됩니다.</span></li>
+    </ol>
+    <div class="tip">제출한 뒤에도 확인 전까지는 보고서를 열어 <b class="key">보고서 고치기</b>로 직접 고칠 수 있습니다. 다시 제출하면 처음 기록도 함께 남습니다.</div>
+  </section>
+
+  <section id="review">
+    <h2><span class="no">2</span>셀보고서 확인하기</h2>
+    <p class="lead">「Leadership」 탭에 맡으신 셀이 모두 나옵니다. 위쪽의 「지난주」 「다음 주」로 다른 주도 볼 수 있습니다.</p>
+    <ol class="steps">
+      <li>「확인이 필요한 보고서가 있습니다」의 <b class="key">확인하러 가기</b>나, 셀 이름을 눌러 보고서를 엽니다.</li>
+      <li>출석, 셀 케어, 기도제목, 은혜와 나눔을 읽어 봅니다. 셀리더가 「Leadership 확인 필요」로 표시한 기록은 강조되어 보입니다.</li>
+      <li>필요하면 <b>Leadership 메모</b>를 남깁니다. 셀리더에게는 보이지 않습니다.</li>
+      <li><b>상위 보고 상태</b>를 고릅니다 — 일반 · 관심 필요 · 목양 확인 필요 · 긴급 확인 필요</li>
+      <li><b class="btnlike">보고서를 확인했습니다</b>를 누릅니다.</li>
+    </ol>
+    <div class="tip">내용을 보완해야 하면 「확인」 대신 <b>수정 요청하기</b>를 눌러 사유를 적어 보내세요. 사유는 셀리더에게 그대로 보이고, 셀리더가 고쳐 다시 제출하면 알림이 옵니다.</div>
+  </section>
+
+  <section id="lr">
+    <h2><span class="no">3</span>교역자 보고 쓰기</h2>
+    <p class="lead">금요일 오후 1시 알림을 받으시면, 셀리더 보고서를 바탕으로 목사님께 전할 소식을 <b>직접</b> 정리합니다. 셀리더 글이 그대로 복사되지 않고 빈칸에서 시작합니다.</p>
+    <ol class="steps">
+      <li>「Leadership」 탭 맨 위 <b class="key">교역자 보고 쓰기</b>를 누릅니다.</li>
+      <li>쓰고 싶으면 <b>한 주 요약</b>을 적습니다.</li>
+      <li><b>셀원 고르기</b>에서 한 분을 고르면, 그 분에 대한 최근 셀리더 기록이 참고로 보입니다.</li>
+      <li><b>이슈 구분</b>을 누르고 <b>내용</b>을 직접 적은 뒤 <b class="key">+ 이 분 추가</b>를 누릅니다. 필요한 만큼 반복합니다.</li>
+      <li><b class="btnlike">교역자 보고 제출하기</b>를 누르면 바로 목사님·사모님께 보입니다.</li>
+    </ol>
+    <div class="tip"><b>개별 케어 명단</b>: 셀에 속하지 않고 따로 돌보시는 분은 교역자 보고 화면 아래 「개별 케어 명단」에 이름을 넣어 두면, 셀원처럼 골라 쓸 수 있습니다. 본인만 보고 고를 수 있습니다.</div>
+    <div class="tip">제출한 뒤에도 「보고 보기 · 고치기」로 고칠 수 있고, 「고친 내용 저장」을 누르면 바로 반영됩니다.</div>
+  </section>
+
+  <section id="members">
+    <h2><span class="no">4</span>셀원 관리</h2>
+    <p class="lead">「Leadership」 탭 아래 셀 이름 버튼, 또는 「셀리더」 탭의 <b>셀원 관리</b>에서 합니다.</p>
+    <ul class="dots">
+      <li><b>새 셀원 추가</b> — 이름을 적고 「이번 주부터 셀원으로 추가」. 같은 셀에 같은 이름이 있으면 새로 만들지 않습니다. 동명이인은 '김민수A'처럼 구분해 주세요.</li>
+      <li><b>정식 셀원으로</b> — 방문자를 정식 셀원으로 등록합니다.</li>
+      <li><b>출석 명단에서 내리기</b> — 이번 주부터 출석 명단에서 뺍니다. 지난 기록은 남고 「다시 올리기」로 되돌릴 수 있습니다.</li>
+      <li><b style="color:#A0372A">삭제</b> <span class="who">교역자·관리자</span> — 중복으로 들어갔거나 잘못 넣은 분을 지웁니다. 이미 제출된 지난 보고서 기록은 그대로 남습니다.</li>
+    </ul>
+    <div class="warn">셀을 떠나신 분은 「삭제」가 아니라 <b>「출석 명단에서 내리기」</b>를 써 주세요. 그래야 지난 출석과 돌봄 기록이 이어집니다.</div>
+  </section>
+
+  <section id="notes">
+    <h2><span class="no">5</span>성도 동정</h2>
+    <p class="lead">셀보고서와 별도로, 교역자가 특별히 만난 분들의 소식을 언제든 남깁니다. 셀리더와 셀원에게는 보이지 않습니다.</p>
+    <ol class="steps">
+      <li>「성도 동정」 탭에서 <b class="key">+ 성도 동정 쓰기</b>를 누릅니다.</li>
+      <li>만난 날, 이름, 캠퍼스, <b>심방 구분</b>(대면·전화·문자), <b>이슈 구분</b>을 고르고 내용과 기도제목을 적습니다.</li>
+      <li><b>누가 볼 수 있나요?</b> — 「교역자 모두」 또는 「골라서 보이기」. 고른 분께는 알림이 갑니다.</li>
+      <li>목사님께 꼭 전해야 할 일이면 <b>목사님 확인이 필요합니다</b>에 체크합니다.</li>
+    </ol>
+    <div class="tip">담임 목사님·사모님은 모든 동정을 보시고, 새 동정이 올라오면 바로 알림을 받으십니다. 「주간 정리」를 누르면 한 주씩 모아 볼 수 있습니다.</div>
+  </section>
+
+  <section id="issues">
+    <h2><span class="no">6</span>셀원 이슈 보기</h2>
+    <p class="lead">셀원들을 양육하며 알아야 할 이슈를 한눈에 봅니다. 「Leadership」 탭의 <b>셀원 이슈 보기</b>를 누르세요.</p>
+    <ul class="dots">
+      <li><b>내 분파 / 교회 전체</b> — 다른 분파 셀의 이슈도 함께 볼 수 있습니다.</li>
+      <li><b>기간</b> — 최근 4주 · 8주 · 12주</li>
+      <li><b>이슈 구분</b> — 관계, 장기결석, 건강, 가정 등을 골라 모아 봅니다.</li>
+      <li><b>관계 한눈에</b> — 「A ↔ B 서로 어려워함」, 「C → D (D 때문에 어려워함)」처럼 누가 누구와 어려운지 모아 보여 줍니다.</li>
+      <li><b>사람별</b> — 이름을 누르면 그분에 대한 기록이 날짜순으로 펼쳐집니다.</li>
+    </ul>
+    <div class="tip">셀보고서의 셀 케어 기록과, 내가 볼 수 있는 성도 동정이 함께 모입니다.</div>
+  </section>
+
+  <section id="faq">
+    <h2>자주 묻는 질문</h2>
+    <details>
+      <summary>셀리더가 지난주 보고서를 이번 주 칸에 썼어요</summary>
+      <p>보고서 첫 화면에서 모임 날짜를 실제 날짜로 고르면 「그 주차 보고서로 옮기기」가 나옵니다. 그 주에 이미 보고서가 있으면 옮겨지지 않으니, 그때는 그 주 보고서를 열어 써 달라고 안내해 주세요.</p>
+    </details>
+    <details>
+      <summary>같은 셀원이 두 번 보여요</summary>
+      <p>셀원 관리에서 한 분을 「삭제」해 주세요. 교역자와 관리자에게만 보이는 버튼입니다.</p>
+    </details>
+    <details>
+      <summary>확인한 보고서를 다시 고쳐야 해요</summary>
+      <p>확인을 마친 보고서는 셀리더가 직접 고칠 수 없습니다. 담당 분파리더가 「수정 요청하기」로 돌려보내 주세요.</p>
+    </details>
+    <details>
+      <summary>지난 주 보고서도 쓸 수 있나요?</summary>
+      <p>지난 4주까지 쓸 수 있습니다(10월 주차는 모두 열려 있습니다). 마감이 지난 뒤 처음 제출한 보고서는 「마감 후 제출」로 표시됩니다.</p>
+    </details>
+    <details>
+      <summary>알림이 오지 않아요</summary>
+      <p>홈 화면에 추가한 셀 케어 아이콘으로 연 뒤, 화면의 「알림 받기」를 눌러 허용해 주세요. 아이폰은 홈 화면 아이콘으로 연 셀 케어에서만 알림을 받을 수 있습니다.</p>
+    </details>
+  </section>
+
+  <a class="cta" href="./">셀 케어 열기</a>
+  <p class="foot">처음 쓰시는 셀리더께는 <a href="guide.html" style="color:var(--accent)">셀리더용 사용 안내</a>를 보내 주세요.</p>
+</div>
+</body>
+</html>
