@@ -129,9 +129,10 @@ nav.tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: var(--card); border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-nav.tabs .in { max-width: 640px; margin: 0 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
-nav.tabs button { min-height: 62px; border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 15px; font-weight: 500; border-top: 3px solid transparent; }
-nav.tabs button[aria-current=page] { color: var(--accent); border-top-color: var(--accent); font-weight: 600; }
+nav.tabs .in { max-width: 640px; margin: 0 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; padding: 8px 10px; }
+nav.tabs button { min-height: 50px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--card); cursor: pointer; color: var(--accent); font-size: 15px; font-weight: 600; padding: 4px 6px; line-height: 1.25; box-shadow: 0 1px 2px rgba(32,54,91,.08); }
+nav.tabs button:active { transform: translateY(1px); }
+nav.tabs button[aria-current=page] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); box-shadow: 0 2px 6px rgba(32,54,91,.25); }
 .listitem { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); cursor: pointer; text-align: left; width: 100%; }
 .listitem:hover { border-color: #B4C0D6; }
 .listitem .top { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
@@ -973,7 +974,7 @@ async function viewReportDetail(app, v) {
   if (canEdit) h += `<div style="margin-top:12px"><button class="btn" data-act="open-editor" data-id="${rep.id}">${rep.status === 'revision_requested' ? '수정해서 다시 제출하기' : rep.submission_no > 0 ? '고친 보고서 다시 제출하기' : '작성 계속하기'}</button></div>`;
   if (rep.status === 'submitted' && row.i_am_leader && rep.review_status !== 'reviewed') {
     h += DETAIL.reopen === rep.id
-      ? `<div class="banner warn" style="margin-top:12px" role="alertdialog"><b>보고서를 고치시겠어요?</b>고치는 동안에는 '고치는 중'으로 보이고, 확인할 분은 다시 제출하신 뒤에 확인할 수 있습니다. 다 고치신 뒤 꼭 <b style="display:inline">다시 제출하기</b>를 눌러 주세요. 처음 제출한 기록도 그대로 남습니다.
+      ? `<div class="banner warn" style="margin-top:12px" role="alertdialog"><b>보고서를 고치시겠어요?</b>고치는 동안에는 '고치는 중'으로 보이고, 확인할 분은 다시 제출하신 뒤에 확인할 수 있습니다. 다 고치신 뒤 꼭 <b style="display:inline">다시 제출하기</b>를 눌러 주세요.
           <div class="row" style="margin-top:12px"><button class="btn sm" data-act="rep-reopen" data-id="${rep.id}" ${DETAIL.busy ? 'disabled' : ''}>고치기 시작</button><button class="btn quiet sm" data-act="rep-reopen-cancel">취소</button></div></div>`
       : `<div style="margin-top:12px"><button class="btn ghost" data-act="rep-reopen-ask" data-id="${rep.id}">보고서 고치기</button>
           <p class="tiny muted" style="margin:6px 0 0">${rep.review_status === 'pending' ? '확인 전까지는 직접 고칠 수 있습니다.' : '제출한 보고서를 고칠 수 있습니다.'}</p></div>`;

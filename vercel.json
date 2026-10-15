@@ -6,6 +6,10 @@
     },
     {
       "path": "/api/cron-reminder",
+      "schedule": "0 13 * * 4"
+    },
+    {
+      "path": "/api/cron-reminder",
       "schedule": "0 1 * * 5"
     },
     {
