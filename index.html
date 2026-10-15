@@ -512,7 +512,7 @@ async function viewLeaderHome(app) {
         <div style="margin-top:10px"><button class="btn warn sm" data-act="open-report" data-id="${r.report_id}">수정하러 가기</button></div></div>`).join('') + '</div>';
   }
   for (const c of ctx.leader_cells) {
-    const leadershipLine = c.review_mode === 'leadership' ? ('담당 Leadership: ' + esc(c.leadership || '배정 전'))
+    const leadershipLine = c.review_mode === 'leadership' ? ('담당 교역자: ' + esc(c.leadership || '배정 전'))
       : c.review_mode === 'senior_direct' ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인' : '검토 없이 제출만 하는 셀';
     h += `<div class="row" style="margin-top:28px;align-items:center"><h2 style="margin:0">${esc(c.name)}</h2><span class="spacer"></span><button class="btn sm ghost" data-act="open-members" data-cell="${c.cell_id}" data-name="${esc(c.name)}">셀원 관리</button></div><p class="sub">${leadershipLine}${c.leaders && c.leaders.length > 1 ? ' · 공동 셀리더: ' + esc(c.leaders.join(', ')) : ''}</p><div class="stack">`;
     const weeks = [thisWeek];
