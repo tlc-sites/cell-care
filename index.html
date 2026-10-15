@@ -974,11 +974,13 @@ async function viewReportDetail(app, v) {
     rpc('get_week_status', { p_week_start: rep.week_start })
   ]);
   const pmsg = await rpc('pastor_msg_get', { p_report: v.id }).then(x => x && x[0]).catch(() => null);
+  const cmts = rep.submitted_at ? ((await rpc('senior_comment_list', { p_report: v.id }).catch(() => [])) || []) : [];
+  if (CMT.id !== rep.id) Object.assign(CMT, { id: rep.id, draft: { report: '', pastor_msg: '' }, busy: false, del: null });
   const row = (wk || []).find(x => x.cell_id === rep.cell_id) || {};
   const nameOf = (id) => (people.find(p => p.user_id === id) || {}).name || '';
   const memName = (id) => (roster.find(x => x.member_id === id) || {}).name || '';
   const canEdit = rep.status !== 'submitted' && row.i_am_leader;
-  if (TRANS.id !== rep.id) { TRANS.id = rep.id; TRANS.map = null; TRANS.err = ''; }
+  if (TRANS.id !== rep.id) { TRANS.id = rep.id; TRANS.map = TX_CACHE['rep:' + rep.id] || null; TRANS.err = ''; }
   setTop((cell?.name || '') + ' · ' + weekLabel(rep.week_start), true); renderTabs(true);
 
   let h = '';
@@ -1004,9 +1006,7 @@ async function viewReportDetail(app, v) {
   h += `<h1>${esc(cell?.name || '')}</h1><p class="sub">${weekLabel(rep.week_start, true)}${people.find(p => (p.roles_in_report || []).includes('submitted')) ? tr(' · 제출: ', ' · Submitted by ') + esc(people.filter(p => (p.roles_in_report || []).includes('submitted')).map(p => p.name).join(', ')) : ''}</p>`;
 
   if (EN() && isSenior()) {
-    h += TRANS.map ? '<p class="tiny muted" style="margin:4px 0 0">Translated by AI · the Korean original is shown in small text.</p>'
-      : `<div style="margin-top:8px"><button class="btn sm ghost" data-act="tx-report" data-id="${rep.id}" ${TRANS.busy ? 'disabled' : ''}>${TRANS.busy ? 'Translating…' : 'Translate to English'}</button></div>`;
-    if (TRANS.err) h += `<div class="banner warn small" style="margin-top:8px">${esc(TRANS.err)}</div>`;
+    h += txStatus(TRANS.map, TRANS.busy, TRANS.err, 'tx-report', rep.id);
   }
   const attn = notes.filter(n => n.leadership_attention_required);
   if ((attn.length || (rep.leader_message && rep.leader_message !== 'none')) && !row.i_am_leader) {
@@ -1035,9 +1035,12 @@ async function viewReportDetail(app, v) {
       ${prayers.map(p => `<div class="note"><b>${esc(p.member_name)}</b> · ${p.this_week_status ? LX('prayer', p.this_week_status) : '<span class="muted">' + tr('업데이트 없음', 'No update') + '</span>'}<div class="small">${TX('prayer:' + p.prayer_id, p.content)}${p.this_week_note ? '<br><span class="muted">' + tr('이번 주: ', 'This week: ') + (TRANS.map && TRANS.map['prayernote:' + p.prayer_id] && EN() ? esc(TRANS.map['prayernote:' + p.prayer_id]) : esc(p.this_week_note)) + '</span>' : ''}</div></div>`).join('')}</div>
     <div class="card"><h3>${tr('은혜와 나눔', 'Grace & sharing')}</h3>${rep.grace_none ? '<span class="muted">' + tr('특별히 나눌 내용이 없습니다', 'Nothing in particular to share') + '</span>' : rep.grace_notes ? TX('grace', rep.grace_notes) : '<span class="muted">' + tr('비어 있음', 'Empty') + '</span>'}</div>
     <div class="card"><h3>${tr('분파셀리더에게 전할 말', 'Message to Leadership')}</h3>${LX('message', rep.leader_message || 'none')}</div>
-    ${pmsg ? `<div class="card" style="border-color:#C9D3E4;background:#F7F9FC"><h3>${tr('담임목사님께 드리는 말씀', 'A message for Pastor Scott Brenner')}</h3>${EN() && pmsg.content_en ? nl2br(pmsg.content_en) + '<div class="tiny muted" style="margin-top:4px">' + nl2br(pmsg.content) + '</div>' : nl2br(pmsg.content)}
-      <div class="tiny muted" style="margin-top:4px">${tr('담임 목사님·사모님만 보십니다', 'Only visible to Pastor Scott Brenner & Mrs. Sunghee Brenner')}${pmsg.sent_at ? ' · ' + tr(dateTime(pmsg.sent_at) + ' 전달됨', 'Sent ' + dateTime(pmsg.sent_at)) : ''}</div></div>` : ''}
+    ${pmsg ? `<div class="card" style="border-color:#C9D3E4;background:#F7F9FC"><h3>${tr('담임목사님께 드리는 말씀', 'A message for Pastor Scott Brenner')}</h3>${EN() && (pmsg.content_en || (TRANS.map && TRANS.map.pmsg)) ? nl2br(pmsg.content_en || TRANS.map.pmsg) + '<div class="tiny muted" style="margin-top:4px">' + nl2br(pmsg.content) + '</div>' : nl2br(pmsg.content)}
+      <div class="tiny muted" style="margin-top:4px">${tr('담임 목사님·사모님만 보십니다', 'Only visible to Pastor Scott Brenner & Mrs. Sunghee Brenner')}${pmsg.sent_at ? ' · ' + tr(dateTime(pmsg.sent_at) + ' 전달됨', 'Sent ' + dateTime(pmsg.sent_at)) : ''}</div>
+      ${commentBlock(cmts, 'pastor_msg', rep)}</div>` : ''}
+    ${rep.submitted_at && (isSenior() || cmts.some(c => c.target === 'report')) ? `<div class="card" style="border-color:#C9D3E4"><h3>${tr('담임 목사님·사모님 코멘트', 'Comments from Pastor & Mrs. Brenner')}</h3>${commentBlock(cmts, 'report', rep)}</div>` : ''}
   </div>`;
+  if (rep.status === 'submitted' || rep.submitted_at) autoTx(TRANS.map, TRANS.busy, TRANS.err, () => { if (S.view.name === 'detail' && S.view.id === rep.id) translateReport(rep.id); });
 
   if (row.i_can_review || row.i_can_request_revision) {
     const R = DETAIL.id === rep.id ? DETAIL : (Object.assign(DETAIL, { id: rep.id, note: '', level: 'normal', revOpen: false, reason: '', busy: false }));
@@ -1070,7 +1073,56 @@ async function viewReportDetail(app, v) {
   app.innerHTML = h;
 }
 const DETAIL = { id: null, note: '', level: 'normal', revOpen: false, reason: '', busy: false, reopen: null };
-/* 보고서 내용 번역 (목사님·사모님, 영어 화면) */
+/* 담임 목사님·사모님 코멘트 (보고서 / 목사님께 드리는 말씀) */
+const CMT = { id: null, draft: { report: '', pastor_msg: '' }, busy: false, del: null };
+function commentBlock(cmts, target, rep) {
+  const list = cmts.filter(c => c.target === target);
+  const hasHangul = (s) => /[가-힣]/.test(s || '');
+  let h = list.map(c => {
+    // 목사님·사모님 화면은 쓰신 그대로, 셀리더·분파셀리더 화면은 한국어 번역을 먼저
+    const showKo = !isSenior() && c.content_ko && !hasHangul(c.content);
+    return `<div class="note" style="border-left:3px solid var(--accent);padding-left:10px;margin-top:10px">
+      <div><b>${esc(c.author_name)}</b> <span class="tiny muted">${dateTime(c.created_at)}</span></div>
+      <div style="margin-top:4px">${nl2br(showKo ? c.content_ko : c.content)}</div>
+      ${showKo ? '<div class="tiny muted" style="margin-top:4px">' + tr('원문: ', 'Original: ') + nl2br(c.content) + '</div>' : ''}
+      ${c.mine ? '<div class="row" style="gap:8px;margin-top:6px">' + (CMT.del === c.id
+          ? `<button class="btn warn sm" data-act="cmt-del" data-id="${c.id}">${tr('이 코멘트 지우기', 'Delete this comment')}</button><button class="btn quiet sm" data-act="cmt-del-cancel">${tr('취소', 'Cancel')}</button>`
+          : `<button class="link tiny" data-act="cmt-del-ask" data-id="${c.id}">${tr('지우기', 'Delete')}</button>`) + '</div>' : ''}</div>`;
+  }).join('');
+  if (isSenior()) {
+    const who = target === 'pastor_msg'
+      ? tr('이 말씀을 쓴 셀리더만 봅니다.', 'Only the cell leader who wrote this message will see your reply.')
+      : tr('셀리더와 담당 분파셀리더가 봅니다.', 'The cell leader and their Leadership will see this.');
+    h += `<div style="margin-top:10px"><textarea data-cmt="${target}" rows="3" maxlength="3000" style="width:100%" placeholder="${target === 'pastor_msg' ? tr('이 말씀에 답글을 남겨 주세요', 'Reply to this message') : tr('보고서에 코멘트를 남겨 주세요', 'Leave a comment on this report')}">${esc(CMT.draft[target] || '')}</textarea>
+      <p class="tiny muted" style="margin:4px 0 8px">${who} ${tr('영어로 쓰시면 한국어 번역이 함께 전달됩니다.', 'Written in English, it will be sent with a Korean translation.')}</p>
+      <button class="btn sm" data-act="cmt-add" data-target="${target}" data-id="${rep.id}" ${CMT.busy ? 'disabled' : ''}>${CMT.busy ? tr('보내는 중…', 'Sending…') : target === 'pastor_msg' ? tr('답글 보내기', 'Send reply') : tr('코멘트 남기기', 'Post comment')}</button></div>`;
+  } else if (!list.length) return '';
+  return h;
+}
+async function commentAdd(id, target) {
+  const text = (CMT.draft[target] || '').trim();
+  if (!text) return toast(tr('코멘트를 적어 주세요.', 'Please write a comment.'));
+  CMT.busy = true; render();
+  try {
+    const cid = await rpc('senior_comment_add', { p_report: id, p_target: target, p_content: text });
+    CMT.draft[target] = '';
+    try {
+      const { data } = await sb.auth.getSession();
+      await fetch('api/senior-comment', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ comment: cid }) });
+    } catch (_) { }
+    toast(tr('코멘트를 남겼습니다.', 'Comment sent.'));
+  } catch (e) { toast(errText(e), 5000); }
+  finally { CMT.busy = false; render(); }
+}
+document.addEventListener('input', (e) => { const t = e.target.dataset && e.target.dataset.cmt; if (t) CMT.draft[t] = e.target.value; });
+/* 보고서 내용 번역 (목사님·사모님, 영어 화면) — 화면을 열면 자동으로 번역 */
+const TX_CACHE = {};
+function txStatus(map, busy, err, act, id) {
+  if (map) return '<p class="tiny muted" style="margin:8px 0 0">Translated by AI · the Korean original is shown in small text.</p>';
+  if (err) return `<div class="banner warn small" style="margin-top:8px">${esc(err)}<div style="margin-top:8px"><button class="btn sm ghost" data-act="${act}" data-id="${id || ''}">Try again</button></div></div>`;
+  return '<p class="tiny muted" style="margin:8px 0 0">Translating into English…</p>';
+}
+function autoTx(map, busy, err, fn) { if (EN() && isSenior() && !map && !busy && !err) setTimeout(fn, 0); }
 const TRANS = { id: null, map: null, busy: false, err: '' };
 function TX(key, ko) {
   const en = TRANS.map && TRANS.map[key];
@@ -1084,8 +1136,8 @@ async function translateReport(id) {
     const r = await fetch('api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ report: id }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
-    TRANS.id = id; TRANS.map = j.translations || {};
-  } catch (e) { TRANS.err = 'Could not translate: ' + (e.message || e); }
+    TRANS.id = id; TRANS.map = j.translations || {}; TX_CACHE['rep:' + id] = TRANS.map;
+  } catch (e) { TRANS.err = 'Could not translate right now. Please try again in a moment.'; }
   finally { TRANS.busy = false; render(); }
 }
 document.addEventListener('input', (e) => { if (e.target.id === 'rv-note') DETAIL.note = e.target.value; if (e.target.id === 'rv-reason') DETAIL.reason = e.target.value; });
@@ -1368,7 +1420,18 @@ async function viewGroup(app, v) {
    내 분파 / 교회 전체, 기간·이슈 구분별, 사람별 묶음. 관계는 누구와 어려운지 한눈에.
    (셀보고서 셀 케어 기록 + 내가 볼 수 있는 성도 동정)
    ===================================================================== */
-const ISS = { scope: 'mine', weeks: 8, cat: '', view: 'person', open: {} };
+const ISS = { scope: 'mine', weeks: 8, cat: '', view: 'person', open: {}, tx: null, txWeeks: 0, txBusy: false, txErr: '' };
+async function issuesTranslate() {
+  const weeks = ISS.weeks; ISS.txBusy = true; ISS.txErr = ''; render();
+  try {
+    const { data } = await sb.auth.getSession();
+    const r = await fetch('api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ issues: weeks }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    ISS.tx = j.translations || {}; ISS.txWeeks = weeks;
+  } catch (e) { ISS.txErr = 'Could not translate right now. Please try again in a moment.'; }
+  finally { ISS.txBusy = false; render(); }
+}
 async function viewIssues(app, v) {
   setTop(tr('셀원 이슈', 'Member issues'), true); renderTabs(true);
   const senior = isSenior();
@@ -1380,6 +1443,11 @@ async function viewIssues(app, v) {
   if (!senior) h += `<div class="seg" style="--n:2;margin-top:12px"><button data-act="iss-scope" data-v="mine" aria-pressed="${ISS.scope === 'mine'}">내 분파</button><button data-act="iss-scope" data-v="all" aria-pressed="${ISS.scope === 'all'}">교회 전체</button></div>`;
   h += `<div class="chips" style="margin-top:10px">${[4, 8, 12].map(w => `<button class="chip" data-act="iss-weeks" data-v="${w}" aria-pressed="${ISS.weeks === w}">${tr('최근 ' + w + '주', 'Last ' + w + ' wks')}</button>`).join('')}</div>`;
   h += `<div class="chips" style="margin-top:6px"><button class="chip" data-act="iss-cat" data-v="" aria-pressed="${!ISS.cat}">${tr('전체', 'All')} ${rows.length}</button>${NOTE_CAT_KEYS.filter(k => cnt[k]).map(k => `<button class="chip" data-act="iss-cat" data-v="${k}" aria-pressed="${ISS.cat === k}">${noteCat(k)} ${cnt[k]}</button>`).join('')}</div>`;
+  if (EN() && senior && rows.length) {
+    if (ISS.txWeeks !== ISS.weeks && !ISS.txBusy) { ISS.tx = null; ISS.txErr = ''; }
+    h += txStatus(ISS.tx, ISS.txBusy, ISS.txErr, 'iss-tx');
+    autoTx(ISS.tx, ISS.txBusy, ISS.txErr, () => { if (S.view.name === 'issues') issuesTranslate(); });
+  }
   h += `<div class="seg" style="--n:2;margin-top:10px"><button data-act="iss-view" data-v="person" aria-pressed="${ISS.view === 'person'}">${tr('사람별', 'By person')}</button><button data-act="iss-view" data-v="recent" aria-pressed="${ISS.view === 'recent'}">${tr('최근 순', 'Latest')}</button></div>`;
 
   const who = (r) => r.source === 'report' ? 'm:' + r.person_id : 'n:' + r.person_name;
@@ -1387,7 +1455,7 @@ async function viewIssues(app, v) {
   const item = (r, asOther) => `<div class="note${r.attention ? ' attn' : ''}" style="margin-top:8px">
       <div class="row" style="flex-wrap:wrap;gap:6px"><span class="pill">${noteCat(r.category)}</span>${r.source === 'note' ? `<span class="pill accent">${tr('성도 동정', 'Pastoral note')}</span>` : ''}${asOther ? `<span class="pill warn">${tr('상대로 언급됨', 'Mentioned as the other person')}</span>` : ''}<span class="spacer"></span><span class="tiny muted">${dayLabel(r.on_date)}</span></div>
       ${r.relation_kind && relOther(r) ? `<div class="small" style="margin-top:4px"><b>${esc(relText(r.person_name, relOther(r), r.relation_kind))}</b></div>` : ''}
-      <div class="small" style="margin-top:4px">${nl2br(r.content)}</div>
+      <div class="small" style="margin-top:4px">${(() => { const en = EN() && ISS.tx && ISS.tx['iss:' + r.source + ':' + r.item_id]; return en ? nl2br(en) + '<div class="tiny muted" style="margin-top:2px">' + nl2br(r.content) + '</div>' : nl2br(r.content); })()}</div>
       <div class="tiny muted" style="margin-top:2px">${r.source === 'report' ? esc(r.cell_name || '') + (r.resp_name ? ' · ' + esc(r.resp_name) : '') + ' · ' + tr('셀리더 ', 'by ') + esc(r.author_name || '') : tr('쓴 분: ', 'By ') + esc(r.author_name || '')}</div></div>`;
 
   // 관계 한눈에: 누가 누구와
@@ -1548,12 +1616,11 @@ async function viewLrRead(app, v) {
   setTop(tr('교역자 보고', 'Pastoral report'), true); renderTabs(true);
   const r = await rpc('lr_read', { p_id: v.id });
   if (!r) { app.innerHTML = '<p class="empty">' + tr('볼 수 없는 보고입니다.', 'This report is not available.') + '</p>'; return; }
-  if (LRT.id !== r.id) { LRT.id = r.id; LRT.map = null; LRT.err = ''; }
+  if (LRT.id !== r.id) { LRT.id = r.id; LRT.map = TX_CACHE['lr:' + r.id] || null; LRT.err = ''; }
+  autoTx(LRT.map, LRT.busy, LRT.err, () => { if (S.view.name === 'lrRead') lrTranslate(r.id); });
   let h = `<h1>${esc(r.author_name)}</h1><p class="sub">${weekLabel(r.week_start, true)} · ${tr(dateTime(r.submitted_at) + ' 제출', 'Submitted ' + dateTime(r.submitted_at))} · ${tr(r.items.length + '명', r.items.length + ' people')}</p>`;
   if (EN() && isSenior()) {
-    h += LRT.map ? '<p class="tiny muted" style="margin:8px 0 0">Translated by AI · the Korean original is shown in small text.</p>'
-      : `<div style="margin-top:8px"><button class="btn sm ghost" data-act="lr-tx" data-id="${r.id}" ${LRT.busy ? 'disabled' : ''}>${LRT.busy ? 'Translating…' : 'Translate to English'}</button></div>`;
-    if (LRT.err) h += `<div class="banner warn small" style="margin-top:8px">${esc(LRT.err)}</div>`;
+    h += txStatus(LRT.map, LRT.busy, LRT.err, 'lr-tx', r.id);
   }
   if (r.summary) h += `<div class="card" style="margin-top:12px"><b>${tr('한 주 요약', 'Summary')}</b><div style="margin-top:4px">${TXL('lr:sum', r.summary)}</div></div>`;
   h += '<div class="stack" style="margin-top:12px">' + (r.items.length ? r.items.map(it => `<div class="card stack" style="gap:6px">
@@ -1568,8 +1635,8 @@ async function lrTranslate(id) {
     const r = await fetch('api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ lr: id }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
-    LRT.id = id; LRT.map = j.translations || {};
-  } catch (e) { LRT.err = 'Could not translate: ' + (e.message || e); }
+    LRT.id = id; LRT.map = j.translations || {}; TX_CACHE['lr:' + id] = LRT.map;
+  } catch (e) { LRT.err = 'Could not translate right now. Please try again in a moment.'; }
   finally { LRT.busy = false; render(); }
 }
 
@@ -1607,9 +1674,8 @@ async function viewNotesHome(app, v) {
   if (hasBusan) h += `<div class="chips" style="margin-top:8px">${[['', tr('모든 캠퍼스', 'All campuses')], ...CAMPUSES.map(c => [c, campusLabel(c)])].map(([k, t]) =>
     `<button class="chip" data-act="note-campus" data-v="${k}" aria-pressed="${(NOTE.campus || '') === k}">${t}</button>`).join('')}</div>`;
   if (EN() && isSenior() && list.length) {
-    h += NOTE.tx ? '<p class="tiny muted" style="margin:8px 0 0">Translated by AI · the Korean original is shown in small text.</p>'
-      : `<div style="margin-top:8px"><button class="btn sm ghost" data-act="note-tx" ${NOTE.txBusy ? 'disabled' : ''}>${NOTE.txBusy ? 'Translating…' : 'Translate to English'}</button></div>`;
-    if (NOTE.txErr) h += `<div class="banner warn small" style="margin-top:8px">${esc(NOTE.txErr)}</div>`;
+    h += txStatus(NOTE.tx, NOTE.txBusy, NOTE.txErr, 'note-tx');
+    autoTx(NOTE.tx, NOTE.txBusy, NOTE.txErr, () => { if (S.view.name === 'notesHome') noteTranslate(); });
   }
   const noteCard = (n) => `
     <div class="card stack" style="gap:6px${n.needs_pastor && !n.acknowledged_at ? ';border-color:#E8C9A8' : ''}">
@@ -1694,7 +1760,7 @@ async function noteTranslate() {
     const r = await fetch('api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ notes: true }) });
     const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
     NOTE.tx = j.translations || {};
-  } catch (e) { NOTE.txErr = 'Could not translate: ' + (e.message || e); }
+  } catch (e) { NOTE.txErr = 'Could not translate right now. Please try again in a moment.'; }
   finally { NOTE.txBusy = false; render(); }
 }
 
@@ -1896,6 +1962,11 @@ document.addEventListener('click', async (e) => {
     case 'reg-send': return sendRegister();
     case 'push-on': return pushOn();
     case 'tx-report': return translateReport(d.id);
+    case 'iss-tx': return issuesTranslate();
+    case 'cmt-add': return commentAdd(d.id, d.target);
+    case 'cmt-del-ask': CMT.del = d.id; return render();
+    case 'cmt-del-cancel': CMT.del = null; return render();
+    case 'cmt-del': try { await rpc('senior_comment_delete', { p_id: d.id }); CMT.del = null; toast(tr('지웠습니다.', 'Deleted.')); } catch (err) { toast(errText(err), 5000); } return render();
     case 'lr-edit-open': LR.week = null; return go({ name: 'lrEdit', week: d.week });
     case 'lr-open': return go({ name: 'lrRead', id: d.id });
     case 'open-issues': return go({ name: 'issues' });

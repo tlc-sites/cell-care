@@ -44,5 +44,16 @@
         }
       ]
     }
-  ]
+  ],
+  "functions": {
+    "api/translate.js": {
+      "maxDuration": 60
+    },
+    "api/senior-comment.js": {
+      "maxDuration": 60
+    },
+    "api/pastor-message.js": {
+      "maxDuration": 60
+    }
+  }
 }

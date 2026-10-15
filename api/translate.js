@@ -25,12 +25,12 @@ Rules:
 - Translate faithfully; do not add, soften or summarize. Keep line breaks.
 - Reply with JSON only: an object mapping each given key to its English translation.`;
 
-async function translate(key, items) {
+async function translate(key, items, system) {
   if (!Object.keys(items).length) return {};
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: 8000, system: SYSTEM, messages: [{ role: 'user', content: JSON.stringify(items) }] })
+    body: JSON.stringify({ model: MODEL, max_tokens: 16000, system: system || SYSTEM, messages: [{ role: 'user', content: JSON.stringify(items) }] })
   });
   const j = await r.json();
   if (!r.ok) { const e = new Error('Translation service error: ' + ((j.error && j.error.message) || r.status)); e.status = 502; throw e; }
@@ -53,7 +53,7 @@ module.exports = async (req, res) => {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
     const id = body.report || '';
     const lrId = body.lr || '';
-    if (!body.notes && !UUID.test(id) && !UUID.test(lrId)) return res.status(400).json({ error: 'report' });
+    if (!body.notes && !body.issues && !UUID.test(id) && !UUID.test(lrId)) return res.status(400).json({ error: 'report' });
 
     // 본인 권한 확인: Senior Pastor · Samonim 만
     const ctx = await asUser(token, 'rpc/get_my_context', {});
@@ -68,6 +68,9 @@ module.exports = async (req, res) => {
       if (!lr) return res.status(404).json({ error: 'Report not found' });
       add('lr:sum', lr.summary);
       (lr.items || []).forEach(i => add('lri:' + i.id, i.content));
+    } else if (body.issues) {
+      const rows = await asUser(token, 'rpc/issue_board', { p_weeks: Math.min(26, Math.max(1, +body.issues || 8)), p_scope: 'all' });
+      rows.slice(0, 120).forEach(r => { if (r.content) items['iss:' + r.source + ':' + r.item_id] = String(r.content).slice(0, 1500); });
     } else if (body.notes) {
       const notes = await asUser(token, 'rpc/pastoral_note_list', { p_limit: 30, p_only_needs: false });
       notes.forEach(n => { add('note:' + n.id, n.content); add('noteprayer:' + n.id, n.prayer); });
@@ -88,6 +91,7 @@ module.exports = async (req, res) => {
       prayers.forEach(p => { add('prayer:' + p.prayer_id, p.content); add('prayernote:' + p.prayer_id, p.this_week_note); });
       roster.forEach(m => add('absence:' + m.member_id, m.absence_reason));
       revisions.forEach(r => add('rev:' + r.id, r.reason));
+      try { const pm = await asUser(token, 'rpc/pastor_msg_get', { p_report: id }); if (pm && pm[0] && !pm[0].content_en) add('pmsg', pm[0].content); } catch (_) { }
     }
     const translations = await translate(key, items);
     res.setHeader('Cache-Control', 'no-store');
