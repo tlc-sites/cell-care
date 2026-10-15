@@ -15,6 +15,27 @@ module.exports = async (req, res) => {
     const user = await authUser(req);
     if (!user || !user.id) return res.status(401).json({ error: 'login required' });
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    const short = (s) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > 90 ? s.slice(0, 88) + '…' : s; };
+    const toKo = async (text) => {
+      if (/[가-힣]/.test(text)) return '';
+      try {
+        const key = (process.env.ANTHROPIC_API_KEY || '').trim();
+        return key ? ((await translate(key, { c: text }, TO_KO)).c || '') : '';
+      } catch (_) { return ''; }
+    };
+    // 성도 동정 코멘트 → 동정을 쓴 분께
+    if (UUID.test(body.note_comment || '')) {
+      const rows = await serviceRpc('note_comment_for_send', { p_id: body.note_comment, p_auth_user: user.id });
+      if (!rows.length) return res.status(200).json({ sent: 0 });
+      const c = rows[0];
+      const ko = await toKo(c.content);
+      await serviceRpc('note_comment_mark', { p_id: body.note_comment, p_ko: ko });
+      const targets = await serviceRpc('note_comment_push_targets', { p_id: body.note_comment });
+      const result = await sendAll(targets, (x) => x.lang === 'en'
+        ? { title: '💬 ' + c.author + ' commented on your note', body: short(c.content) + '\n(' + c.person_name + ')', tag: 'ncmt-' + body.note_comment }
+        : { title: '💬 ' + c.author + '께서 성도 동정에 코멘트를 남기셨습니다', body: short(ko || c.content) + '\n(' + c.person_name + ')', tag: 'ncmt-' + body.note_comment });
+      return res.status(200).json({ translated: !!ko, ...result });
+    }
     if (!UUID.test(body.comment || '')) return res.status(400).json({ error: 'comment' });
     const rows = await serviceRpc('senior_comment_for_send', { p_id: body.comment, p_auth_user: user.id });
     if (!rows.length) return res.status(200).json({ sent: 0 });
@@ -28,7 +49,6 @@ module.exports = async (req, res) => {
     }
     await serviceRpc('senior_comment_mark', { p_id: body.comment, p_ko: ko });
     const targets = await serviceRpc('senior_comment_push_targets', { p_id: body.comment });
-    const short = (s) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > 90 ? s.slice(0, 88) + '…' : s; };
     const what = c.target === 'pastor_msg' ? '목사님께 드린 말씀에 답글을' : '셀보고서에 코멘트를';
     const result = await sendAll(targets, (x) => x.lang === 'en'
       ? { title: '💬 ' + c.author + ' left a ' + (c.target === 'pastor_msg' ? 'reply' : 'comment'), body: short(c.content) + '\n(' + c.cell_name + ')', tag: 'cmt-' + body.comment }

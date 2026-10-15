@@ -587,14 +587,13 @@ async function renderPushBox() {
   if (st.s === 'ready') return box.innerHTML = card(`<p style="margin:0">${tr('셀 케어 알림을 받으시겠어요?', 'Would you like Cell Care notifications?')}</p>
     <button class="btn" data-act="push-on" ${PUSH.busy ? 'disabled' : ''}>${PUSH.busy ? tr('설정하는 중…', 'Setting up…') : tr('알림 받기', 'Turn on notifications')}</button>
     <p class="tiny muted" style="margin:0">${tr('버튼을 누른 뒤 나오는 창에서 「허용」을 눌러 주세요.', 'Then tap “Allow” in the pop-up.')}</p>`);
-  if (st.s === 'denied') return box.innerHTML = card(`<p style="margin:0">이 휴대폰에서 셀 케어 알림이 꺼져 있습니다.</p>
-    <p class="small muted" style="margin:0">휴대폰 <b>설정 → 알림</b>(또는 인터넷 앱의 사이트 설정)에서 셀 케어 알림을 허용한 뒤 다시 열어 주세요.</p>`);
+  if (st.s === 'denied') return box.innerHTML = card(`<p style="margin:0">${tr('이 휴대폰에서 셀 케어 알림이 꺼져 있습니다.', 'Cell Care notifications are blocked on this phone.')}</p>
+    <p class="small muted" style="margin:0">${tr('휴대폰 <b>설정 → 알림</b>(또는 인터넷 앱의 사이트 설정)에서 셀 케어 알림을 허용한 뒤 다시 열어 주세요.', 'Allow them in your phone’s <b>Settings → Notifications</b> (or the browser’s site settings), then reopen the app.')}</p>`);
   if (st.s === 'ios-home') return box.innerHTML = card(`<p style="margin:0">${tr('아이폰은 <b>홈 화면에 추가</b>한 뒤에 알림을 받을 수 있어요.', 'On iPhone, notifications work after you <b>Add to Home Screen</b>.')}</p>
-    <ol class="small" style="margin:0;padding-left:20px;line-height:1.8"><li>사파리 아래쪽 <b>공유 버튼</b>(네모에 위쪽 화살표)을 누릅니다.</li>
-    <li><b>홈 화면에 추가</b>를 누릅니다.</li><li>홈 화면에 생긴 <b>셀 케어</b> 아이콘으로 열고, 여기서 「알림 받기」를 누릅니다.</li></ol>`);
-  if (st.s === 'inapp') return box.innerHTML = card(`<p style="margin:0">카카오톡 등 다른 앱 안에서 연 화면에서는 알림을 받을 수 없어요.</p>
-    <p class="small muted" style="margin:0">오른쪽 위 메뉴에서 <b>다른 브라우저로 열기</b>(크롬·사파리)를 눌러 주세요.</p>`);
-  box.innerHTML = card(`<p style="margin:0">이 인터넷 앱에서는 알림을 받을 수 없어요.</p><p class="small muted" style="margin:0">휴대폰의 크롬(안드로이드) 또는 사파리(아이폰)로 열어 주세요.</p>`);
+    <ol class="small" style="margin:0;padding-left:20px;line-height:1.8">${tr('<li>사파리 아래쪽 <b>공유 버튼</b>(네모에 위쪽 화살표)을 누릅니다.</li><li><b>홈 화면에 추가</b>를 누릅니다.</li><li>홈 화면에 생긴 <b>셀 케어</b> 아이콘으로 열고, 여기서 「알림 받기」를 누릅니다.</li>', '<li>Tap the <b>Share</b> button at the bottom of Safari.</li><li>Tap <b>Add to Home Screen</b>.</li><li>Open Cell Care from the new home-screen icon and tap “Turn on notifications”.</li>')}</ol>`);
+  if (st.s === 'inapp') return box.innerHTML = card(`<p style="margin:0">${tr('카카오톡 등 다른 앱 안에서 연 화면에서는 알림을 받을 수 없어요.', 'Notifications don’t work inside other apps like KakaoTalk.')}</p>
+    <p class="small muted" style="margin:0">${tr('오른쪽 위 메뉴에서 <b>다른 브라우저로 열기</b>(크롬·사파리)를 눌러 주세요.', 'Use the menu to <b>open in your browser</b> (Chrome or Safari).')}</p>`);
+  box.innerHTML = card(`<p style="margin:0">${tr('이 인터넷 앱에서는 알림을 받을 수 없어요.', 'This browser can’t receive notifications.')}</p><p class="small muted" style="margin:0">${tr('휴대폰의 크롬(안드로이드) 또는 사파리(아이폰)로 열어 주세요.', 'Please open it in Chrome (Android) or Safari (iPhone).')}</p>`);
 }
 // 제출 알림: 확인할 분께 바로 알림 (실패해도 제출에는 영향 없음)
 async function notifySubmitted(id) {
@@ -1655,6 +1654,45 @@ function ackPills(n) {
   const one = (role, ko, en) => ackOf(n, role) ? `<span class="pill ok">${tr(ko + ' 확인 ✓', en + ' ✓')}</span>` : `<span class="pill warn">${tr(ko + ' 확인 전', en + ' not yet')}</span>`;
   return one('senior_pastor', '목사님', 'Pastor') + one('samonim', '사모님', 'Mrs. Brenner');
 }
+/* 성도 동정 코멘트 (목사님·사모님) */
+const NCMT = { open: null, draft: '', busy: false, del: null };
+function noteComments(n) {
+  const list = (NOTE.cmts || {})[n.id] || [];
+  let h = list.map(c => {
+    const showKo = !isSenior() && c.content_ko && !/[가-힣]/.test(c.content);
+    return `<div class="note" style="border-left:3px solid var(--accent);padding-left:10px">
+      <div><b>${esc(c.author_name)}</b> <span class="tiny muted">${dateTime(c.created_at)}</span></div>
+      <div style="margin-top:4px">${nl2br(showKo ? c.content_ko : c.content)}</div>
+      ${showKo ? '<div class="tiny muted" style="margin-top:4px">' + tr('원문: ', 'Original: ') + nl2br(c.content) + '</div>' : ''}
+      ${c.mine ? '<div class="row" style="gap:8px;margin-top:6px">' + (NCMT.del === c.id
+        ? `<button class="btn warn sm" data-act="ncmt-del" data-id="${c.id}">${tr('이 코멘트 지우기', 'Delete this comment')}</button><button class="btn quiet sm" data-act="ncmt-del-cancel">${tr('취소', 'Cancel')}</button>`
+        : `<button class="link tiny" data-act="ncmt-del-ask" data-id="${c.id}">${tr('지우기', 'Delete')}</button>`) + '</div>' : ''}</div>`;
+  }).join('');
+  if (isSenior()) {
+    h += NCMT.open === n.id
+      ? `<div><textarea data-ncmt="1" rows="3" maxlength="3000" style="width:100%" placeholder="${tr('이 동정에 코멘트를 남겨 주세요', 'Leave a comment on this note')}">${esc(NCMT.draft)}</textarea>
+          <p class="tiny muted" style="margin:4px 0 8px">${tr('이 동정을 볼 수 있는 분이 함께 보고, 쓴 분께 알림이 갑니다. 영어로 쓰시면 한국어 번역이 함께 전달됩니다.', 'Everyone who can see this note will see it, and the writer gets a notification. Written in English, it will be sent with a Korean translation.')}</p>
+          <div class="row" style="gap:8px"><button class="btn sm" data-act="ncmt-add" data-id="${n.id}" ${NCMT.busy ? 'disabled' : ''}>${NCMT.busy ? tr('보내는 중…', 'Sending…') : tr('코멘트 남기기', 'Post comment')}</button><button class="btn quiet sm" data-act="ncmt-cancel">${tr('취소', 'Cancel')}</button></div></div>`
+      : `<div><button class="link" data-act="ncmt-open" data-id="${n.id}">💬 ${tr('코멘트 남기기', 'Comment')}</button></div>`;
+  }
+  return h;
+}
+async function noteCommentAdd(id) {
+  const text = (NCMT.draft || '').trim();
+  if (!text) return toast(tr('코멘트를 적어 주세요.', 'Please write a comment.'));
+  NCMT.busy = true; render();
+  try {
+    const cid = await rpc('note_comment_add', { p_note: id, p_content: text });
+    NCMT.draft = ''; NCMT.open = null;
+    try {
+      const { data } = await sb.auth.getSession();
+      await fetch('api/senior-comment', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ note_comment: cid }) });
+    } catch (_) { }
+    toast(tr('코멘트를 남겼습니다.', 'Comment sent.'));
+  } catch (e) { toast(errText(e), 5000); }
+  finally { NCMT.busy = false; render(); }
+}
+document.addEventListener('input', (e) => { if (e.target.dataset && e.target.dataset.ncmt) NCMT.draft = e.target.value; });
 const NOTE = { filter: 'all', list: [], form: null, busy: false, tx: null, txBusy: false, txErr: '', staff: null };
 const noteCat = (k) => LX('care', NOTE_CAT_KEYS.includes(k) ? k : 'other');
 const noteMethod = (k) => (NOTE_METHOD[k] || NOTE_METHOD.other)[EN() ? 1 : 0];
@@ -1674,6 +1712,8 @@ async function viewNotesHome(app, v) {
   const hasBusan = rows.some(r => r.campus === '부산');
   if (hasBusan && NOTE.campus) list = list.filter(r => r.campus === NOTE.campus);
   NOTE.list = rows;
+  NOTE.cmts = {};
+  if (rows.length) ((await rpc('note_comments_for', { p_notes: rows.map(r => r.id) }).catch(() => [])) || []).forEach(c => { (NOTE.cmts[c.note_id] = NOTE.cmts[c.note_id] || []).push(c); });
   let h = `<h1>${tr('성도 동정', 'Pastoral notes')}</h1>
     <p class="sub">${tr('교역자가 특별히 만난 분들의 소식을 나눕니다. 목사님·사모님은 모든 동정을 보시고, 다른 교역자는 쓴 분이 고른 분만 봅니다.', 'Pastoral staff share news about people they met. Pastor Scott Brenner & Mrs. Sunghee Brenner see every note; other staff see only what is shared with them.')}</p>
     <div style="margin-top:12px"><button class="btn" data-act="note-new">${tr('+ 성도 동정 쓰기', '+ Write a note')}</button></div>`;
@@ -1692,6 +1732,7 @@ async function viewNotesHome(app, v) {
         <span class="spacer"></span><span class="tiny muted">${dayLabel(n.met_on)}</span></div>
       <div>${NTX('note:' + n.id, n.content)}</div>
       ${n.prayer ? `<div class="small"><b>${tr('기도제목', 'Prayer')}</b> · ${NTX('noteprayer:' + n.id, n.prayer)}</div>` : ''}
+      ${noteComments(n)}
       <div class="row" style="gap:12px;flex-wrap:wrap"><span class="tiny muted">${tr('쓴 분: ', 'By ')}${esc(n.author_name)} · ${tr('보는 분: ', 'Shared with: ')}${n.visibility === 'all' ? tr('교역자 모두', 'all pastoral staff') : (n.viewer_names ? esc(n.viewer_names) + ' + ' : '') + tr('목사님·사모님', 'Pastor Scott Brenner & Mrs. Sunghee Brenner')}</span><span class="spacer"></span>
         ${n.mine ? `<button class="link" data-act="note-edit" data-id="${n.id}">${tr('고치기', 'Edit')}</button>` : ''}
         ${isSenior() && n.needs_pastor && !n.i_acked ? `<button class="btn sm" data-act="note-ack" data-id="${n.id}">${tr('확인했습니다', 'Mark as seen')}</button>` : ''}</div>
@@ -1778,39 +1819,39 @@ async function noteTranslate() {
    ===================================================================== */
 const MEM = { confirm: null, del: null, busy: false };
 async function viewMembers(app, v) {
-  setTop('셀원 관리', true); renderTabs(false);
+  setTop(tr('셀원 관리', 'Members'), true); renderTabs(false);
   const rows = await rpc('member_list', { p_cell: v.cell });
-  const label = { member: ['정식 셀원', ''], visitor: ['방문자', 'accent'], left: ['명단에서 내림', ''], hidden: ['목록에서 내림', ''] };
+  const label = { member: [tr('정식 셀원', 'Member'), ''], visitor: [tr('방문자', 'Visitor'), 'accent'], left: [tr('명단에서 내림', 'Removed from list'), ''], hidden: [tr('목록에서 내림', 'Hidden'), ''] };
   const item = (m) => {
     const [t, c] = label[m.state];
     const confirming = MEM.confirm === m.id;
     let actions = '';
     if (MEM.del === m.id) {
-      actions = `<div class="banner warn small" style="margin-top:8px"><b>${esc(m.name)}님을 셀원 명단에서 삭제할까요?</b>중복으로 들어갔거나 잘못 넣은 분일 때만 지워 주세요. 이미 제출된 지난 보고서 기록은 그대로 남습니다.
-        <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="mem-del" data-id="${m.id}">삭제</button><button class="btn sm ghost" data-act="mem-cancel">취소</button></div></div>`;
+      actions = `<div class="banner warn small" style="margin-top:8px"><b>${tr(esc(m.name) + '님을 셀원 명단에서 삭제할까요?', 'Delete ' + esc(m.name) + ' from this cell?')}</b>${tr('중복으로 들어갔거나 잘못 넣은 분일 때만 지워 주세요. 이미 제출된 지난 보고서 기록은 그대로 남습니다.', 'Only for duplicates or mistakes. Past submitted reports stay as they are.')}
+        <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="mem-del" data-id="${m.id}">${tr('삭제', 'Delete')}</button><button class="btn sm ghost" data-act="mem-cancel">${tr('취소', 'Cancel')}</button></div></div>`;
     } else if (confirming) {
-      actions = `<div class="banner warn small" style="margin-top:8px"><b>${esc(m.name)}님을 ${m.state === 'visitor' ? '방문자 목록에서 내릴까요?' : '이번 주부터 출석 명단에서 내릴까요?'}</b>지난 출석 기록은 그대로 남고, 언제든 다시 올릴 수 있습니다.
-        <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="mem-leave" data-id="${m.id}">내리기</button><button class="btn sm ghost" data-act="mem-cancel">취소</button></div></div>`;
+      actions = `<div class="banner warn small" style="margin-top:8px"><b>${m.state === 'visitor' ? tr(esc(m.name) + '님을 방문자 목록에서 내릴까요?', 'Remove ' + esc(m.name) + ' from visitors?') : tr(esc(m.name) + '님을 이번 주부터 출석 명단에서 내릴까요?', 'Remove ' + esc(m.name) + ' from attendance from this week?')}</b>${tr('지난 출석 기록은 그대로 남고, 언제든 다시 올릴 수 있습니다.', 'Past attendance stays, and you can add them back anytime.')}
+        <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="mem-leave" data-id="${m.id}">${tr('내리기', 'Remove')}</button><button class="btn sm ghost" data-act="mem-cancel">${tr('취소', 'Cancel')}</button></div></div>`;
     } else if (m.state === 'left' || m.state === 'hidden') {
-      actions = `<div class="row" style="gap:12px;margin-top:6px"><button class="link" data-act="mem-restore" data-id="${m.id}">다시 올리기</button></div>`;
+      actions = `<div class="row" style="gap:12px;margin-top:6px"><button class="link" data-act="mem-restore" data-id="${m.id}">${tr('다시 올리기', 'Add back')}</button></div>`;
     } else {
       actions = `<div class="row" style="gap:12px;margin-top:6px;flex-wrap:wrap">
-        ${m.state === 'visitor' ? `<button class="link" data-act="mem-register" data-id="${m.id}">정식 셀원으로</button>` : ''}
-        ${m.state === 'member' ? `<button class="link" data-act="mem-sep" data-id="${m.id}" data-v="${m.meets_separately ? '0' : '1'}">${m.meets_separately ? '모임 셀원으로' : '따로 만나는 셀원으로'}</button>` : ''}
-        <button class="link" data-act="mem-confirm" data-id="${m.id}">${m.state === 'visitor' ? '목록에서 내리기' : '출석 명단에서 내리기'}</button>
-        ${m.can_delete ? `<button class="link" data-act="mem-del-ask" data-id="${m.id}" style="color:var(--danger)">삭제</button>` : ''}</div>`;
+        ${m.state === 'visitor' ? `<button class="link" data-act="mem-register" data-id="${m.id}">${tr('정식 셀원으로', 'Make a member')}</button>` : ''}
+        ${m.state === 'member' ? `<button class="link" data-act="mem-sep" data-id="${m.id}" data-v="${m.meets_separately ? '0' : '1'}">${m.meets_separately ? tr('모임 셀원으로', 'Meets with the group') : tr('따로 만나는 셀원으로', 'Meets separately')}</button>` : ''}
+        <button class="link" data-act="mem-confirm" data-id="${m.id}">${m.state === 'visitor' ? tr('목록에서 내리기', 'Remove') : tr('출석 명단에서 내리기', 'Remove from attendance')}</button>
+        ${m.can_delete ? `<button class="link" data-act="mem-del-ask" data-id="${m.id}" style="color:var(--danger)">${tr('삭제', 'Delete')}</button>` : ''}</div>`;
     }
-    return `<div class="member"><div class="row"><b style="font-size:1.05em">${esc(m.name)}</b>${m.meets_separately ? ' <span class="pill" style="margin-left:6px">따로</span>' : ''}<span class="spacer"></span><span class="pill ${c}">${t}</span></div>
-      ${m.state === 'left' && m.left_at ? `<div class="tiny muted">${dayLabel(addDays(m.left_at, 1))}부터 출석 명단에서 내림</div>` : ''}${actions}</div>`;
+    return `<div class="member"><div class="row"><b style="font-size:1.05em">${esc(m.name)}</b>${m.meets_separately ? ' <span class="pill" style="margin-left:6px">' + tr('따로', 'Separate') + '</span>' : ''}<span class="spacer"></span><span class="pill ${c}">${t}</span></div>
+      ${m.state === 'left' && m.left_at ? `<div class="tiny muted">${tr(dayLabel(addDays(m.left_at, 1)) + '부터 출석 명단에서 내림', 'Removed from ' + dayLabel(addDays(m.left_at, 1)))}</div>` : ''}${actions}</div>`;
   };
   const now = rows.filter(m => m.state === 'member' || m.state === 'visitor');
   const gone = rows.filter(m => m.state === 'left' || m.state === 'hidden');
-  let h = `<h1>${esc(v.cellName)} · 셀원 관리</h1><p class="sub">이번 주 출석 명단에 나오는 분들입니다. 바꾼 내용은 기록으로 남습니다.</p>
-    <div class="card stack" style="margin-top:12px"><label class="field">새 셀원 추가
-      <input type="text" id="mem-new" maxlength="40" placeholder="이름 (동명이인은 김민수A처럼)"></label>
-      <button class="btn" data-act="mem-add" ${MEM.busy ? 'disabled' : ''}>이번 주부터 셀원으로 추가</button></div>
-    <h2>지금 셀원 ${now.length}명</h2><div class="card">${now.length ? now.map(item).join('') : '<p class="empty">셀원이 없습니다.</p>'}</div>`;
-  if (gone.length) h += `<h2>명단에서 내린 분</h2><div class="card">${gone.map(item).join('')}</div>`;
+  let h = `<h1>${esc(v.cellName)} · ${tr('셀원 관리', 'Members')}</h1><p class="sub">${tr('이번 주 출석 명단에 나오는 분들입니다. 바꾼 내용은 기록으로 남습니다.', 'People on this week’s attendance list. Changes are recorded.')}</p>
+    <div class="card stack" style="margin-top:12px"><label class="field">${tr('새 셀원 추가', 'Add a member')}
+      <input type="text" id="mem-new" maxlength="40" placeholder="${tr('이름 (동명이인은 김민수A처럼)', 'Name')}"></label>
+      <button class="btn" data-act="mem-add" ${MEM.busy ? 'disabled' : ''}>${tr('이번 주부터 셀원으로 추가', 'Add from this week')}</button></div>
+    <h2>${tr('지금 셀원 ' + now.length + '명', 'Current members (' + now.length + ')')}</h2><div class="card">${now.length ? now.map(item).join('') : '<p class="empty">' + tr('셀원이 없습니다.', 'No members.') + '</p>'}</div>`;
+  if (gone.length) h += `<h2>${tr('명단에서 내린 분', 'Removed')}</h2><div class="card">${gone.map(item).join('')}</div>`;
   app.innerHTML = h;
 }
 async function memAct(fn, args, okMsg) {
@@ -1846,17 +1887,18 @@ async function loadAdminData() {
   return { reqs, P, C };
 }
 const ROLE_KO = { leadership: 'Leadership', senior_pastor: '담임 목사님', samonim: '사모님', admin: '관리자' };
+const ROLE_EN = { leadership: 'Leadership', senior_pastor: 'Senior Pastor', samonim: 'Mrs. Brenner', admin: 'Admin' };
 function personSummary(p) {
   const bits = [];
-  if (p.leads.length) bits.push(p.leads.map(c => c.name).join(', ') + ' 셀리더');
-  if (p.oversees.length) bits.push('분파셀리더 · 담당 셀 ' + p.oversees.length + '개');
-  const extra = p.roles.filter(r => r !== 'leadership').map(r => ROLE_KO[r]);
+  if (p.leads.length) bits.push(p.leads.map(c => c.name).join(', ') + tr(' 셀리더', ' · cell leader'));
+  if (p.oversees.length) bits.push(tr('분파셀리더 · 담당 셀 ' + p.oversees.length + '개', 'Leadership · ' + p.oversees.length + ' cells'));
+  const extra = p.roles.filter(r => r !== 'leadership').map(r => (EN() ? ROLE_EN : ROLE_KO)[r]);
   if (extra.length) bits.push(extra.join(', '));
-  return bits.join(' · ') || '맡은 셀·역할 없음';
+  return bits.join(' · ') || tr('맡은 셀·역할 없음', 'No cell or role');
 }
 function isRegistered(p) { return !!p.email; }
 async function viewAdminHome(app) {
-  setTop('관리', false); renderTabs(true);
+  setTop(tr('관리', 'Admin'), false); renderTabs(true);
   const { reqs, P, C } = await loadAdminData();
   const people = [...P.values()].filter(p => p.active);
   const waiting = people.filter(p => !isRegistered(p));
@@ -1867,11 +1909,11 @@ async function viewAdminHome(app) {
       <span class="top"><b>${title}</b><span class="pill ${id === 'requests' && count ? 'warn' : ''}">${count}</span></span></button>
     ${ADMIN.open === id ? '<div class="stack" style="margin-top:8px">' + body + '</div>' : ''}`;
 
-  let h = `<h1>관리</h1>
+  let h = `<h1>${tr('관리', 'Admin')}</h1>
     <div class="stats" style="margin-top:12px">
-      <div class="stat ${reqs.length ? 'warn' : ''}"><div class="v">${reqs.length}</div><div class="k">승인 대기</div></div>
-      <div class="stat"><div class="v">${done.length} / ${people.length}</div><div class="k">등록 완료</div></div>
-      <div class="stat"><div class="v">${C.size}</div><div class="k">셀</div></div></div>`;
+      <div class="stat ${reqs.length ? 'warn' : ''}"><div class="v">${reqs.length}</div><div class="k">${tr('승인 대기', 'Pending')}</div></div>
+      <div class="stat"><div class="v">${done.length} / ${people.length}</div><div class="k">${tr('등록 완료', 'Registered')}</div></div>
+      <div class="stat"><div class="v">${C.size}</div><div class="k">${tr('셀', 'Cells')}</div></div></div>`;
 
   // 1) 등록 신청
   const reqBody = reqs.length ? reqs.map(r => {
@@ -1879,52 +1921,52 @@ async function viewAdminHome(app) {
     const ok = m && !isRegistered(m);
     const sel = ADMIN.pick[r.id] || (ok ? m.id : '');
     return `<div class="card stack">
-      <div class="row"><b style="font-size:1.1em">${esc(r.name)}</b><span class="spacer"></span><span class="tiny muted">${new Date(r.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span></div>
+      <div class="row"><b style="font-size:1.1em">${esc(r.name)}</b><span class="spacer"></span><span class="tiny muted">${new Date(r.created_at).toLocaleString(EN() ? 'en-US' : 'ko-KR', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span></div>
       <div class="small">${esc(r.email)}</div>
-      ${ok ? `<div class="banner small"><b>명단에서 찾았습니다: ${esc(m.name)}</b>${esc(personSummary(m))}</div>`
-           : `<div class="banner warn small"><b>명단에서 같은 이름을 찾지 못했습니다</b>아래에서 이 분이 누구인지 골라 주세요. 모르는 분이면 거절해 주세요.</div>`}
-      <label class="field small">이 신청을 연결할 사람
+      ${ok ? `<div class="banner small"><b>${tr('명단에서 찾았습니다: ', 'Found on the list: ')}${esc(m.name)}</b>${esc(personSummary(m))}</div>`
+           : `<div class="banner warn small"><b>${tr('명단에서 같은 이름을 찾지 못했습니다', 'No matching name on the list')}</b>${tr('아래에서 이 분이 누구인지 골라 주세요. 모르는 분이면 거절해 주세요.', 'Please choose who this is below. If you don’t know them, decline.')}</div>`}
+      <label class="field small">${tr('이 신청을 연결할 사람', 'Link this request to')}
         <select data-adpick="${r.id}">
-          <option value="">— 골라 주세요 —</option>
+          <option value="">${tr('— 골라 주세요 —', '— Choose —')}</option>
           ${unclaimed.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)} · ${esc(personSummary(p))}</option>`).join('')}
         </select></label>
       <div class="row" style="gap:8px">
-        <button class="btn sm" data-act="ad-approve" data-id="${r.id}" ${sel ? '' : 'disabled'}>승인</button>
-        <button class="btn sm ghost" data-act="ad-reject" data-id="${r.id}">거절</button></div>
+        <button class="btn sm" data-act="ad-approve" data-id="${r.id}" ${sel ? '' : 'disabled'}>${tr('승인', 'Approve')}</button>
+        <button class="btn sm ghost" data-act="ad-reject" data-id="${r.id}">${tr('거절', 'Decline')}</button></div>
     </div>`;
-  }).join('') : '<p class="empty">지금 승인을 기다리는 신청이 없습니다.</p>';
-  h += sec('requests', '등록 신청', reqs.length, reqBody);
+  }).join('') : '<p class="empty">' + tr('지금 승인을 기다리는 신청이 없습니다.', 'No requests waiting.') + '</p>';
+  h += sec('requests', tr('등록 신청', 'Sign-up requests'), reqs.length, reqBody);
 
   // 2) 등록 현황
-  const line = (p) => `<div class="member"><div class="row"><b>${esc(p.name)}</b><span class="spacer"></span>${isRegistered(p) ? `<span class="pill ok">${p.auth_user_id ? '로그인함' : '승인됨'}</span>` : '<span class="pill">아직</span>'}</div>
+  const line = (p) => `<div class="member"><div class="row"><b>${esc(p.name)}</b><span class="spacer"></span>${isRegistered(p) ? `<span class="pill ok">${p.auth_user_id ? tr('로그인함', 'Signed in') : tr('승인됨', 'Approved')}</span>` : '<span class="pill">' + tr('아직', 'Not yet') + '</span>'}</div>
     <div class="tiny muted">${esc(personSummary(p))}${isRegistered(p) ? ' · ' + esc(p.email) : ''}</div></div>`;
-  h += sec('people', '등록 현황', `${done.length} / ${people.length}`,
-    `<div class="card">${waiting.length ? '<h3 style="margin-top:0">아직 등록하지 않은 분 ' + waiting.length + '명</h3>' + waiting.map(line).join('') : '<p style="margin:0">모든 분이 등록을 마치셨습니다.</p>'}</div>` +
-    (done.length ? `<div class="card"><h3 style="margin-top:0">등록을 마친 분 ${done.length}명</h3>${done.map(line).join('')}</div>` : ''));
+  h += sec('people', tr('등록 현황', 'Registration'), `${done.length} / ${people.length}`,
+    `<div class="card">${waiting.length ? '<h3 style="margin-top:0">' + tr('아직 등록하지 않은 분 ' + waiting.length + '명', 'Not registered yet (' + waiting.length + ')') + '</h3>' + waiting.map(line).join('') : '<p style="margin:0">' + tr('모든 분이 등록을 마치셨습니다.', 'Everyone has registered.') + '</p>'}</div>` +
+    (done.length ? `<div class="card"><h3 style="margin-top:0">${tr('등록을 마친 분 ' + done.length + '명', 'Registered (' + done.length + ')')}</h3>${done.map(line).join('')}</div>` : ''));
 
   // 3) 셀 명단 (담당별)
   const groups = new Map();
   for (const c of C.values()) {
-    const key = c.review_mode === 'leadership' ? (c.resp ? c.resp.name : '담당 분파셀리더 없음') : c.review_mode === 'senior_direct' ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인' : '검토 없음';
+    const key = c.review_mode === 'leadership' ? (c.resp ? c.resp.name : tr('담당 분파셀리더 없음', 'No Leadership assigned')) : c.review_mode === 'senior_direct' ? tr('스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인', 'Reviewed by Pastor Scott Brenner & Mrs. Sunghee Brenner') : tr('검토 없음', 'No review');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(c);
   }
-  const gsorted = [...groups.entries()].sort((a, b) => (a[0].startsWith('스캇') ? 1 : 0) - (b[0].startsWith('스캇') ? 1 : 0) || a[0].localeCompare(b[0], 'ko'));
-  const cellBody = gsorted.map(([g, cs]) => `<div class="card"><h3 style="margin-top:0">${esc(g)} <span class="tiny muted">셀 ${cs.length}개 · 셀원 ${cs.reduce((n, c) => n + c.members.length, 0)}명</span></h3>
-    ${cs.map(c => `<details class="cellbox"><summary><b>${esc(c.name)}</b> <span class="tiny muted">셀원 ${c.members.length}명</span></summary>
-      <div class="small" style="margin:6px 0">셀리더: ${c.leaders.map(p => esc(p.name)).join(', ') || '배정 전'}</div>
-      <div class="small muted">${c.members.map(esc).join(' · ') || '셀원 없음'}</div>
-      <button class="btn sm ghost" style="margin-top:8px" data-act="open-members" data-cell="${c.id}" data-name="${esc(c.name)}">셀원 관리</button></details>`).join('')}</div>`).join('');
-  h += sec('cells', '셀 명단', C.size + '개', cellBody);
+  const gsorted = [...groups.entries()].sort((a, b) => (/^(스캇|Reviewed by)/.test(a[0]) ? 1 : 0) - (/^(스캇|Reviewed by)/.test(b[0]) ? 1 : 0) || a[0].localeCompare(b[0], 'ko'));
+  const cellBody = gsorted.map(([g, cs]) => `<div class="card"><h3 style="margin-top:0">${esc(g)} <span class="tiny muted">${tr('셀 ' + cs.length + '개 · 셀원 ' + cs.reduce((n, c) => n + c.members.length, 0) + '명', cs.length + ' cells · ' + cs.reduce((n, c) => n + c.members.length, 0) + ' members')}</span></h3>
+    ${cs.map(c => `<details class="cellbox"><summary><b>${esc(c.name)}</b> <span class="tiny muted">${tr('셀원 ' + c.members.length + '명', c.members.length + ' members')}</span></summary>
+      <div class="small" style="margin:6px 0">${tr('셀리더: ', 'Cell leader: ')}${c.leaders.map(p => esc(p.name)).join(', ') || tr('배정 전', 'not assigned')}</div>
+      <div class="small muted">${c.members.map(esc).join(' · ') || tr('셀원 없음', 'No members')}</div>
+      <button class="btn sm ghost" style="margin-top:8px" data-act="open-members" data-cell="${c.id}" data-name="${esc(c.name)}">${tr('셀원 관리', 'Members')}</button></details>`).join('')}</div>`).join('');
+  h += sec('cells', tr('셀 명단', 'Cells'), C.size + tr('개', ''), cellBody);
   try {
     const ps = await rpc('admin_push_stats');
-    h += `<div class="card stack" style="margin-top:12px"><div class="row"><b>보고서 알림</b><span class="spacer"></span><span class="pill">${ps.with_push} / ${ps.leaders}명</span></div>
-      <p class="small muted" style="margin:0">이번 주 셀리더 ${ps.leaders}명 중 ${ps.registered}명이 로그인했고, ${ps.with_push}명이 알림을 켰습니다.</p></div>`;
+    h += `<div class="card stack" style="margin-top:12px"><div class="row"><b>${tr('보고서 알림', 'Report notifications')}</b><span class="spacer"></span><span class="pill">${ps.with_push} / ${ps.leaders}</span></div>
+      <p class="small muted" style="margin:0">${tr('이번 주 셀리더 ' + ps.leaders + '명 중 ' + ps.registered + '명이 로그인했고, ' + ps.with_push + '명이 알림을 켰습니다.', 'Of ' + ps.leaders + ' cell leaders this week, ' + ps.registered + ' have signed in and ' + ps.with_push + ' have notifications on.')}</p></div>`;
   } catch (_) { /* 알림 기능 설치 전 */ }
 
   h += `<div class="card stack" style="margin-top:20px">
-    <p class="small muted" style="margin:0">셀원 이동, 셀리더·담당 변경은 아직 Supabase 대시보드에서 합니다. 대시보드에서 고친 내용은 변경 기록에 “누가”가 남지 않으니, 정정 기록표에 날짜·작업자·사유를 함께 적어 주세요.</p>
-    <p class="small muted" style="margin:0">관리자 역할만으로는 보고서와 목양 기록을 볼 수 없습니다.</p></div><div id="pushbox"></div>`;
+    <p class="small muted" style="margin:0">${tr('셀원 이동, 셀리더·담당 변경은 아직 Supabase 대시보드에서 합니다. 대시보드에서 고친 내용은 변경 기록에 “누가”가 남지 않으니, 정정 기록표에 날짜·작업자·사유를 함께 적어 주세요.', 'Moving members and changing cell leaders or Leadership is still done by the church office.')}</p>
+    ${isSenior() ? '' : '<p class="small muted" style="margin:0">관리자 역할만으로는 보고서와 목양 기록을 볼 수 없습니다.</p>'}</div><div id="pushbox"></div>`;
   app.innerHTML = h;
   renderPushBox();
 }
@@ -1937,12 +1979,12 @@ async function adminDecide(id, approve) {
   try {
     if (approve) {
       const pid = document.querySelector(`[data-adpick="${id}"]`)?.value;
-      if (!pid) return toast('연결할 사람을 골라 주세요.');
+      if (!pid) return toast(tr('연결할 사람을 골라 주세요.', 'Please choose a person.'));
       await rpc('admin_approve_request', { p_request: id, p_profile: pid });
-      toast('승인했습니다. 이제 그 이메일로 로그인하실 수 있습니다.');
+      toast(tr('승인했습니다. 이제 그 이메일로 로그인하실 수 있습니다.', 'Approved. They can now sign in with that email.'));
     } else {
       await rpc('admin_reject_request', { p_request: id });
-      toast('거절했습니다.');
+      toast(tr('거절했습니다.', 'Declined.'));
     }
     delete ADMIN.pick[id];
   } catch (e) { toast(errText(e), 4500); }
@@ -1972,6 +2014,12 @@ document.addEventListener('click', async (e) => {
     case 'tx-report': return translateReport(d.id);
     case 'iss-tx': return issuesTranslate();
     case 'cmt-add': return commentAdd(d.id, d.target);
+    case 'ncmt-open': NCMT.open = d.id; NCMT.draft = ''; return render();
+    case 'ncmt-cancel': NCMT.open = null; return render();
+    case 'ncmt-add': return noteCommentAdd(d.id);
+    case 'ncmt-del-ask': NCMT.del = d.id; return render();
+    case 'ncmt-del-cancel': NCMT.del = null; return render();
+    case 'ncmt-del': try { await rpc('note_comment_delete', { p_id: d.id }); NCMT.del = null; toast(tr('지웠습니다.', 'Deleted.')); } catch (err) { toast(errText(err), 5000); } return render();
     case 'cmt-del-ask': CMT.del = d.id; return render();
     case 'cmt-del-cancel': CMT.del = null; return render();
     case 'cmt-del': try { await rpc('senior_comment_delete', { p_id: d.id }); CMT.del = null; toast(tr('지웠습니다.', 'Deleted.')); } catch (err) { toast(errText(err), 5000); } return render();
@@ -2009,15 +2057,15 @@ document.addEventListener('click', async (e) => {
     case 'nt-del-cancel': NOTE.form.confirmDel = false; return render();
     case 'nt-del': try { await rpc('pastoral_note_delete', { p_id: NOTE.form.id }); NOTE.form = null; toast(tr('지웠습니다.', 'Deleted.')); return back(); } catch (e) { return toast(errText(e)); }
     case 'open-members': Object.assign(MEM, { edit: null, confirm: null }); return go({ name: 'members', cell: d.cell, cellName: d.name });
-    case 'mem-add': { const nm = ($('#mem-new')?.value || '').trim(); if (!nm) return toast('이름을 적어 주세요.'); return memAct('member_add', { p_cell: S.view.cell, p_name: nm }, nm + '님을 셀원으로 추가했습니다.'); }
+    case 'mem-add': { const nm = ($('#mem-new')?.value || '').trim(); if (!nm) return toast(tr('이름을 적어 주세요.', 'Please enter a name.')); return memAct('member_add', { p_cell: S.view.cell, p_name: nm }, tr(nm + '님을 셀원으로 추가했습니다.', 'Added ' + nm + '.')); }
     case 'mem-confirm': MEM.confirm = d.id; MEM.del = null; return render();
-    case 'mem-sep': return memAct('member_set_separate', { p_member: d.id, p_on: d.v === '1' }, d.v === '1' ? '따로 만나는 셀원으로 바꿨습니다.' : '모임 셀원으로 바꿨습니다.');
+    case 'mem-sep': return memAct('member_set_separate', { p_member: d.id, p_on: d.v === '1' }, d.v === '1' ? tr('따로 만나는 셀원으로 바꿨습니다.', 'Now meets separately.') : tr('모임 셀원으로 바꿨습니다.', 'Now meets with the group.'));
     case 'mem-del-ask': MEM.del = d.id; MEM.confirm = null; return render();
-    case 'mem-del': return memAct('member_delete', { p_member: d.id }, '셀원 명단에서 삭제했습니다.');
+    case 'mem-del': return memAct('member_delete', { p_member: d.id }, tr('셀원 명단에서 삭제했습니다.', 'Deleted.'));
     case 'mem-cancel': MEM.confirm = null; MEM.del = null; return render();
-    case 'mem-leave': return memAct('member_leave', { p_member: d.id }, '출석 명단에서 내렸습니다.');
-    case 'mem-restore': return memAct('member_restore', { p_member: d.id }, '다시 올렸습니다.');
-    case 'mem-register': return memAct('register_member', { p_member: d.id }, '정식 셀원으로 등록했습니다.');
+    case 'mem-leave': return memAct('member_leave', { p_member: d.id }, tr('출석 명단에서 내렸습니다.', 'Removed from attendance.'));
+    case 'mem-restore': return memAct('member_restore', { p_member: d.id }, tr('다시 올렸습니다.', 'Added back.'));
+    case 'mem-register': return memAct('register_member', { p_member: d.id }, tr('정식 셀원으로 등록했습니다.', 'Registered as a member.'));
     case 'push-off': return pushOff();
     case 'push-test': return pushTest();
     case 'ad-approve': return adminDecide(d.id, true);
