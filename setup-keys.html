@@ -30,6 +30,12 @@
       <div id="rows"></div>
     </div>
   </div>
+  <div class="card">
+    <h2 style="margin-top:0;font-size:18px">구글 시트 연결 암호 만들기</h2>
+    <p class="muted">구글 시트 자동 정리에 쓰는 암호 하나만 새로 만듭니다. 위의 알림 키는 바뀌지 않습니다.</p>
+    <button id="gen-export">시트 연결 암호 만들기</button>
+    <div id="out-export" hidden></div>
+  </div>
 </div>
 <script>
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -49,6 +55,13 @@ document.getElementById('gen').onclick = async () => {
     `<label>SUPABASE_SECRET_KEY</label><div class="muted">이 값은 여기서 만들지 않습니다. Supabase → Project Settings → API Keys에서 <b>Secret key</b>(sb_secret_로 시작)를 복사해 넣어 주세요. (비밀)</div>`;
   document.getElementById('out').hidden = false;
   document.getElementById('gen').disabled = true;
+};
+document.getElementById('gen-export').onclick = () => {
+  const t = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const box = document.getElementById('out-export');
+  box.innerHTML = `<p class="warn">같은 값을 <b>두 곳</b>에 넣어 주세요. ① Vercel → Environment Variables의 이름 <b>EXPORT_TOKEN</b> ② 구글 Apps Script → 프로젝트 설정 → 스크립트 속성의 <b>EXPORT_TOKEN</b>. 다른 사람이나 채팅에는 보내지 마세요.</p>` +
+    row('EXPORT_TOKEN', t, '구글 시트가 셀 케어 기록을 가져갈 때 쓰는 암호 (비밀)');
+  box.hidden = false; document.getElementById('gen-export').disabled = true;
 };
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-v]'); if (!b) return;
