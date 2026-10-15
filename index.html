@@ -670,7 +670,7 @@ async function loadEditor(id) {
     id, rep, cell: cells[0] || { name: '' }, roster, visitors, prayers, revisions,
     step: E && E.id === id ? E.step : 0,
     m: {
-      meeting_held: rep.meeting_held, meeting_date: rep.meeting_date || '', meeting_cancel_reason: rep.meeting_cancel_reason || '',
+      meeting_held: rep.meeting_held, meeting_date: (rep.meeting_date && rep.meeting_date >= rep.week_start && rep.meeting_date <= addDays(rep.week_start, 6)) ? rep.meeting_date : '', bad_date: (rep.meeting_date && (rep.meeting_date < rep.week_start || rep.meeting_date > addDays(rep.week_start, 6))) ? rep.meeting_date : '', meeting_cancel_reason: rep.meeting_cancel_reason || '',
       grace_notes: rep.grace_notes || '', grace_none: false, leader_message: rep.leader_message === 'share_up' ? 'none' : (rep.leader_message || 'none'),
       att, pu,
       notes: notes.map(n => ({ member_id: n.member_id, category: n.category, content: n.content, attention: n.leadership_attention_required, related_member_id: n.related_member_id || '', related_name: n.related_name || '', related_mode: n.related_member_id ? 'member' : n.related_name ? 'other' : '', relation_kind: n.relation_kind || 'mutual' })),
@@ -711,7 +711,8 @@ function renderEditor() {
         <button data-act="ed-set" data-k="meeting_held" data-v="false" aria-pressed="${m.meeting_held === false}">진행하지 못함</button>
       </div>`;
     if (m.meeting_held === true) h += `<div style="margin-top:16px"><label class="field">셀모임 날짜
-        <input type="date" data-bind="meeting_date" min="${r.week_start}" max="${addDays(r.week_start, 6)}" value="${esc(m.meeting_date)}"></label></div>`;
+        <input type="date" data-bind="meeting_date" min="${r.week_start}" max="${addDays(r.week_start, 6)}" value="${esc(m.meeting_date)}"></label>
+        ${m.bad_date && !m.meeting_date ? `<p class="small" style="margin:6px 0 0;color:var(--warn)">전에 적은 날짜(${dayLabel(m.bad_date)})는 이 주(${dayLabel(r.week_start)}~${dayLabel(addDays(r.week_start, 6))})가 아니어서 비워 두었습니다. 이 주의 모임 날짜를 다시 골라 주세요.${m.bad_date < r.week_start ? ' 그 날 모임이었다면 지난주 보고서로 써 주세요.' : ''}</p>` : ''}</div>`;
     if (m.meeting_held === false) h += `<div style="margin-top:16px"><label class="field">모임을 진행하지 못한 이유
         <textarea data-bind="meeting_cancel_reason" placeholder="예: 추석 연휴로 쉬었습니다">${esc(m.meeting_cancel_reason)}</textarea></label>
         <p class="tiny muted">모임을 하지 못한 주에도 보고서를 제출할 수 있습니다.</p></div>`;
@@ -908,6 +909,7 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   if (!E) return; const t = e.target;
   if (t.dataset.bindCheck) { E.m[t.dataset.bindCheck] = t.checked; markDirty(true); }
+  else if (t.dataset.bind) { E.m[t.dataset.bind] = t.value; markDirty(false); }
   else if (t.dataset.noteAttn !== undefined) { E.m.notes[+t.dataset.noteAttn].attention = t.checked; markDirty(false); }
   else if (t.dataset.note !== undefined && t.dataset.f === 'member_id') { E.m.notes[+t.dataset.note].member_id = t.value; markDirty(E.m.notes[+t.dataset.note].category === 'relationship'); }
   else if (t.dataset.note !== undefined && t.dataset.f === 'related') { const n = E.m.notes[+t.dataset.note];
