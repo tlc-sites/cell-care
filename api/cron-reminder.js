@@ -10,6 +10,11 @@ module.exports = async (req, res) => {
   try {
     if ((req.headers.authorization || '') !== 'Bearer ' + env('CRON_SECRET')) return res.status(401).json({ error: 'unauthorized' });
     const t = seoulToday();
+    // 처음 배포하는 주(10월 3주차)는 마감 안내를 보내지 않음
+    const NO_DEADLINE_NOTICE = ['2026-10-16'];
+    if ((t.dow === 4 || t.dow === 5) && NO_DEADLINE_NOTICE.includes(t.dow === 4 ? addDays(t.iso, 1) : t.iso)) {
+      return res.status(200).json({ skipped: '이번 주는 마감 안내를 보내지 않습니다', today: t.iso });
+    }
     let targets, payload;
     if (t.dow === 1) {          // 월요일: 이번 주 셀리더 모두에게 격려
       targets = await serviceRpc('leader_push_targets', { p_week: t.iso });
