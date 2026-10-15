@@ -75,10 +75,10 @@ module.exports = async (req, res) => {
       const notes = await asUser(token, 'rpc/pastoral_note_list', { p_limit: 30, p_only_needs: false });
       notes.forEach(n => { add('note:' + n.id, n.content); add('noteprayer:' + n.id, n.prayer); });
     } else {
-      const [rep] = await asUser(token, 'weekly_reports?select=id,grace_notes,meeting_cancel_reason&id=eq.' + id);
+      const [rep] = await asUser(token, 'weekly_reports?select=id,grace_notes,meeting_cancel_reason,leader_message_note&id=eq.' + id);
       if (!rep) return res.status(404).json({ error: 'Report not found' });
       const [notes, newPrayers, prayers, roster, revisions] = await Promise.all([
-        asUser(token, 'care_notes?select=id,content&report_id=eq.' + id),
+        asUser(token, 'care_notes?select=id,content,prayer&report_id=eq.' + id),
         asUser(token, 'prayer_requests?select=id,content&report_id=eq.' + id),
         asUser(token, 'rpc/get_open_prayers', { p_report: id }),
         asUser(token, 'rpc/get_report_roster', { p_report: id }),
@@ -86,7 +86,8 @@ module.exports = async (req, res) => {
       ]);
       add('grace', rep.grace_notes);
       add('cancel', rep.meeting_cancel_reason);
-      notes.forEach(n => add('care:' + n.id, n.content));
+      add('lmnote', rep.leader_message_note);
+      notes.forEach(n => { add('care:' + n.id, n.content); add('careprayer:' + n.id, n.prayer); });
       newPrayers.forEach(p => add('newprayer:' + p.id, p.content));
       prayers.forEach(p => { add('prayer:' + p.prayer_id, p.content); add('prayernote:' + p.prayer_id, p.this_week_note); });
       roster.forEach(m => add('absence:' + m.member_id, m.absence_reason));
