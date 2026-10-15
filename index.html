@@ -45,7 +45,7 @@ body {
   background: var(--bg); color: var(--ink);
   font-family: var(--font-body); font-size: 17px; line-height: 1.6;
   -webkit-text-size-adjust: 100%;
-  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
 }
 button, input, textarea, select { font: inherit; color: inherit; }
 .wrap { max-width: 640px; margin: 0 auto; padding-inline: 16px; padding-block: 12px 24px; }
@@ -126,13 +126,15 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); bor
 .footer-bar .btns { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
 .savestate { font-size: 13px; color: var(--muted); text-align: center; min-height: 18px; }
 nav.tabs {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: var(--card); border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: var(--accent);
+  padding-bottom: env(safe-area-inset-bottom, 0px); box-shadow: 0 -4px 14px rgba(32,54,91,.18);
 }
-nav.tabs .in { max-width: 640px; margin: 0 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; padding: 8px 10px; }
-nav.tabs button { min-height: 50px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--card); cursor: pointer; color: var(--accent); font-size: 15px; font-weight: 600; padding: 4px 6px; line-height: 1.25; box-shadow: 0 1px 2px rgba(32,54,91,.08); }
-nav.tabs button:active { transform: translateY(1px); }
-nav.tabs button[aria-current=page] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); box-shadow: 0 2px 6px rgba(32,54,91,.25); }
+nav.tabs .in { max-width: 640px; margin: 0 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; padding: 7px 8px; }
+nav.tabs button { min-height: 58px; border: 0; border-radius: 14px; background: transparent; cursor: pointer; color: rgba(255,255,255,.72);
+  font-size: 13.5px; font-weight: 600; padding: 4px 4px; line-height: 1.2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+nav.tabs button svg { width: 23px; height: 23px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+nav.tabs button:active { transform: scale(.97); }
+nav.tabs button[aria-current=page] { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
 .listitem { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); cursor: pointer; text-align: left; width: 100%; }
 .listitem:hover { border-color: #B4C0D6; }
 .listitem .top { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
@@ -298,13 +300,20 @@ function setTop(title, canBack) {
     (langAllowed() ? '<button class="iconbtn" data-act="lang" aria-label="Language">' + (EN() ? '한국어' : 'EN') + '</button>' : '') +
     (S.ctx ? '<button class="iconbtn" data-act="logout">' + tr('로그아웃', 'Log out') + '</button>' : '');
 }
+const TAB_ICON = {
+  leader: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>',
+  leadership: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3 2.8-4.8 5.5-4.8s4.9 1.8 5.5 4.8"/><circle cx="17" cy="9" r="2.5"/><path d="M15.8 14.4c2.3.1 4.1 1.7 4.7 4.6"/></svg>',
+  senior: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  notes: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
+  admin: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>'
+};
 function renderTabs(show) {
   const nav = $('#tabs');
   const tabs = S.ctx ? availableTabs() : [];
   if (!show || tabs.length < 2) { nav.hidden = true; document.body.style.paddingBottom = show === 'footer' ? '170px' : '24px'; if (show && tabs.length < 2) document.body.style.paddingBottom = '24px'; return; }
   nav.hidden = false; document.body.style.paddingBottom = '';
   nav.innerHTML = '<div class="in">' + tabs.map(t =>
-    '<button data-act="tab" data-id="' + t.id + '"' + (S.tab === t.id ? ' aria-current="page"' : '') + '>' + esc(t.label) + '</button>').join('') + '</div>';
+    '<button data-act="tab" data-id="' + t.id + '"' + (S.tab === t.id ? ' aria-current="page"' : '') + '>' + (TAB_ICON[t.id] || '') + '<span>' + esc(t.label) + '</span></button>').join('') + '</div>';
 }
 
 async function render() {
