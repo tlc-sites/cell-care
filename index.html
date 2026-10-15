@@ -1247,10 +1247,11 @@ async function signals(week) {
 async function viewDashboard(app, v) {
   setTop(tr('전체 현황', 'Overview'), false); renderTabs(true);
   const week = v.week || S.ctx.this_week;
-  const [allRows, lrs, wkNotes] = await Promise.all([
+  const [allRows, lrs, wkNotes, pmsgs] = await Promise.all([
     rpc('get_week_status', { p_week_start: week }),
     rpc('lr_overview', { p_week: week }).catch(() => []),
-    rpc('pastoral_note_list', { p_limit: 200, p_only_needs: false }).then(x => x.filter(n => n.met_on >= week && n.met_on <= addDays(week, 6))).catch(() => [])
+    rpc('pastoral_note_list', { p_limit: 200, p_only_needs: false }).then(x => x.filter(n => n.met_on >= week && n.met_on <= addDays(week, 6))).catch(() => []),
+    rpc('pastor_msgs_week', { p_week: week }).catch(() => [])
   ]);
   const campusList = [...new Set(allRows.map(r => r.campus || '분당'))].sort();
   const rows = campusList.length > 1 && DASH.campus ? allRows.filter(r => (r.campus || '분당') === DASH.campus) : allRows;
@@ -1278,6 +1279,14 @@ async function viewDashboard(app, v) {
   let h = `<h1>${tr('전체 현황', 'Overview')}</h1>` + weekNav(week, 'db-week');
   if (campusList.length > 1) h += `<div class="chips" style="margin-bottom:8px">${[['', tr('모든 캠퍼스', 'All campuses')], ...campusList.map(c => [c, campusLabel(c)])].map(([k, t]) =>
     `<button class="chip" data-act="db-campus" data-v="${k}" aria-pressed="${DASH.campus === k}">${t}</button>`).join('')}</div>`;
+  if (pmsgs.length) {
+    const short = (t) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > 70 ? t.slice(0, 68) + '…' : t; };
+    h += `<h2 style="margin-top:8px">${tr('목사님께 온 말씀', 'Messages for you')} <span class="muted" style="font-weight:400">${pmsgs.length}</span></h2><div class="stack" style="gap:8px">` +
+      pmsgs.map(x => `<button class="listitem" data-act="open-detail" data-id="${x.report_id}" style="border-color:#C9D3E4;background:#F7F9FC">
+        <span class="top"><b>✉️ ${esc(x.author || '')}</b><span class="small muted">${esc(x.cell_name)}</span></span>
+        <span class="small">${esc(short(EN() && x.content_en ? x.content_en : x.content))}</span>
+        <span class="tiny muted">${dateTime(x.sent_at)}</span></button>`).join('') + '</div>';
+  }
   if (lrs.length) {
     const done = lrs.filter(x => x.status === 'submitted');
     h += `<h2 style="margin-top:8px">${tr('교역자 보고', 'Pastoral reports')} <span class="muted" style="font-weight:400">${done.length} / ${lrs.length}</span></h2><div class="stack" style="gap:8px">` +
