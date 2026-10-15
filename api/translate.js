@@ -96,3 +96,4 @@ module.exports = async (req, res) => {
     res.status(e.status || 500).json({ error: String(e.message || e) });
   }
 };
+module.exports.translate = translate;
