@@ -19,10 +19,6 @@
     {
       "path": "/api/cron-senior",
       "schedule": "0 8 * * 5"
-    },
-    {
-      "path": "/api/cron-senior",
-      "schedule": "0 8 * * 6"
     }
   ],
   "headers": [
