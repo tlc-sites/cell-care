@@ -1361,9 +1361,9 @@ async function viewDashboard(app, v) {
         : `<div class="listitem" style="cursor:default"><span class="top"><b>${esc(x.author_name)}</b><span class="pill warn">${tr('아직 작성 전', 'Not yet')}</span></span></div>`).join('') + '</div>';
   }
   {
-    const needs = wkNotes.filter(n => n.needs_pastor && !n.acknowledged_at).length;
+    const needs = wkNotes.filter(noteOpen).length;
     h += `<h2>${tr('이 주 성도 동정', 'Pastoral notes this week')} <span class="muted" style="font-weight:400">${wkNotes.length}</span></h2>
-      <button class="listitem" data-act="lr-notes" data-week="${week}"><span class="top"><b>${wkNotes.length ? tr(wkNotes.length + '건의 동정이 있습니다', wkNotes.length + ' note(s)') : tr('이 주에 올라온 동정이 없습니다', 'No notes this week')}</b>${needs ? `<span class="pill warn">${tr('목사님 확인 필요 ' + needs, needs + ' need you')}</span>` : ''}</span><span class="small muted">${tr('주간 정리 보기 →', 'Open weekly view →')}</span></button>`;
+      <button class="listitem" data-act="lr-notes" data-week="${week}"><span class="top"><b>${wkNotes.length ? tr(wkNotes.length + '건의 동정이 있습니다', wkNotes.length + ' note(s)') : tr('이 주에 올라온 동정이 없습니다', 'No notes this week')}</b>${needs ? `<span class="pill warn">${tr('확인 필요 ' + needs, needs + ' need you')}</span>` : ''}</span><span class="small muted">${tr('주간 정리 보기 →', 'Open weekly view →')}</span></button>`;
   }
   h += `<button class="listitem" data-act="open-issues" style="margin-top:8px"><span class="top"><b>${tr('셀원 이슈 보기', 'Member issues')}</b><span class="small muted">${tr('이슈별 · 사람별 →', 'By topic · by person →')}</span></span><span class="small muted">${tr('관계, 장기결석, 건강 등 교회 전체 셀원의 이슈를 모아 봅니다.', 'Relationships, long absences, health and more across the church.')}</span></button>`;
   h += `<h2>${tr('셀리더 보고서', 'Cell reports')}</h2>`;
@@ -1647,6 +1647,14 @@ async function lrTranslate(id) {
 const NOTE_METHOD = { in_person: ['대면 심방', 'In person'], phone: ['전화 심방', 'Phone call'], text: ['문자 심방', 'Text message'], other: ['기타', 'Other'] };
 const NOTE_CAT_KEYS = ['update', 'prayer', 'faith', 'health', 'family', 'work_school', 'relationship', 'long_absence', 'care_needed', 'other'];
 const CAMPUSES = ['분당', '부산'];
+/* 성도 동정 확인: 목사님·사모님 각각 */
+const ackOf = (n, role) => (n.acks || []).find(a => a.role === role);
+const noteOpen = (n) => n.needs_pastor && (isSenior() ? !n.i_acked : !(n.acks || []).length);
+function ackPills(n) {
+  if (!n.needs_pastor) return '';
+  const one = (role, ko, en) => ackOf(n, role) ? `<span class="pill ok">${tr(ko + ' 확인 ✓', en + ' ✓')}</span>` : `<span class="pill warn">${tr(ko + ' 확인 전', en + ' not yet')}</span>`;
+  return one('senior_pastor', '목사님', 'Pastor') + one('samonim', '사모님', 'Mrs. Brenner');
+}
 const NOTE = { filter: 'all', list: [], form: null, busy: false, tx: null, txBusy: false, txErr: '', staff: null };
 const noteCat = (k) => LX('care', NOTE_CAT_KEYS.includes(k) ? k : 'other');
 const noteMethod = (k) => (NOTE_METHOD[k] || NOTE_METHOD.other)[EN() ? 1 : 0];
@@ -1669,7 +1677,7 @@ async function viewNotesHome(app, v) {
   let h = `<h1>${tr('성도 동정', 'Pastoral notes')}</h1>
     <p class="sub">${tr('교역자가 특별히 만난 분들의 소식을 나눕니다. 목사님·사모님은 모든 동정을 보시고, 다른 교역자는 쓴 분이 고른 분만 봅니다.', 'Pastoral staff share news about people they met. Pastor Scott Brenner & Mrs. Sunghee Brenner see every note; other staff see only what is shared with them.')}</p>
     <div style="margin-top:12px"><button class="btn" data-act="note-new">${tr('+ 성도 동정 쓰기', '+ Write a note')}</button></div>`;
-  if (canSeeAllNotes()) h += `<div class="chips" style="margin-top:16px">${[['all', tr('최근 순', 'Latest')], ['week', tr('주간 정리', 'By week')], ['needs', tr('목사님 확인 필요', 'Needs pastor')], ['mine', tr('내가 쓴 것', 'Mine')]].map(([k, t]) =>
+  if (canSeeAllNotes()) h += `<div class="chips" style="margin-top:16px">${[['all', tr('최근 순', 'Latest')], ['week', tr('주간 정리', 'By week')], ['needs', isSenior() ? tr('내가 확인할 동정', 'Needs my review') : tr('목사님 확인 필요', 'Needs pastor')], ['mine', tr('내가 쓴 것', 'Mine')]].map(([k, t]) =>
     `<button class="chip" data-act="note-filter" data-v="${k}" aria-pressed="${NOTE.filter === k}">${t}</button>`).join('')}</div>`;
   if (hasBusan) h += `<div class="chips" style="margin-top:8px">${[['', tr('모든 캠퍼스', 'All campuses')], ...CAMPUSES.map(c => [c, campusLabel(c)])].map(([k, t]) =>
     `<button class="chip" data-act="note-campus" data-v="${k}" aria-pressed="${(NOTE.campus || '') === k}">${t}</button>`).join('')}</div>`;
@@ -1678,15 +1686,15 @@ async function viewNotesHome(app, v) {
     autoTx(NOTE.tx, NOTE.txBusy, NOTE.txErr, () => { if (S.view.name === 'notesHome') noteTranslate(); });
   }
   const noteCard = (n) => `
-    <div class="card stack" style="gap:6px${n.needs_pastor && !n.acknowledged_at ? ';border-color:#E8C9A8' : ''}">
+    <div class="card stack" style="gap:6px${noteOpen(n) ? ';border-color:#E8C9A8' : ''}">
       <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.08em">${esc(n.person_name)}</b><span class="pill">${noteMethod(n.visit_method)}</span><span class="pill">${noteCat(n.category)}</span>${n.campus && n.campus !== '분당' ? `<span class="pill accent">${campusLabel(n.campus)}</span>` : ''}
-        ${n.needs_pastor ? (n.acknowledged_at ? `<span class="pill ok">${tr('목사님 확인함', 'Seen by pastor')}</span>` : `<span class="pill warn">${tr('목사님 확인 필요', 'Needs pastor')}</span>`) : ''}
+        ${ackPills(n)}
         <span class="spacer"></span><span class="tiny muted">${dayLabel(n.met_on)}</span></div>
       <div>${NTX('note:' + n.id, n.content)}</div>
       ${n.prayer ? `<div class="small"><b>${tr('기도제목', 'Prayer')}</b> · ${NTX('noteprayer:' + n.id, n.prayer)}</div>` : ''}
-      <div class="row" style="gap:12px;flex-wrap:wrap"><span class="tiny muted">${tr('쓴 분: ', 'By ')}${esc(n.author_name)} · ${tr('보는 분: ', 'Shared with: ')}${n.visibility === 'all' ? tr('교역자 모두', 'all pastoral staff') : (n.viewer_names ? esc(n.viewer_names) + ' + ' : '') + tr('목사님·사모님', 'Pastor Scott Brenner & Mrs. Sunghee Brenner')}${n.acknowledged_at ? ' · ' + tr('확인: ', 'Seen: ') + esc(n.acknowledged_name || '') : ''}</span><span class="spacer"></span>
+      <div class="row" style="gap:12px;flex-wrap:wrap"><span class="tiny muted">${tr('쓴 분: ', 'By ')}${esc(n.author_name)} · ${tr('보는 분: ', 'Shared with: ')}${n.visibility === 'all' ? tr('교역자 모두', 'all pastoral staff') : (n.viewer_names ? esc(n.viewer_names) + ' + ' : '') + tr('목사님·사모님', 'Pastor Scott Brenner & Mrs. Sunghee Brenner')}</span><span class="spacer"></span>
         ${n.mine ? `<button class="link" data-act="note-edit" data-id="${n.id}">${tr('고치기', 'Edit')}</button>` : ''}
-        ${isSenior() && n.needs_pastor && !n.acknowledged_at ? `<button class="btn sm" data-act="note-ack" data-id="${n.id}">${tr('확인했습니다', 'Mark as seen')}</button>` : ''}</div>
+        ${isSenior() && n.needs_pastor && !n.i_acked ? `<button class="btn sm" data-act="note-ack" data-id="${n.id}">${tr('확인했습니다', 'Mark as seen')}</button>` : ''}</div>
     </div>`;
   if (weekly) {
     const isNow = NOTE.week >= S.ctx.this_week;
@@ -1696,7 +1704,7 @@ async function viewNotesHome(app, v) {
       const cnt = (key, keys, lab) => keys.map(k => [lab(k), list.filter(n => (n[key] || '') === k).length]).filter(x => x[1]).map(([t, c]) => esc(t) + ' ' + c).join(' · ');
       h += `<div class="card small" style="margin-top:12px"><b>${tr('이 주 성도 동정 ' + list.length + '건', list.length + ' notes')}</b>
         <div>${tr('심방', 'Visits')}: ${cnt('visit_method', Object.keys(NOTE_METHOD), noteMethod)}</div>
-        ${list.some(n => n.needs_pastor && !n.acknowledged_at) ? `<div style="color:var(--warn)">${tr('목사님 확인 필요 ' + list.filter(n => n.needs_pastor && !n.acknowledged_at).length + '건', list.filter(n => n.needs_pastor && !n.acknowledged_at).length + ' need the pastor')}</div>` : ''}</div>`;
+        ${list.some(noteOpen) ? `<div style="color:var(--warn)">${tr('확인 필요 ' + list.filter(noteOpen).length + '건', list.filter(noteOpen).length + ' need your review')}</div>` : ''}</div>`;
       for (const k of NOTE_CAT_KEYS) {
         const g = list.filter(n => (NOTE_CAT_KEYS.includes(n.category) ? n.category : 'other') === k);
         if (g.length) h += `<h2>${noteCat(k)} <span class="muted" style="font-weight:400">${g.length}</span></h2><div class="stack">${g.map(noteCard).join('')}</div>`;
@@ -1704,7 +1712,7 @@ async function viewNotesHome(app, v) {
     } else h += `<p class="empty">${tr('이 주에 만난 분의 동정이 없습니다.', 'No notes for this week.')}</p>`;
     app.innerHTML = h; return;
   }
-  h += '<div class="stack" style="margin-top:12px">' + (list.length ? list.map(noteCard).join('') : `<p class="empty">${NOTE.filter === 'needs' ? tr('확인할 동정이 없습니다.', 'Nothing waiting for the pastor.') : tr('아직 쓴 동정이 없습니다.', 'No notes yet.')}</p>`) + '</div>';
+  h += '<div class="stack" style="margin-top:12px">' + (list.length ? list.map(noteCard).join('') : `<p class="empty">${NOTE.filter === 'needs' ? tr('확인할 동정이 없습니다.', isSenior() ? 'Nothing waiting for you.' : 'Nothing waiting for the pastor.') : tr('아직 쓴 동정이 없습니다.', 'No notes yet.')}</p>`) + '</div>';
   app.innerHTML = h;
 }
 function viewNoteEdit(app, v) {
