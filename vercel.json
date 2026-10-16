@@ -19,7 +19,14 @@
     {
       "path": "/api/cron-senior",
       "schedule": "0 8 * * 5"
+    },
+    {
+      "path": "/api/cron-weekly-email",
+      "schedule": "0 8 * * 5"
     }
+  ],
+  "rewrites": [
+    { "source": "/api/cron-weekly-email", "destination": "/api/cron-senior?delivery=email" }
   ],
   "headers": [
     {
@@ -46,6 +53,9 @@
     }
   ],
   "functions": {
+    "api/cron-senior.js": {
+      "maxDuration": 300
+    },
     "api/translate.js": {
       "maxDuration": 60
     },

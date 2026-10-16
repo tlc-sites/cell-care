@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
     const toKo = async (text) => {
       if (/[가-힣]/.test(text)) return '';
       try {
-        const key = (process.env.ANTHROPIC_API_KEY || '').trim();
+        const key = (process.env.OPENAI_API_KEY || '').trim();
         return key ? ((await translate(key, { c: text }, TO_KO)).c || '') : '';
       } catch (_) { return ''; }
     };
@@ -43,7 +43,7 @@ module.exports = async (req, res) => {
     let ko = '';
     if (!/[가-힣]/.test(c.content)) {
       try {
-        const key = (process.env.ANTHROPIC_API_KEY || '').trim();
+        const key = (process.env.OPENAI_API_KEY || '').trim();
         if (key) ko = (await translate(key, { c: c.content }, TO_KO)).c || '';
       } catch (_) { ko = ''; }
     }

@@ -1,6 +1,8 @@
 // 금요일 오후 5시: 담임 목사님·사모님께 "이번 주 교역자 보고가 준비되었습니다" 알림 (Vercel Cron, CRON_SECRET 필요)
 const { serviceRpc, sendAll, seoulToday, env } = require('./_lib');
 module.exports = async (req, res) => {
+  // A separate cron request is routed here to avoid adding a bundled function on Hobby.
+  if (req.query && req.query.delivery === 'email') return require('../lib/cron-weekly-email')(req, res);
   try {
     if ((req.headers.authorization || '') !== 'Bearer ' + env('CRON_SECRET')) return res.status(401).json({ error: 'unauthorized' });
     const t = seoulToday();
