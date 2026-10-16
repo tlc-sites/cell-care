@@ -1560,7 +1560,7 @@ async function viewLrEdit(app, v) {
       <div class="row" style="gap:14px"><button class="link" data-act="lr-item-edit" data-i="${i}">고치기</button><button class="link" data-act="lr-item-del" data-i="${i}">빼기</button></div></div>`).join('') + '</div>'
     : '<p class="empty">아직 적은 분이 없습니다. 아래에서 한 분씩 골라 적어 주세요.</p>';
   h += `<div class="card stack" style="margin-top:12px" id="lr-form"><b>${LR.editing ? '고치는 중' : '한 분 더 적기'}</b>
-    <label class="field">셀원 고르기<select id="lr-pick"><option value="">— 고르세요 —</option>${groups.map(g => `<optgroup label="${esc(g)}">${LR.people.filter(p => p.group_name === g).map(p => {
+    <label class="field">셀리더·셀원 고르기 <span class="tiny muted" style="font-weight:400">셀리더를 만나 상담한 내용도 적을 수 있습니다</span><select id="lr-pick"><option value="">— 고르세요 —</option>${groups.map(g => `<optgroup label="${esc(g)}">${LR.people.filter(p => p.group_name === g).map(p => {
       const k = lrKey(p.kind, p.id); const taken = used.has(k) && k !== LR.editing;
       return `<option value="${k}" ${LR.pick === k ? 'selected' : ''} ${taken ? 'disabled' : ''}>${esc(p.name)}${taken ? ' (적음)' : ''}</option>`; }).join('')}</optgroup>`).join('')}</select></label>
     <div id="lr-ref">${lrRefHtml()}</div>
@@ -1647,7 +1647,7 @@ async function viewLrRead(app, v) {
   }
   if (r.summary) h += `<div class="card" style="margin-top:12px"><b>${tr('한 주 요약', 'Summary')}</b><div style="margin-top:4px">${TXL('lr:sum', r.summary)}</div></div>`;
   h += '<div class="stack" style="margin-top:12px">' + (r.items.length ? r.items.map(it => `<div class="card stack" style="gap:6px">
-      <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.05em">${esc(it.person_name)}</b><span class="tiny muted">${esc(it.group_name === '개별 케어' ? tr('개별 케어', 'Individual care') : it.group_name || '')}</span><span class="spacer"></span><span class="pill">${noteCat(it.category)}</span></div>
+      <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.05em">${esc(it.person_name)}</b><span class="tiny muted">${esc(it.group_name === '개별 케어' ? tr('개별 케어', 'Individual care') : it.group_name === '셀리더' ? tr('셀리더', 'Cell leader') : it.group_name || '')}</span><span class="spacer"></span><span class="pill">${noteCat(it.category)}</span></div>
       <div>${TXL('lri:' + it.id, it.content)}</div></div>`).join('') : '<p class="empty">' + tr('적은 분이 없습니다.', 'No one listed.') + '</p>') + '</div>';
   app.innerHTML = h;
 }
@@ -1841,16 +1841,21 @@ async function noteTranslate() {
    셀원 관리 — 추가 · 이번 주부터 빼기 · 다시 넣기
    (그 셀의 셀리더, 담당 Leadership, 관리자. 바꾼 내용은 기록으로 남음)
    ===================================================================== */
-const MEM = { confirm: null, del: null, busy: false };
+const MEM = { confirm: null, del: null, move: null, targets: [], busy: false };
 async function viewMembers(app, v) {
   setTop(tr('셀원 관리', 'Members'), true); renderTabs(false);
-  const rows = await rpc('member_list', { p_cell: v.cell });
+  const [rows, targets] = await Promise.all([rpc('member_list', { p_cell: v.cell }), rpc('member_move_targets', { p_cell: v.cell }).catch(() => [])]);
+  MEM.targets = targets || [];
   const label = { member: [tr('정식 셀원', 'Member'), ''], visitor: [tr('방문자', 'Visitor'), 'accent'], left: [tr('명단에서 내림', 'Removed from list'), ''], hidden: [tr('목록에서 내림', 'Hidden'), ''] };
   const item = (m) => {
     const [t, c] = label[m.state];
     const confirming = MEM.confirm === m.id;
     let actions = '';
-    if (MEM.del === m.id) {
+    if (MEM.move === m.id) {
+      actions = `<div class="banner small" style="margin-top:8px"><b>${tr(esc(m.name) + '님을 어느 셀로 옮길까요?', 'Move ' + esc(m.name) + ' to which cell?')}</b>${tr('이번 주부터 새 셀의 출석 명단에 나오고, 이 셀에서는 내려갑니다. 지난 기록은 그대로 남고, 진행 중인 기도제목은 함께 옮겨집니다.', 'From this week they appear in the new cell. Past records stay; ongoing prayer requests move with them.')}
+        <select id="mem-move-to" style="margin-top:8px"><option value="">${tr('— 셀 고르기 —', '— Choose a cell —')}</option>${MEM.targets.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+        <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm" data-act="mem-move" data-id="${m.id}" ${MEM.busy ? 'disabled' : ''}>${tr('옮기기', 'Move')}</button><button class="btn sm ghost" data-act="mem-cancel">${tr('취소', 'Cancel')}</button></div></div>`;
+    } else if (MEM.del === m.id) {
       actions = `<div class="banner warn small" style="margin-top:8px"><b>${tr(esc(m.name) + '님을 셀원 명단에서 삭제할까요?', 'Delete ' + esc(m.name) + ' from this cell?')}</b>${tr('중복으로 들어갔거나 잘못 넣은 분일 때만 지워 주세요. 이미 제출된 지난 보고서 기록은 그대로 남습니다.', 'Only for duplicates or mistakes. Past submitted reports stay as they are.')}
         <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="mem-del" data-id="${m.id}">${tr('삭제', 'Delete')}</button><button class="btn sm ghost" data-act="mem-cancel">${tr('취소', 'Cancel')}</button></div></div>`;
     } else if (confirming) {
@@ -1862,6 +1867,7 @@ async function viewMembers(app, v) {
       actions = `<div class="row" style="gap:12px;margin-top:6px;flex-wrap:wrap">
         ${m.state === 'visitor' ? `<button class="link" data-act="mem-register" data-id="${m.id}">${tr('정식 셀원으로', 'Make a member')}</button>` : ''}
         ${m.state === 'member' ? `<button class="link" data-act="mem-sep" data-id="${m.id}" data-v="${m.meets_separately ? '0' : '1'}">${m.meets_separately ? tr('모임 셀원으로', 'Meets with the group') : tr('따로 만나는 셀원으로', 'Meets separately')}</button>` : ''}
+        ${MEM.targets.length ? `<button class="link" data-act="mem-move-ask" data-id="${m.id}">${tr('다른 셀로 옮기기', 'Move to another cell')}</button>` : ''}
         <button class="link" data-act="mem-confirm" data-id="${m.id}">${m.state === 'visitor' ? tr('목록에서 내리기', 'Remove') : tr('출석 명단에서 내리기', 'Remove from attendance')}</button>
         ${m.can_delete ? `<button class="link" data-act="mem-del-ask" data-id="${m.id}" style="color:var(--danger)">${tr('삭제', 'Delete')}</button>` : ''}</div>`;
     }
@@ -2086,7 +2092,11 @@ document.addEventListener('click', async (e) => {
     case 'mem-sep': return memAct('member_set_separate', { p_member: d.id, p_on: d.v === '1' }, d.v === '1' ? tr('따로 만나는 셀원으로 바꿨습니다.', 'Now meets separately.') : tr('모임 셀원으로 바꿨습니다.', 'Now meets with the group.'));
     case 'mem-del-ask': MEM.del = d.id; MEM.confirm = null; return render();
     case 'mem-del': return memAct('member_delete', { p_member: d.id }, tr('셀원 명단에서 삭제했습니다.', 'Deleted.'));
-    case 'mem-cancel': MEM.confirm = null; MEM.del = null; return render();
+    case 'mem-cancel': MEM.confirm = null; MEM.del = null; MEM.move = null; return render();
+    case 'mem-move-ask': MEM.move = d.id; MEM.confirm = null; MEM.del = null; return render();
+    case 'mem-move': { const to = $('#mem-move-to')?.value; if (!to) return toast(tr('옮길 셀을 골라 주세요.', 'Please choose a cell.'));
+      const cn = (MEM.targets.find(c => c.id === to) || {}).name || '';
+      MEM.move = null; return memAct('member_move', { p_member: d.id, p_target: to }, tr(cn + '로 옮겼습니다.', 'Moved to ' + cn + '.')); }
     case 'mem-leave': return memAct('member_leave', { p_member: d.id }, tr('출석 명단에서 내렸습니다.', 'Removed from attendance.'));
     case 'mem-restore': return memAct('member_restore', { p_member: d.id }, tr('다시 올렸습니다.', 'Added back.'));
     case 'mem-register': return memAct('register_member', { p_member: d.id }, tr('정식 셀원으로 등록했습니다.', 'Registered as a member.'));
