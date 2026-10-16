@@ -1051,9 +1051,10 @@ async function viewReportDetail(app, v) {
     const R = DETAIL.id === rep.id ? DETAIL : (Object.assign(DETAIL, { id: rep.id, note: '', level: 'normal', revOpen: false, reason: '', busy: false }));
     h += '<h2>' + tr('확인', 'Review') + '</h2><div class="card stack">';
     if (row.i_can_review) h += `
-      <label class="field">${tr('분파셀리더 메모', 'Review note')} <span class="tiny muted" style="font-weight:400">${tr('셀리더에게는 보이지 않습니다', 'Not visible to the cell leader')}</span>
+      <label class="field">${tr('확인 메모 (목사님·사모님께 전할 내용)', 'Review note (for the senior pastor)')}
+        <span class="tiny muted" style="font-weight:400;display:block;margin-top:2px">${tr('보고서를 확인하며 남기는 기록입니다. 담임 목사님·사모님과 담당 분파셀리더가 보고서의 「확인 기록」에서 보시고, 셀리더에게는 보이지 않습니다.', 'Kept with this review. Seen by Pastor Scott Brenner & Mrs. Sunghee Brenner and Leadership in “Review history” — not by the cell leader.')}</span>
         <textarea id="rv-note" rows="3" placeholder="${tr('예: 최근 3주 결석 중. 연락 예정.', 'e.g. Absent 3 weeks — will call.')}">${esc(R.note)}</textarea></label>
-      <div><div style="font-weight:500;margin-bottom:6px">${tr('상위 보고 상태', 'Escalation')}</div><div class="sel">${Object.keys(L.escalation).map(k =>
+      <div><div style="font-weight:500;margin-bottom:2px">${tr('상위 보고 상태', 'Escalation')}</div><div class="tiny muted" style="margin-bottom:6px">${tr('목사님·사모님께서 이 셀을 얼마나 살펴보셔야 하는지 골라 주세요.', 'How closely should the senior pastor look at this cell?')}</div><div class="sel">${Object.keys(L.escalation).map(k =>
         `<button class="chip" data-act="rv-level" data-v="${k}" aria-pressed="${R.level === k}" style="min-height:48px">${LX('escalation', k)}</button>`).join('')}</div></div>
       <button class="btn" data-act="rv-ok" ${R.busy ? 'disabled' : ''}>${tr('보고서를 확인했습니다', 'Mark as reviewed')}</button>`;
     if (row.i_can_request_revision) h += R.revOpen ? `
