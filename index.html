@@ -377,7 +377,7 @@ function viewLogin() {
       <p class="small muted" style="margin:0">${tr('이름과 이메일을 적어 등록을 신청해 주세요. 확인을 마치면 그 이메일로 로그인하실 수 있습니다.', 'Request access with your name and email. Once approved, you can sign in with that email.')}</p>
       <button class="btn ghost" data-act="reg-open">${tr('등록 신청하기', 'Request access')}</button>
     </div>` : ''}
-    <p style="text-align:center;margin-top:18px"><a href="guide.html" style="color:var(--accent);font-weight:500">${tr('📖 처음 쓰시는 분을 위한 사용 안내', '📖 How to get started')}</a></p>`;
+    <p style="text-align:center;margin-top:18px"><a href="guide.html" style="color:var(--accent);font-weight:500">${tr('📖 처음 쓰시는 분을 위한 사용 안내', '📖 How to get started')}</a></p>${HELP_LINE()}`;
 }
 
 /* 등록 신청 (로그인 전) — 명단에 미리 있는 이름과 맞춰 관리자가 승인 */
@@ -549,6 +549,7 @@ async function viewLeaderHome(app) {
     const rv = r.review_status === 'reviewed' ? '<span class="pill ok">분파셀리더 확인 완료</span>' : r.review_status === 'not_required' ? '<span class="pill ok">제출 완료</span>' : '<span class="pill">확인 대기</span>';
     return `<button class="listitem" data-act="open-report" data-id="${r.id}"><span class="top"><b>${weekLabel(r.week_start)}${ctx.leader_cells.length > 1 ? ' · ' + esc(cell?.name || '') : ''}</b>${rv}</span></button>`;
   }).join('') + '</div>' : '<p class="empty">아직 제출한 보고서가 없습니다.</p>';
+  h += HELP_LINE();
   app.innerHTML = h;
   renderPushBox();
 }
@@ -653,6 +654,7 @@ async function startReport(cell, week) {
    보고서 작성 (5단계) — 제출 전에는 수정, 제출 후에는 읽기 화면
    ===================================================================== */
 const STEPS = ['모임', '출석', '셀 케어', '은혜', '확인'];
+const HELP_LINE = () => `<p class="tiny muted" style="text-align:center;margin:16px 0 0">${tr('앱 사용 중 문제가 있으면 김도현 간사에게 문의해 주세요.', 'If you have any trouble with the app, please contact Dohyun Kim.')}</p>`;
 const catsLabel = (n) => ((n.categories && n.categories.length) ? n.categories : (n.category ? [n.category] : [])).map(k => LX('care', k)).join(', ');
 const reviewerName = (mode) => mode === 'senior_direct' ? '담임 목사님·사모님' : '담당 분파셀리더';
 /* 관계 기록: 서로 어려워함 / 이 분이 상대 때문에 어려워함 */
@@ -1280,7 +1282,7 @@ async function viewLeadershipHome(app, v) {
     h += '<div class="stack">' + own.map(r => ownCellItem(r, week)).join('') + '</div>';
   }
   if (!S.ctx.leader_cells.length) h += '<div id="pushbox"></div>';
-  h += '<p style="text-align:center;margin-top:24px"><a href="staff-guide.html" style="color:var(--accent);font-weight:500">📖 교역자 사용 안내</a></p>';
+  h += '<p style="text-align:center;margin-top:24px"><a href="staff-guide.html" style="color:var(--accent);font-weight:500">📖 교역자 사용 안내</a></p>' + HELP_LINE();
   app.innerHTML = h;
   renderPushBox();
 }
@@ -1421,7 +1423,7 @@ async function viewDashboard(app, v) {
         : `<span class="bar"><span>${tr('확인', 'Reviewed')}</span><span class="track"><span class="fill rv ${g.rev < g.sub ? 'low' : ''}" style="width:${pct(g.rev, g.sub)}%"></span></span><span class="num">${g.rev} / ${g.sub}</span></span>`}
       ${g.unrev || g.concern ? `<span class="small" style="color:var(--warn)">${g.unrev ? tr('미확인 ' + g.unrev + '건', g.unrev + ' unreviewed') : ''}${g.unrev && g.concern ? ' · ' : ''}${g.concern ? tr('목양 관심 ' + g.concern + '건', g.concern + ' need attention') : ''}</span>` : ''}
     </button>`).join('') : '<p class="empty">' + tr('조건에 맞는 분파셀리더가 없습니다.', 'Nothing matches this filter.') + '</p>') + '</div>';
-  h += '<h2>' + tr('주의 필요', 'Watch list') + '</h2><div id="signals" class="stack"><p class="muted small">' + tr('확인하는 중…', 'Checking…') + '</p></div><div id="pushbox"></div>';
+  h += '<h2>' + tr('주의 필요', 'Watch list') + '</h2><div id="signals" class="stack"><p class="muted small">' + tr('확인하는 중…', 'Checking…') + '</p></div><div id="pushbox"></div>' + HELP_LINE();
   app.innerHTML = h;
   renderPushBox();
   signals(week).then(list => {
