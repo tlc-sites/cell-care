@@ -1071,7 +1071,14 @@ async function viewReportDetail(app, v) {
 
   if (reviews.length) {
     h += '<h2>' + tr('분파셀리더가 확인한 내용', 'Leadership review') + '</h2><p class="tiny muted" style="margin:-4px 0 8px">' + tr('분파셀리더가 이 보고서를 확인하며 남긴 메모와 상위 보고 상태입니다. 담임 목사님·사모님과 분파셀리더만 보고, 셀리더에게는 보이지 않습니다.', 'The note and escalation level Leadership left when reviewing this report. Not visible to the cell leader.') + '</p><div class="stack">' + reviews.map(x => `<div class="card small"><div class="row"><b>${tr(x.submission_no + '번째 제출 확인', 'Submission #' + x.submission_no + ' reviewed')}</b><span class="pill ${x.escalation_level === 'normal' ? '' : 'warn'}">${tr('상위 보고: ', 'Escalation: ')}${LX('escalation', x.escalation_level)}</span>${x.submission_no !== rep.submission_no ? '<span class="pill">' + tr('이전 제출', 'Earlier') + '</span>' : ''}</div>
-      <div class="muted">${esc(nameOf(x.reviewer_id))} · ${dateTime(x.reviewed_at)}</div>${x.review_note ? '<div style="margin-top:4px"><b>' + tr('메모', 'Note') + '</b> · ' + nl2br(x.review_note) + '</div>' : '<div class="tiny muted" style="margin-top:4px">' + tr('남긴 메모 없음', 'No note') + '</div>'}</div>`).join('') + '</div>';
+      <div class="muted">${esc(nameOf(x.reviewer_id))} · ${dateTime(x.reviewed_at)}${x.edited_at ? tr(' · ' + dateTime(x.edited_at) + ' 고침', ' · edited ' + dateTime(x.edited_at)) : ''}</div>
+      ${RVE.id === x.id ? `<div class="stack" style="margin-top:8px;gap:8px">
+          <textarea id="rve-note" rows="3" maxlength="4000">${esc(RVE.note)}</textarea>
+          <div class="sel">${Object.keys(L.escalation).map(k => `<button class="chip" data-act="rve-level" data-v="${k}" aria-pressed="${RVE.level === k}">${LX('escalation', k)}</button>`).join('')}</div>
+          <div class="row" style="gap:8px"><button class="btn sm" data-act="rve-save" ${RVE.busy ? 'disabled' : ''}>${tr('고친 내용 저장', 'Save')}</button><button class="btn quiet sm" data-act="rve-cancel">${tr('취소', 'Cancel')}</button></div></div>`
+        : (x.review_note ? '<div style="margin-top:4px"><b>' + tr('메모', 'Note') + '</b> · ' + nl2br(x.review_note) + '</div>' : '<div class="tiny muted" style="margin-top:4px">' + tr('남긴 메모 없음', 'No note') + '</div>')
+          + (S.me && x.reviewer_id === S.me.id ? `<div style="margin-top:6px"><button class="link" data-act="rve-open" data-id="${x.id}">${tr('메모·상위 보고 상태 고치기', 'Edit note & escalation')}</button></div>` : '')}</div>`).join('') + '</div>';
+    RVE.list = reviews;
   }
   if (revisions.length) {
     h += '<h2>' + tr('수정 요청 기록', 'Revision requests') + '</h2><div class="stack">' + revisions.map(x => `<div class="card small"><b>${tr(x.submission_no + '번째 제출에 대한 요청', 'On submission #' + x.submission_no)}</b> ${x.resolved_at ? '<span class="pill ok">' + tr('다시 제출됨', 'Resubmitted') + '</span>' : '<span class="pill warn">' + tr('수정 대기', 'Pending') + '</span>'}
@@ -1080,6 +1087,15 @@ async function viewReportDetail(app, v) {
   app.innerHTML = h;
 }
 const DETAIL = { id: null, note: '', level: 'normal', revOpen: false, reason: '', busy: false, reopen: null };
+/* 확인 메모 고치기 (직접 확인한 분파셀리더만) */
+const RVE = { id: null, note: '', level: 'normal', busy: false, list: [] };
+document.addEventListener('input', (e) => { if (e.target.id === 'rve-note') RVE.note = e.target.value; });
+async function reviewEditSave() {
+  RVE.busy = true;
+  try { await rpc('review_update', { p_review: RVE.id, p_note: RVE.note, p_level: RVE.level }); RVE.id = null; toast(tr('고쳤습니다.', 'Saved.')); }
+  catch (e) { toast(errText(e), 5000); }
+  finally { RVE.busy = false; render(); }
+}
 /* 담임 목사님·사모님 코멘트 (보고서 / 목사님께 드리는 말씀) */
 const CMT = { id: null, draft: { report: '', pastor_msg: '' }, busy: false, del: null };
 function commentBlock(cmts, target, rep) {
@@ -2090,6 +2106,10 @@ document.addEventListener('click', async (e) => {
     case 'db-campus': DASH.campus = d.v || ''; return render();
     case 'rv-level': DETAIL.level = d.v; document.querySelectorAll('[data-act=rv-level]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === d.v))); return;
     case 'rv-ok': return reviewOk();
+    case 'rve-open': { const x = RVE.list.find(r => r.id === d.id); if (!x) return; Object.assign(RVE, { id: x.id, note: x.review_note || '', level: x.escalation_level }); return render(); }
+    case 'rve-level': { const t = $('#rve-note'); if (t) RVE.note = t.value; RVE.level = d.v; return render(); }
+    case 'rve-cancel': RVE.id = null; return render();
+    case 'rve-save': { const t = $('#rve-note'); if (t) RVE.note = t.value; return reviewEditSave(); }
     case 'rv-revopen': DETAIL.revOpen = true; return render();
     case 'rep-reopen-ask': DETAIL.reopen = d.id; return render();
     case 'rep-reopen-cancel': DETAIL.reopen = null; return render();
