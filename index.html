@@ -1220,7 +1220,7 @@ function ownCellItem(r, week) {
   const hint = submitted ? '눌러서 보고서 보기' : r.report_id ? '눌러서 이어서 쓰기' : '눌러서 보고서 쓰기';
   return `<button class="listitem" ${act}>
     <span class="top"><b>${esc(r.cell_name)}</b><span class="pill ${st.c}">${st.t}</span></span>
-    <span class="small muted">${r.review_mode === 'senior_direct' ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님 확인' : '담당: ' + esc(r.responsible_leadership_name || '배정 전')} · ${hint}</span>
+    <span class="small muted">${r.campus === '부산' ? '부산 캠퍼스 · 교역자 공동' : r.review_mode === 'senior_direct' ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님 확인' : '담당: ' + esc(r.responsible_leadership_name || '배정 전')} · ${hint}</span>
   </button>`;
 }
 
@@ -1237,7 +1237,8 @@ async function viewLeadershipHome(app, v) {
   ]);
   const today = S.ctx.today;
   const current = new Set(asg.filter(a => a.start_date <= today && (!a.end_date || a.end_date >= today)).map(a => a.cell_id));
-  const mine = rows.filter(r => !r.i_am_leader && r.review_mode === 'leadership' && (current.has(r.cell_id) || r.responsible_leadership_id === S.me.id || r.i_can_review));
+  const busan = rows.filter(r => r.campus === '부산' && !r.i_am_leader).sort((a, b) => a.cell_name.localeCompare(b.cell_name, 'ko'));
+  const mine = rows.filter(r => r.campus !== '부산' && !r.i_am_leader && r.review_mode === 'leadership' && (current.has(r.cell_id) || r.responsible_leadership_id === S.me.id || r.i_can_review));
   const own = rows.filter(r => r.i_am_leader).sort((a, b) => a.cell_name.localeCompare(b.cell_name, 'ko'));
   const submitted = mine.filter(r => r.status === 'submitted');
   const need = mine.filter(r => r.i_can_review);
@@ -1267,6 +1268,13 @@ async function viewLeadershipHome(app, v) {
   h += '<h2>담당 셀</h2>' + (mine.length ? '<div class="stack">' + mine.map(r => cellItem(r)).join('') + '</div>' : '<p class="empty">이 주에 담당한 셀이 없습니다.</p>');
   const manage = mine.filter(r => current.has(r.cell_id));
   if (manage.length) h += '<h3 style="margin:20px 0 8px">셀원 관리</h3><div class="chips">' + manage.map(r => `<button class="chip" data-act="open-members" data-cell="${r.cell_id}" data-name="${esc(r.cell_name)}">${esc(r.cell_name)}</button>`).join('') + '</div>';
+  if (busan.length) {
+    const bNeed = busan.filter(r => r.i_can_review), bSub = busan.filter(r => r.status === 'submitted');
+    h += `<h2>부산 캠퍼스 <span class="tiny muted" style="font-weight:400">교역자 모두가 함께 맡습니다</span></h2>
+      <p class="sub" style="margin-top:0">제출 ${bSub.length} / ${busan.length}${bNeed.length ? ' · <b style="color:var(--warn)">확인 필요 ' + bNeed.length + '</b>' : ''} · 먼저 확인하신 분 이름으로 기록됩니다.</p>`;
+    h += '<div class="stack">' + busan.sort((a, b) => order(a) - order(b) || a.cell_name.localeCompare(b.cell_name, 'ko')).map(r => cellItem(r)).join('') + '</div>';
+    h += '<div class="chips" style="margin-top:10px">' + busan.map(r => `<button class="chip" data-act="open-members" data-cell="${r.cell_id}" data-name="${esc(r.cell_name)}">${esc(r.cell_name.replace(/^부산 /, ''))} 셀원 관리</button>`).join('') + '</div>';
+  }
   if (own.length) {
     h += '<h2>내 셀</h2><p class="sub">직접 인도하는 셀입니다. 확인은 ' + (own.some(r => r.review_mode === 'senior_direct') ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님' : '담당 분파셀리더') + '께서 하십니다.</p>';
     h += '<div class="stack">' + own.map(r => ownCellItem(r, week)).join('') + '</div>';
@@ -1282,6 +1290,7 @@ async function viewLeadershipHome(app, v) {
    ===================================================================== */
 const DASH = { sort: 'unreviewed', filter: 'all', campus: '' };
 function groupKey(r) {
+  if (r.campus === '부산') return { key: 'busan', name: tr('부산 캠퍼스 (교역자 공동)', 'Busan campus (all staff)'), mode: 'leadership' };
   if (r.review_mode === 'none') return { key: 'none', name: tr('검토 없음 셀', 'Cells without review'), mode: 'none' };
   if (r.review_mode === 'senior_direct') return { key: 'senior', name: tr('스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인', 'Reviewed by Pastor Scott Brenner & Mrs. Sunghee Brenner'), mode: 'senior' };
   return { key: r.responsible_leadership_id || 'unassigned', name: r.responsible_leadership_name ? r.responsible_leadership_name : tr('담당 분파셀리더 없음', 'No Leadership assigned'), mode: 'leadership' };
@@ -1977,7 +1986,7 @@ async function viewAdminHome(app) {
   // 3) 셀 명단 (담당별)
   const groups = new Map();
   for (const c of C.values()) {
-    const key = c.review_mode === 'leadership' ? (c.resp ? c.resp.name : tr('담당 분파셀리더 없음', 'No Leadership assigned')) : c.review_mode === 'senior_direct' ? tr('스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인', 'Reviewed by Pastor Scott Brenner & Mrs. Sunghee Brenner') : tr('검토 없음', 'No review');
+    const key = c.campus === '부산' ? tr('부산 캠퍼스 (교역자 공동)', 'Busan campus (all staff)') : c.review_mode === 'leadership' ? (c.resp ? c.resp.name : tr('담당 분파셀리더 없음', 'No Leadership assigned')) : c.review_mode === 'senior_direct' ? tr('스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인', 'Reviewed by Pastor Scott Brenner & Mrs. Sunghee Brenner') : tr('검토 없음', 'No review');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(c);
   }
