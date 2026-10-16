@@ -15,7 +15,7 @@ module.exports = async (req, res) => {
     const m = rows[0];
     let en = '';
     try {
-      const key = (process.env.ANTHROPIC_API_KEY || '').trim();
+      const key = (process.env.OPENAI_API_KEY || '').trim();
       if (key) en = (await translate(key, { msg: m.content })).msg || '';
     } catch (_) { en = ''; }
     await serviceRpc('pastor_msg_mark_sent', { p_report: body.report, p_content: m.content, p_en: en });

@@ -1,7 +1,15 @@
 {
   "name": "cell-care",
   "private": true,
+  "scripts": { "test": "node --test test/translation.test.js test/email.test.js test/database.test.js test/cron.test.js", "preview:email": "node scripts/preview-email.js" },
   "description": "TLC 셀 케어 — 화면(index.html)과 알림 보내기(api/)",
-  "engines": { "node": ">=18" },
-  "dependencies": { "web-push": "3.6.7" }
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "web-push": "3.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10"
+  }
 }
