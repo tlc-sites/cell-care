@@ -1049,7 +1049,8 @@ async function viewReportDetail(app, v) {
 
   if (row.i_can_review || row.i_can_request_revision) {
     const R = DETAIL.id === rep.id ? DETAIL : (Object.assign(DETAIL, { id: rep.id, note: '', level: 'normal', revOpen: false, reason: '', busy: false }));
-    h += '<h2>' + tr('확인', 'Review') + '</h2><div class="card stack">';
+    h += '<h2>' + (row.i_can_review ? tr('보고서 확인하기', 'Review this report') : tr('수정 요청', 'Request a revision')) + '</h2><div class="card stack">';
+    if (!row.i_can_review && rep.review_status === 'reviewed') h += '<p class="small muted" style="margin:0">' + tr('이미 확인한 보고서입니다. 고칠 부분이 있으면 셀리더에게 수정을 요청할 수 있습니다.', 'This report has already been reviewed. You can still ask the cell leader to revise it.') + '</p>';
     if (row.i_can_review) h += `
       <label class="field">${tr('확인 메모 (목사님·사모님께 전할 내용)', 'Review note (for the senior pastor)')}
         <span class="tiny muted" style="font-weight:400;display:block;margin-top:2px">${tr('보고서를 확인하며 남기는 기록입니다. 담임 목사님·사모님과 담당 분파셀리더가 보고서의 「확인 기록」에서 보시고, 셀리더에게는 보이지 않습니다.', 'Kept with this review. Seen by Pastor Scott Brenner & Mrs. Sunghee Brenner and Leadership in “Review history” — not by the cell leader.')}</span>
@@ -1069,8 +1070,8 @@ async function viewReportDetail(app, v) {
   }
 
   if (reviews.length) {
-    h += '<h2>' + tr('확인 기록', 'Review history') + '</h2><div class="stack">' + reviews.map(x => `<div class="card small"><div class="row"><b>${tr(x.submission_no + '번째 제출', 'Submission #' + x.submission_no)}</b><span class="pill ${x.escalation_level === 'normal' ? '' : 'warn'}">${LX('escalation', x.escalation_level)}</span>${x.submission_no !== rep.submission_no ? '<span class="pill">' + tr('이전 제출', 'Earlier') + '</span>' : ''}</div>
-      <div class="muted">${esc(nameOf(x.reviewer_id))} · ${dateTime(x.reviewed_at)}</div>${x.review_note ? '<div style="margin-top:4px">' + nl2br(x.review_note) + '</div>' : ''}</div>`).join('') + '</div>';
+    h += '<h2>' + tr('분파셀리더가 확인한 내용', 'Leadership review') + '</h2><p class="tiny muted" style="margin:-4px 0 8px">' + tr('분파셀리더가 이 보고서를 확인하며 남긴 메모와 상위 보고 상태입니다. 담임 목사님·사모님과 분파셀리더만 보고, 셀리더에게는 보이지 않습니다.', 'The note and escalation level Leadership left when reviewing this report. Not visible to the cell leader.') + '</p><div class="stack">' + reviews.map(x => `<div class="card small"><div class="row"><b>${tr(x.submission_no + '번째 제출 확인', 'Submission #' + x.submission_no + ' reviewed')}</b><span class="pill ${x.escalation_level === 'normal' ? '' : 'warn'}">${tr('상위 보고: ', 'Escalation: ')}${LX('escalation', x.escalation_level)}</span>${x.submission_no !== rep.submission_no ? '<span class="pill">' + tr('이전 제출', 'Earlier') + '</span>' : ''}</div>
+      <div class="muted">${esc(nameOf(x.reviewer_id))} · ${dateTime(x.reviewed_at)}</div>${x.review_note ? '<div style="margin-top:4px"><b>' + tr('메모', 'Note') + '</b> · ' + nl2br(x.review_note) + '</div>' : '<div class="tiny muted" style="margin-top:4px">' + tr('남긴 메모 없음', 'No note') + '</div>'}</div>`).join('') + '</div>';
   }
   if (revisions.length) {
     h += '<h2>' + tr('수정 요청 기록', 'Revision requests') + '</h2><div class="stack">' + revisions.map(x => `<div class="card small"><b>${tr(x.submission_no + '번째 제출에 대한 요청', 'On submission #' + x.submission_no)}</b> ${x.resolved_at ? '<span class="pill ok">' + tr('다시 제출됨', 'Resubmitted') + '</span>' : '<span class="pill warn">' + tr('수정 대기', 'Pending') + '</span>'}
