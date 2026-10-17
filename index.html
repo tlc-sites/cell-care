@@ -1905,7 +1905,8 @@ async function memAct(fn, args, okMsg) {
 /* =====================================================================
    관리 — 등록 승인, 등록 현황, 셀 명단 (보고서·목양 기록은 보이지 않음)
    ===================================================================== */
-const ADMIN = { open: 'requests', pick: {} };
+const ADMIN = { open: 'requests', pick: {}, mail: null, busy: false };
+const normName = (t) => String(t || '').toLowerCase().replace(/\([^)]*\)|\s/g, '').replace(/(목사님|전도사님|간사님|사모님|셀리더님|집사님|권사님|장로님|성도님|목사|전도사|간사|사모|셀리더|집사|권사|장로|성도|님)$/, '');
 async function loadAdminData() {
   const today = S.ctx.today;
   const cur = (x) => x.start_date <= today && (!x.end_date || x.end_date >= today);
@@ -1961,10 +1962,15 @@ async function viewAdminHome(app) {
     const m = r.matched_profile_id && P.get(r.matched_profile_id);
     const ok = m && !isRegistered(m);
     const sel = ADMIN.pick[r.id] || (ok ? m.id : '');
+    const same = ok ? [] : people.filter(p => isRegistered(p) && normName(p.name) === normName(r.name));
     return `<div class="card stack">
       <div class="row"><b style="font-size:1.1em">${esc(r.name)}</b><span class="spacer"></span><span class="tiny muted">${new Date(r.created_at).toLocaleString(EN() ? 'en-US' : 'ko-KR', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span></div>
       <div class="small">${esc(r.email)}</div>
       ${ok ? `<div class="banner small"><b>${tr('명단에서 찾았습니다: ', 'Found on the list: ')}${esc(m.name)}</b>${esc(personSummary(m))}</div>`
+           : same.length ? same.map(p => `<div class="banner warn small stack"><b>${tr('같은 이름으로 이미 등록된 분이 있습니다: ', 'Already registered under this name: ')}${esc(p.name)}</b>
+                <span>${tr('지금 등록된 이메일: ', 'Current email: ')}${esc(p.email)}</span>
+                <span>${tr('처음에 이메일을 잘못 적으셨다면, 아래 버튼으로 새 이메일로 바꿔 주세요. 예전 이메일로는 더 이상 로그인되지 않습니다.', 'If the first email was wrong, switch to the new one below. The old email will no longer work.')}</span>
+                <button class="btn sm" data-act="ad-mail-swap" data-id="${p.id}" data-email="${esc(r.email)}" ${ADMIN.busy ? 'disabled' : ''}>${tr('이 이메일로 바꾸기', 'Use this email instead')}</button></div>`).join('')
            : `<div class="banner warn small"><b>${tr('명단에서 같은 이름을 찾지 못했습니다', 'No matching name on the list')}</b>${tr('아래에서 이 분이 누구인지 골라 주세요. 모르는 분이면 거절해 주세요.', 'Please choose who this is below. If you don’t know them, decline.')}</div>`}
       <label class="field small">${tr('이 신청을 연결할 사람', 'Link this request to')}
         <select data-adpick="${r.id}">
@@ -1980,7 +1986,14 @@ async function viewAdminHome(app) {
 
   // 2) 등록 현황
   const line = (p) => `<div class="member"><div class="row"><b>${esc(p.name)}</b><span class="spacer"></span>${isRegistered(p) ? `<span class="pill ok">${p.auth_user_id ? tr('로그인함', 'Signed in') : tr('승인됨', 'Approved')}</span>` : '<span class="pill">' + tr('아직', 'Not yet') + '</span>'}</div>
-    <div class="tiny muted">${esc(personSummary(p))}${isRegistered(p) ? ' · ' + esc(p.email) : ''}</div></div>`;
+    <div class="tiny muted">${esc(personSummary(p))}${isRegistered(p) ? ' · ' + esc(p.email) : ''}</div>
+    ${!isRegistered(p) || p.id === S.me?.id ? '' : ADMIN.mail?.id === p.id
+      ? `<div class="stack" style="margin-top:8px"><label class="field small">${tr('바른 이메일', 'Correct email')}
+           <input type="email" inputmode="email" autocomplete="off" data-admail value="${esc(ADMIN.mail.value)}"></label>
+         <p class="tiny muted" style="margin:0">${tr('바꾸면 예전 이메일로는 더 이상 로그인되지 않고, 새 이메일로 로그인하시면 됩니다.', 'After the change, the old email stops working and they sign in with the new one.')}</p>
+         <div class="row" style="gap:8px"><button class="btn sm" data-act="ad-mail-save" data-id="${p.id}" ${ADMIN.busy ? 'disabled' : ''}>${tr('저장', 'Save')}</button>
+           <button class="btn sm ghost" data-act="ad-mail-cancel">${tr('취소', 'Cancel')}</button></div></div>`
+      : `<button class="link" data-act="ad-mail-open" data-id="${p.id}" data-email="${esc(p.email)}">${tr('이메일 고치기', 'Fix email')}</button>`}</div>`;
   h += sec('people', tr('등록 현황', 'Registration'), `${done.length} / ${people.length}`,
     `<div class="card">${waiting.length ? '<h3 style="margin-top:0">' + tr('아직 등록하지 않은 분 ' + waiting.length + '명', 'Not registered yet (' + waiting.length + ')') + '</h3>' + waiting.map(line).join('') : '<p style="margin:0">' + tr('모든 분이 등록을 마치셨습니다.', 'Everyone has registered.') + '</p>'}</div>` +
     (done.length ? `<div class="card"><h3 style="margin-top:0">${tr('등록을 마친 분 ' + done.length + '명', 'Registered (' + done.length + ')')}</h3>${done.map(line).join('')}</div>` : ''));
@@ -2016,6 +2029,18 @@ document.addEventListener('change', (e) => {
   ADMIN.pick[el.dataset.adpick] = el.value;
   const btn = document.querySelector(`[data-act=ad-approve][data-id="${el.dataset.adpick}"]`); if (btn) btn.disabled = !el.value;
 });
+document.addEventListener('input', (e) => { if (e.target.matches('[data-admail]') && ADMIN.mail) ADMIN.mail.value = e.target.value; });
+async function adminChangeEmail(id, email, name) {
+  email = String(email || '').trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast(tr('이메일 주소를 다시 확인해 주세요.', 'Please check the email address.'));
+  ADMIN.busy = true;
+  try {
+    await rpc('admin_change_email', { p_profile: id, p_email: email });
+    ADMIN.mail = null;
+    toast(tr('이메일을 바꿨습니다. 이제 ' + email + ' 로 로그인하실 수 있습니다.', 'Email updated. They can now sign in with ' + email + '.'), 4000);
+  } catch (e) { toast(errText(e), 4500); }
+  finally { ADMIN.busy = false; render(); }
+}
 async function adminDecide(id, approve) {
   try {
     if (approve) {
@@ -2114,6 +2139,10 @@ document.addEventListener('click', async (e) => {
     case 'push-off': return pushOff();
     case 'push-test': return pushTest();
     case 'ad-approve': return adminDecide(d.id, true);
+    case 'ad-mail-open': ADMIN.mail = { id: d.id, value: d.email || '' }; return render();
+    case 'ad-mail-cancel': ADMIN.mail = null; return render();
+    case 'ad-mail-save': return adminChangeEmail(d.id, ADMIN.mail?.value);
+    case 'ad-mail-swap': return adminChangeEmail(d.id, d.email);
     case 'ad-reject': return adminDecide(d.id, false);
     case 'ad-section': ADMIN.open = ADMIN.open === d.v ? '' : d.v; return render();
     case 'start-report': return startReport(d.cell, d.week);
