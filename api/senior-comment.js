@@ -9,7 +9,9 @@ Rules:
 - Keep people's names exactly as written. Church terms: cell group = 셀, cell leader = 셀리더, prayer = 기도, grace = 은혜.
 - Translate faithfully; do not add, soften or summarize. Keep line breaks.
 - Reply with JSON only: an object mapping each given key to its Korean translation.`;
+const messageJob = require('./_message');
 module.exports = async (req, res) => {
+  if ((req.query && req.query.job) === 'message') return messageJob(req, res);
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
     const user = await authUser(req);

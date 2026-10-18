@@ -1,3 +1,4 @@
+// (api/senior-comment.js?job=message 로 불림 — Vercel 무료 요금제 함수 12개 제한 때문에 합침)
 // 메시지를 보낸 뒤: (담임 목사님이 들어 있는 대화면) 번역해 두고, 받는 분들께 알림
 //  POST { post: <uuid> }  — 보낸 본인만 (10분 안)
 const { serviceRpc, authUser, sendAll } = require('./_lib');
