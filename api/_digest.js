@@ -159,8 +159,10 @@ module.exports = async (req, res) => {
     if ((req.headers.authorization || '') !== 'Bearer ' + env('CRON_SECRET')) return res.status(401).json({ error: 'unauthorized' });
     const t = seoulToday();
     if (t.dow !== 5) return res.status(200).json({ skipped: '금요일에만 보냅니다', today: t.iso });
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return res.status(200).json({ skipped: 'mail not configured' });
     const { D, S } = await build(t.iso);
+    // 구글 시트용으로 요약을 저장 (메일 연결 전에도)
+    if (S) await serviceRpc('digest_save', { p_week: t.iso, p_summary: S }).catch(() => {});
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return res.status(200).json({ saved: !!S, skipped: 'mail not configured' });
     const results = [];
     const en = buildHtml(D, S, 'en'), ko = buildHtml(D, S, 'ko');
     const enTo = [...new Set([...(D.recipients || []).filter(r => r.lang === 'en').map(r => r.email), ...(process.env.DIGEST_EN_TO || '').split(',')].map(s => String(s || '').trim().toLowerCase()).filter(Boolean))];

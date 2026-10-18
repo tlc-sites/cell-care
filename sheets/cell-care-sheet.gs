@@ -1,8 +1,9 @@
 /**
  * 셀 케어 → 구글 시트 자동 정리 (Google Apps Script)
  *
- * 하는 일: 매주 금요일 저녁, 이번 주와 지난주의
- *   ① 셀보고서 현황  ② 출석  ③ 셀 케어  ④ 기도제목
+ * 하는 일: 매주 토요일 새벽(금요일 밤 주간 요약 메일 다음), 이번 주와 지난주의
+ *   ① 주간 요약  ② 셀별 중요 내용  ③ 미제출 누적
+ *   ④ 셀보고서 현황  ⑤ 출석  ⑥ 셀 케어  ⑦ 기도제목
  * 을 각 탭에 정리합니다. 같은 주차는 지우고 다시 써서, 고친 내용도 최신으로 맞춰집니다.
  *
  * 처음 한 번만:
@@ -14,24 +15,27 @@ const APP_URL = 'https://tlc-cell-care.vercel.app/api/export-week';
 const FIRST_WEEK = '2026-09-28';   // 처음 설정할 때 이 주부터 지금까지 한 번에 채움
 
 const TABS = {
+  summary:    { name: '주간 요약',     wrap: true, src: ['digest', 'summary'], cols: ['주차', '셀보고서 제출', '셀보고서 미제출', '교역자 보고', '교역자 보고 미제출', '이번 주 중요 내용'] },
+  cells:      { name: '셀별 중요 내용', wrap: true, src: ['digest', 'cells'],   cols: ['주차', '셀', '중요 내용'] },
+  missing:    { name: '미제출 누적',    src: ['digest', 'missing'], cols: ['주차', '구분', '셀', '이름', '담당', '안 낸 주', '누적 횟수'] },
   reports:    { name: '셀보고서 현황', cols: ['주차', '캠퍼스', '분파리더', '셀', '셀리더', '상태', '제출 시각', '마감 후', '확인', '확인한 분', '모임', '모임 날짜', '못한 이유', '참석', '결석', '은혜와 나눔', 'Leadership에게'] },
   attendance: { name: '출석',         cols: ['주차', '분파리더', '셀', '이름', '구분', '출석', '결석 사유'] },
-  care:       { name: '셀 케어',      cols: ['주차', '분파리더', '셀', '이름', '이슈 구분', '내용', 'Leadership 확인 필요', '관계 상대', '관계'] },
+  care:       { name: '셀 케어',      cols: ['주차', '분파리더', '셀', '이름', '이슈 구분', '내용', 'Leadership 확인 필요', '관계 상대', '관계', '개인 기도제목'] },
   prayers:    { name: '기도제목',     cols: ['주차', '분파리더', '셀', '이름', '구분', '기도제목', '이번 주 소식'] }
 };
 
-/** 처음 한 번 실행: 매주 금요일 저녁 자동 실행 등록 + 9/28 주부터 지금까지 채우기 */
+/** 처음 한 번 실행 (코드를 바꾼 뒤에도 한 번 더): 매주 토요일 새벽 자동 실행 등록 + 9/28 주부터 지금까지 채우기 */
 function 처음설정() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === '매주정리') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('매주정리').timeBased().onWeekDay(ScriptApp.WeekDay.FRIDAY).atHour(19).everyWeeks(1).create();
+  ScriptApp.newTrigger('매주정리').timeBased().onWeekDay(ScriptApp.WeekDay.SATURDAY).atHour(1).everyWeeks(1).create();
   var w = FIRST_WEEK, now = mondayOf_(new Date());
   while (w <= now) { syncWeek_(w); w = addDays_(w, 7); }
-  SpreadsheetApp.getActive().toast('설정을 마쳤습니다. 매주 금요일 저녁 7~8시에 자동으로 정리됩니다.', '셀 케어', 8);
+  SpreadsheetApp.getActive().toast('설정을 마쳤습니다. 매주 토요일 새벽 1~2시에 자동으로 정리됩니다.', '셀 케어', 8);
 }
 
-/** 매주 금요일 저녁 자동 실행 (지금 바로 정리하고 싶을 때 직접 실행해도 됩니다) */
+/** 매주 토요일 새벽 자동 실행 (지금 바로 정리하고 싶을 때 직접 실행해도 됩니다) */
 function 매주정리() {
   var now = mondayOf_(new Date());
   syncWeek_(addDays_(now, -7));   // 지난주 (토요일 모임 셀은 이번 금요일이 마감)
@@ -44,7 +48,10 @@ function syncWeek_(week) {
   var res = UrlFetchApp.fetch(APP_URL + '?week=' + week, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('셀 케어에서 받지 못했습니다 (' + res.getResponseCode() + '): ' + res.getContentText().slice(0, 200));
   var data = JSON.parse(res.getContentText());
-  Object.keys(TABS).forEach(function (key) { writeTab_(TABS[key], week, data[key] || []); });
+  Object.keys(TABS).forEach(function (key) {
+    var t = TABS[key], rows = t.src ? ((data[t.src[0]] || {})[t.src[1]] || []) : (data[key] || []);
+    writeTab_(t, week, rows);
+  });
   SpreadsheetApp.getActive().toast(week + ' 주 정리 완료', '셀 케어', 3);
 }
 
@@ -67,6 +74,7 @@ function writeTab_(tab, week, rows) {
   });
   if (last > 1) sh.getRange(2, 1, last - 1, n).clearContent();
   if (all.length) sh.getRange(2, 1, all.length, n).setNumberFormat('@').setValues(all);
+  if (tab.wrap) { sh.getRange(1, 1, Math.max(all.length, 1) + 1, n).setWrap(true).setVerticalAlignment('top'); for (var i = 2; i <= n; i++) sh.setColumnWidth(i, 280); }
 }
 
 function mondayOf_(d) {
