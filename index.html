@@ -2080,7 +2080,7 @@ async function viewDigest(app) {
   setTop(tr('주간 요약 메일', 'Weekly email'), true); renderTabs(false);
   const lang = DIG.lang || (EN() ? 'en' : 'ko');
   let h = `<h1>${tr('주간 요약 메일 미리 보기', 'Weekly email preview')}</h1>
-    <p class="sub">${tr('매주 금요일 밤 11:59에 담임 목사님(영어)과 김도현 간사(한국어)께 보내는 메일입니다. 지금까지 들어온 보고서로 만든 모습입니다.', 'Sent every Friday at 11:59 PM. This preview uses the reports received so far.')}</p>
+    <p class="sub">${tr('매주 금요일 밤 11:59에 담임 목사님(영어)과 사모님(한국어)께 보내는 메일입니다. 지금까지 들어온 보고서로 만든 모습입니다.', 'Sent every Friday at 11:59 PM. This preview uses the reports received so far.')}</p>
     <div class="seg" style="margin:8px 0 12px">${[['ko', '한국어'], ['en', 'English']].map(([k, t]) => `<button data-act="dg-lang" data-v="${k}" aria-pressed="${lang === k}">${t}</button>`).join('')}</div>`;
   const d = DIG.data[lang];
   if (!d) {
