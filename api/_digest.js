@@ -55,7 +55,7 @@ function weekName(iso, lang) {
   const n = Math.ceil(d / 7);
   return lang === 'en' ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1] + ' wk ' + n : m + '월 ' + n + '주';
 }
-const CAMPUS = { ko: { '분당': '분당·판교', '부산': '부산' }, en: { '분당': 'Bundang·Pangyo', '부산': 'Busan' } };
+const CAMPUS = { ko: { '분당': '분당', '부산': '부산' }, en: { '분당': 'Bundang', '부산': 'Busan' } };
 
 function buildHtml(D, S, lang) {
   const T = (ko, en) => lang === 'en' ? en : ko;

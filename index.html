@@ -1760,7 +1760,7 @@ document.addEventListener('input', (e) => { if (e.target.dataset && e.target.dat
 const NOTE = { filter: 'all', list: [], form: null, busy: false, tx: null, txBusy: false, txErr: '', staff: null };
 const noteCat = (k) => LX('care', NOTE_CAT_KEYS.includes(k) ? k : 'other');
 const noteMethod = (k) => (NOTE_METHOD[k] || NOTE_METHOD.other)[EN() ? 1 : 0];
-const campusLabel = (c) => EN() ? ({ '분당': 'Bundang·Pangyo', '부산': 'Busan' }[c] || c) : ({ '분당': '분당·판교' }[c] || c);
+const campusLabel = (c) => EN() ? ({ '분당': 'Bundang', '부산': 'Busan' }[c] || c) : c;
 const canSeeAllNotes = () => hasRole('leadership') || isSenior();
 function NTX(key, ko) {
   const en = NOTE.tx && NOTE.tx[key];
