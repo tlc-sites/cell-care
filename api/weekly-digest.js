@@ -1,6 +1,6 @@
 // 주간 요약 메일 (금요일 밤 11:59, Vercel Cron)
 //  · 셀보고서 미제출 / 교역자 보고 미제출 (누적 포함) + 이번 주 셀보고서 중요 내용 요약
-//  · 받는 분: 담임 목사님(영어) + DIGEST_KO_TO 에 적은 주소(한국어, 쉼표로 여러 개)
+//  · 받는 분: 담임 목사님(영어: 앱에 등록된 이메일 + DIGEST_EN_TO) + DIGEST_KO_TO 에 적은 주소(한국어). 쉼표로 여러 개
 //  · 보내는 메일: GMAIL_USER / GMAIL_APP_PASSWORD (교회 Gmail 앱 비밀번호). 없으면 보내지 않고 건너뜀
 //  · 앱 안 미리보기: POST { preview: 'ko'|'en' } (목사님·사모님·관리자만), 테스트 발송: POST { test: true } (본인에게만)
 const { serviceRpc, authUser, seoulToday, env } = require('./_lib');
@@ -161,7 +161,8 @@ module.exports = async (req, res) => {
     const { D, S } = await build(t.iso);
     const results = [];
     const en = buildHtml(D, S, 'en'), ko = buildHtml(D, S, 'ko');
-    for (const r of D.recipients || []) results.push(await sendMail(r.email, en.subject, en.html).catch(e => ({ error: String(e.message || e) })));
+    const enTo = [...new Set([...(D.recipients || []).map(r => r.email), ...(process.env.DIGEST_EN_TO || '').split(',')].map(s => String(s || '').trim().toLowerCase()).filter(Boolean))];
+    if (enTo.length) results.push(await sendMail(enTo.join(','), en.subject, en.html).catch(e => ({ error: String(e.message || e) })));
     const koTo = (process.env.DIGEST_KO_TO || '').split(',').map(s => s.trim()).filter(Boolean);
     if (koTo.length) results.push(await sendMail(koTo.join(','), ko.subject, ko.html).catch(e => ({ error: String(e.message || e) })));
     res.status(200).json({ today: t.iso, summary: !!S, results });
