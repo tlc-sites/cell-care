@@ -57,6 +57,8 @@ module.exports = async (req, res) => {
 
     // 본인 권한 확인: Senior Pastor · Samonim 만
     const ctx = await asUser(token, 'rpc/get_my_context', {});
+    // 관리자가 다른 분 화면으로 보는 중이면 번역(내용)을 주지 않음
+    if (await asUser(token, 'rpc/admin_view_status', {}).catch(() => null)) return res.status(403).json({ error: 'viewing as another person' });
     const roles = (ctx && ctx.roles) || [];
     if (!roles.includes('senior_pastor') && !roles.includes('samonim')) return res.status(403).json({ error: 'Not allowed' });
 
