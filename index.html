@@ -261,11 +261,12 @@ function errText(e) {
   return m.replace(/^VERSION_CONFLICT:\s*/, '');
 }
 async function rpc(name, args) {
+  if (DEMO.role) return demoRpc(name, args || {});
   const { data, error } = await sb.rpc(name, args || {});
   if (error) throw error;
   return data;
 }
-async function q(promise) { const { data, error } = await promise; if (error) throw error; return data; }
+async function q(promise) { if (DEMO.role) return demoTable(promise); const { data, error } = await promise; if (error) throw error; return data; }
 
 /* =====================================================================
    상태와 이동
@@ -1162,7 +1163,7 @@ function txStatus(map, busy, err, act, id) {
   if (err) return `<div class="banner warn small" style="margin-top:8px">${esc(err)}<div style="margin-top:8px"><button class="btn sm ghost" data-act="${act}" data-id="${id || ''}">Try again</button></div></div>`;
   return '<p class="tiny muted" style="margin:8px 0 0">Translating into English…</p>';
 }
-function autoTx(map, busy, err, fn) { if (EN() && isSenior() && !map && !busy && !err) setTimeout(fn, 0); }
+function autoTx(map, busy, err, fn) { if (!DEMO.role && EN() && isSenior() && !map && !busy && !err) setTimeout(fn, 0); }
 const TRANS = { id: null, map: null, busy: false, err: '' };
 function TX(key, ko) {
   const en = TRANS.map && TRANS.map[key];
@@ -2000,6 +2001,149 @@ async function memAct(fn, args, okMsg) {
 }
 
 /* =====================================================================
+   화면 미리보기 (관리자) — 예시 데이터로 셀리더·교역자·목사님 화면을 둘러봄
+   실제 데이터는 불러오지 않고, 아무것도 저장되지 않습니다.
+   ===================================================================== */
+const DEMO = { role: null, saved: null, week: null, today: null };
+const DEMO_ROLE = { leader: '셀리더', leadership: '분파셀리더(교역자)', senior: '목사님·사모님' };
+function demoErr() { const e = new Error('미리보기 화면이라 저장·제출되지 않습니다.'); e.demo = true; return e; }
+function demoDB() {
+  const W = DEMO.week, LW = addDays(W, -7), at = (d, t) => d + 'T' + (t || '10:00') + ':00+09:00';
+  const ME = { leader: { id: 'demo-u1', name: '홍길동' }, leadership: { id: 'demo-l1', name: '김교역 전도사' }, senior: { id: 'demo-s1', name: '담임 목사님 (예시)' } }[DEMO.role];
+  const cells = [
+    { id: 'demo-c1', name: '샘플 1셀', leader: '홍길동', leader_id: 'demo-u1', resp: '김교역 전도사', resp_id: 'demo-l1', mode: 'leadership', campus: '분당' },
+    { id: 'demo-c2', name: '샘플 2셀', leader: '이성도', leader_id: 'demo-u2', resp: '김교역 전도사', resp_id: 'demo-l1', mode: 'leadership', campus: '분당' },
+    { id: 'demo-c3', name: '샘플 3셀', leader: '박성도', leader_id: 'demo-u3', resp: '김교역 전도사', resp_id: 'demo-l1', mode: 'leadership', campus: '분당' },
+    { id: 'demo-c4', name: '샘플 4셀', leader: '최성도', leader_id: 'demo-u4', resp: '정교역 목사', resp_id: 'demo-l2', mode: 'leadership', campus: '분당' },
+    { id: 'demo-c5', name: '샘플 5셀', leader: '한성도', leader_id: 'demo-u5', resp: null, resp_id: null, mode: 'senior_direct', campus: '분당' },
+    { id: 'demo-b1', name: '부산 샘플 셀', leader: '오성도', leader_id: 'demo-u6', resp: null, resp_id: null, mode: 'leadership', campus: '부산', shared: true }
+  ];
+  const rep = (id, cell, week, status, review, extra) => Object.assign({ id, cell_id: cell, week_start: week, status, review_status: review, review_mode: cells.find(c => c.id === cell).mode,
+    submission_no: status === 'draft' ? 0 : 1, meeting_held: status === 'draft' ? null : true, meeting_date: status === 'draft' ? null : addDays(week, 3), meeting_cancel_reason: null,
+    grace_notes: status === 'draft' ? null : '(예시) 이번 주 말씀을 나누며 서로 위로와 힘을 얻었습니다.', grace_none: false, leader_message: 'none', leader_message_note: null,
+    created_by: 'demo-u1', submitted_by: status === 'draft' ? null : cells.find(c => c.id === cell).leader_id, submitted_at: status === 'draft' ? null : at(addDays(week, 3), '21:30'),
+    first_submitted_at: status === 'draft' ? null : at(addDays(week, 3), '21:30'), reviewed_by: review === 'reviewed' ? 'demo-l1' : null, reviewed_at: review === 'reviewed' ? at(addDays(week, 4), '09:10') : null,
+    version: 1, reviewer_user_id: null }, extra || {});
+  const reports = [
+    rep('demo-r1', 'demo-c1', W, 'draft', 'none'),
+    rep('demo-r1l', 'demo-c1', LW, 'submitted', 'reviewed'),
+    rep('demo-r2', 'demo-c2', W, 'submitted', 'pending', { leader_message: 'contact', leader_message_note: '(예시) 셀원 한 분이 수술을 앞두고 있어 심방을 부탁드립니다.' }),
+    rep('demo-r4', 'demo-c4', W, 'submitted', 'reviewed'),
+    rep('demo-r5', 'demo-c5', W, 'submitted', 'pending'),
+    rep('demo-rb', 'demo-b1', W, 'submitted', 'pending')
+  ];
+  const members = { 'demo-c1': ['김하나', '이두리', '박세나'], 'demo-c2': ['정다운', '최기쁨', '윤소망', '강믿음'], 'demo-c4': ['서은혜', '한사랑'], 'demo-c5': ['문평안', '조온유'], 'demo-b1': ['임충성', '오화평'], 'demo-c3': ['노절제', '배자비'] };
+  const roster = (cell, filled) => (members[cell] || []).map((n, i) => ({ member_id: cell + '-m' + i, name: n, type_in_week: 'member', member_type_now: 'member', attendance: filled ? (i === 1 ? 'absent' : 'present') : null, absence_reason: filled && i === 1 ? '(예시) 출장' : null, listed: true }));
+  const notes = {
+    'demo-r2': [{ id: 'demo-n1', report_id: 'demo-r2', member_id: 'demo-c2-m0', category: 'health', categories: ['health', 'family'], content: '(예시) 다음 주 수술을 앞두고 있어 가족들이 걱정이 많습니다.', prayer: '(예시) 수술이 잘 되고 빨리 회복되도록', leadership_attention_required: true, created_at: at(W) },
+                { id: 'demo-n2', report_id: 'demo-r2', member_id: 'demo-c2-m2', category: 'work_school', categories: ['work_school'], content: '(예시) 새 직장에 잘 적응하고 있다고 감사를 나눴습니다.', prayer: null, leadership_attention_required: false, created_at: at(W) }],
+    'demo-r1l': [{ id: 'demo-n3', report_id: 'demo-r1l', member_id: 'demo-c1-m1', category: 'long_absence', categories: ['long_absence'], content: '(예시) 3주째 모임에 오지 못해 따로 연락드렸습니다.', prayer: null, leadership_attention_required: false, created_at: at(LW) }],
+    'demo-r4': [{ id: 'demo-n4', report_id: 'demo-r4', member_id: 'demo-c4-m0', category: 'faith', categories: ['faith'], content: '(예시) 세례를 준비하고 싶다고 하셨습니다.', prayer: '(예시) 세례 준비 과정을 잘 마치도록', leadership_attention_required: false, created_at: at(W) }]
+  };
+  const reviews = { 'demo-r1l': [{ id: 'demo-v1', report_id: 'demo-r1l', submission_no: 1, reviewer_id: 'demo-l1', review_note: '(예시) 장기결석 셀원 연락 이어가기로 함.', escalation_level: 'normal', reviewed_at: at(addDays(LW, 4)), edited_at: null }],
+                    'demo-r4': [{ id: 'demo-v2', report_id: 'demo-r4', submission_no: 1, reviewer_id: 'demo-l2', review_note: '(예시) 세례 준비 안내를 함께 드릴 예정입니다.', escalation_level: 'pastoral', reviewed_at: at(addDays(W, 4)), edited_at: null }] };
+  const status = (week) => cells.filter(c => DEMO.role !== 'leader' || c.id === 'demo-c1').map(c => {
+    const r = reports.find(x => x.cell_id === c.id && x.week_start === week);
+    const lead = DEMO.role === 'leadership' && (c.resp_id === 'demo-l1' || c.shared);
+    return { cell_id: c.id, cell_name: c.name, campus: c.campus, review_mode: c.mode, responsible_leadership_id: c.resp_id, responsible_leadership_name: c.resp, leader_names: c.leader,
+      report_id: r ? r.id : null, status: r ? r.status : null, review_status: r ? r.review_status : null, submission_no: r ? r.submission_no : null, submitted_at: r ? r.submitted_at : null,
+      reviewed_at: r ? r.reviewed_at : null, reviewed_by_name: r && r.reviewed_by ? '김교역 전도사' : null, is_late: false, is_missing: false,
+      escalation_level: r && r.id === 'demo-r4' ? 'pastoral' : r && r.review_status === 'reviewed' ? 'normal' : null, attention_items: r && r.status === 'submitted' ? (notes[r.id] || []).filter(n => n.leadership_attention_required).length : null,
+      members_present: r && r.status === 'submitted' ? (members[c.id] || []).length - 1 : null, members_absent: r && r.status === 'submitted' ? 1 : null, members_unknown: 0, visitors_present: 0,
+      i_am_leader: DEMO.role === 'leader' && c.id === 'demo-c1', i_can_review: !!(r && r.status === 'submitted' && r.review_status === 'pending' && ((lead) || (DEMO.role === 'senior' && c.mode === 'senior_direct'))),
+      i_can_request_revision: !!(r && r.status === 'submitted' && (lead || (DEMO.role === 'senior' && c.mode === 'senior_direct'))) };
+  });
+  return { W, LW, at, ME, cells, reports, members, roster, notes, reviews, status };
+}
+function demoRpc(name, a) {
+  const D = demoDB(), { W, at, ME } = D;
+  const ctx = { roles: { leader: [], leadership: ['leadership'], senior: ['senior_pastor'] }[DEMO.role], today: DEMO.today, this_week: W, profile: { id: ME.id, name: ME.name, email: 'preview@example.com' },
+    leader_cells: DEMO.role === 'leader' ? [{ cell_id: 'demo-c1', name: '샘플 1셀', review_mode: 'leadership', leadership: '김교역 전도사', leaders: ['홍길동'] }] : [], my_open_reports: [], leadership_cell_count: DEMO.role === 'leadership' ? 3 : 0 };
+  const thread = { id: 'demo-t1', people: [{ id: ME.id, name: ME.name, me: true }, { id: 'demo-x', name: DEMO.role === 'leader' ? '김교역 전도사' : '이성도', me: false }], report_id: DEMO.role === 'leader' ? 'demo-r1l' : null, report_label: DEMO.role === 'leader' ? '샘플 1셀 · ' + D.LW : null,
+    posts: [{ id: 'p1', author: DEMO.role === 'leader' ? ME.name : '이성도', mine: DEMO.role === 'leader', body: '(예시) 보고서에 다 적지 못한 이야기가 있어 따로 말씀드립니다. 셀원 한 분이 요즘 많이 힘들어하세요.', body_tr: null, at: at(W, '20:10') },
+            { id: 'p2', author: DEMO.role === 'leader' ? '김교역 전도사' : ME.name, mine: DEMO.role !== 'leader', body: '(예시) 알려 주셔서 감사합니다. 이번 주에 연락드려 볼게요.', body_tr: null, at: at(W, '21:02') }] };
+  const R = {
+    get_my_context: ctx,
+    my_report_weeks: [], cell_deadline: at(addDays(W, 4), '12:00'), msg_unread: 1,
+    get_week_status: D.status(a.p_week_start || W),
+    start_report: 'demo-r1', save_report: (a.p_version || 1) + 1, pastor_msg_save: null,
+    get_report_roster: D.roster(D.reports.find(r => r.id === a.p_report)?.cell_id, D.reports.find(r => r.id === a.p_report)?.status === 'submitted'),
+    get_recent_visitors: [], get_open_prayers: [], separate_members: [],
+    get_report_people: [{ user_id: 'demo-u1', name: D.cells.find(c => c.id === D.reports.find(r => r.id === a.p_report)?.cell_id)?.leader || '', roles_in_report: ['created', 'submitted'] }, { user_id: 'demo-l1', name: '김교역 전도사', roles_in_report: [] }, { user_id: 'demo-l2', name: '정교역 목사', roles_in_report: [] }],
+    pastor_msg_get: a.p_report === 'demo-r2' ? [{ content: '(예시) 목사님, 이번 주 셀원들을 위해 기도 부탁드립니다.', content_en: null, sent_at: at(addDays(W, 3), '21:30') }] : [],
+    senior_comment_list: a.p_report === 'demo-r4' ? [{ id: 'demo-cm1', target: 'report', author_name: '담임 목사님', content: '(예시) 세례 준비 소식이 정말 반갑습니다. 함께 기도하겠습니다.', content_ko: null, created_at: at(addDays(W, 4), '15:00'), mine: false }] : [],
+    lr_get: null,
+    lr_people: [{ kind: 'leader', id: 'demo-u2', name: '이성도', group_name: '셀리더', ref_category: null, ref_content: null, ref_week: null },
+                { kind: 'member', id: 'demo-c2-m0', name: '정다운', group_name: '샘플 2셀', ref_category: 'health', ref_content: '(예시) 다음 주 수술 예정', ref_week: W },
+                { kind: 'member', id: 'demo-c3-m0', name: '노절제', group_name: '샘플 3셀', ref_category: null, ref_content: null, ref_week: null }],
+    lr_overview: [{ author_id: 'demo-l1', author_name: '김교역 전도사', report_id: 'demo-lr1', status: 'submitted', submitted_at: at(addDays(W, 4), '13:00'), items: 2, people: 9 },
+                  { author_id: 'demo-l2', author_name: '정교역 목사', report_id: null, status: 'none', submitted_at: null, items: 0, people: 4 }],
+    lr_read: { id: 'demo-lr1', week_start: W, summary: '(예시) 이번 주는 수술을 앞둔 셀원과 장기결석 셀원 돌봄에 집중했습니다.', status: 'submitted', submitted_at: at(addDays(W, 4), '13:00'), author_id: 'demo-l1', author_name: '김교역 전도사',
+               items: [{ id: 'i1', kind: 'member', person_id: 'demo-c2-m0', person_name: '정다운', group_name: '샘플 2셀', category: 'health', content: '(예시) 수술 전 통화로 기도해 드렸습니다.' },
+                       { id: 'i2', kind: 'leader', person_id: 'demo-u3', person_name: '박성도', group_name: '셀리더', category: 'update', content: '(예시) 셀 운영 고민을 함께 나눴습니다.' }] },
+    pastor_msgs_week: DEMO.role === 'senior' ? [{ report_id: 'demo-r2', author: '이성도', cell_name: '샘플 2셀', content: '(예시) 목사님, 이번 주 셀원들을 위해 기도 부탁드립니다.', content_en: null, sent_at: at(addDays(W, 3), '21:30') }] : [],
+    pastoral_note_list: [{ id: 'demo-pn1', person_name: '배자비', visit_method: 'phone', category: 'care_needed', campus: '분당', content: '(예시) 최근 가정 일로 마음이 많이 힘드시다고 하셨습니다.', prayer: '(예시) 마음의 평안을 위해', met_on: addDays(W, 1), author_name: '김교역 전도사', needs_pastor: true, acks: [], i_acked: false, mine: DEMO.role === 'leadership', visibility: 'staff', viewer_names: null },
+                         { id: 'demo-pn2', person_name: '서은혜', visit_method: 'in_person', category: 'faith', campus: '분당', content: '(예시) 세례 준비에 대해 이야기 나눴습니다.', prayer: null, met_on: addDays(W, 2), author_name: '정교역 목사', needs_pastor: false, acks: [], i_acked: false, mine: false, visibility: 'staff', viewer_names: null }],
+    note_comments_for: [], pastoral_staff: [],
+    issue_board: [{ source: 'report', item_id: 'demo-n1', on_date: addDays(W, 3), week_start: W, cell_id: 'demo-c2', cell_name: '샘플 2셀', resp_name: '김교역 전도사', person_id: 'demo-c2-m0', person_name: '정다운', category: 'health', content: '(예시) 다음 주 수술 예정\n기도제목: 수술이 잘 되도록', attention: true, related_member_id: null, related_name: null, relation_kind: null, author_name: '이성도', my_area: true },
+                  { source: 'report', item_id: 'demo-n3', on_date: addDays(D.LW, 3), week_start: D.LW, cell_id: 'demo-c1', cell_name: '샘플 1셀', resp_name: '김교역 전도사', person_id: 'demo-c1-m1', person_name: '이두리', category: 'long_absence', content: '(예시) 3주째 결석, 따로 연락함', attention: false, related_member_id: null, related_name: null, relation_kind: null, author_name: '홍길동', my_area: true }],
+    msg_list: [{ id: 'demo-t1', people: thread.people.filter(p => !p.me).map(p => p.name).join(', '), report_id: thread.report_id, report_label: thread.report_label, last_body: thread.posts[1].body, last_body_tr: null, last_author: thread.posts[1].author, last_at: thread.posts[1].at, unread: 1 }],
+    msg_thread: thread,
+    msg_contacts: DEMO.role === 'senior' ? [{ id: 'demo-u1', name: '홍길동', info: '샘플 1셀', kind: 'leader' }, { id: 'demo-u2', name: '이성도', info: '샘플 2셀', kind: 'leader' }, { id: 'demo-l1', name: '김교역 전도사', info: '교역자', kind: 'staff' }]
+      : [{ id: 'demo-s1', name: '담임 목사님', info: '담임 목사님', kind: 'staff' }, { id: 'demo-s2', name: '사모님', info: '사모님', kind: 'staff' }, { id: 'demo-l1', name: '김교역 전도사', info: '교역자', kind: 'staff' }],
+    member_list: (D.members[a.p_cell] || []).map((n, i) => ({ id: a.p_cell + '-m' + i, name: n, state: 'member', left_at: null, meets_separately: false, can_delete: false })),
+    member_move_targets: [], cell_admin_info: null, individual_care_list: []
+  };
+  if (Object.prototype.hasOwnProperty.call(R, name)) return Promise.resolve(JSON.parse(JSON.stringify(R[name])));
+  if (/^(save_push_subscription|delete_push_subscription)$/.test(name)) return Promise.resolve(null);
+  if (/^(save|submit|request|review|reopen|move|add|member_|cell_|lr_save|pastor_msg|pastoral_note_(save|delete|ack)|note_comment_(add|delete)|senior_comment_(add|delete)|msg_(start|post)|individual_care_(add|remove)|admin_)/.test(name)) return Promise.reject(demoErr());
+  return Promise.resolve([]);
+}
+function demoTable(p) {
+  if (p.method && p.method !== 'GET') return Promise.reject(demoErr());
+  const D = demoDB(); const u = p.url; const t = u.pathname.split('/').pop(); const sp = u.searchParams;
+  const eq = (k) => (sp.get(k) || '').replace(/^eq\./, '');
+  const inn = (k) => ((sp.get(k) || '').match(/^in\.\((.*)\)$/) || [, ''])[1].split(',').filter(Boolean);
+  const copy = (x) => JSON.parse(JSON.stringify(x));
+  if (t === 'weekly_reports') {
+    if (eq('id')) return Promise.resolve(copy(D.reports.filter(r => r.id === eq('id'))));
+    const ids = inn('cell_id'); return Promise.resolve(copy(D.reports.filter(r => !ids.length || ids.includes(r.cell_id)).sort((a, b) => b.week_start.localeCompare(a.week_start))));
+  }
+  if (t === 'cells') {
+    if (eq('id')) { const c = D.cells.find(x => x.id === eq('id')); return Promise.resolve(c ? [{ id: c.id, name: c.name, review_mode: c.mode, campus: c.campus }] : []); }
+    return Promise.resolve(D.cells.map(c => ({ id: c.id, name: c.name, created_at: addDays(D.LW, -30) + 'T00:00:00+09:00' })));
+  }
+  if (t === 'care_notes') return Promise.resolve(copy(D.notes[eq('report_id')] || []));
+  if (t === 'leadership_reviews') return Promise.resolve(copy(D.reviews[eq('report_id')] || []));
+  if (t === 'leadership_assignments') return Promise.resolve(DEMO.role === 'leadership' ? ['demo-c1', 'demo-c2', 'demo-c3'].map(c => ({ cell_id: c, start_date: addDays(D.LW, -30), end_date: null })) : []);
+  if (t === 'prayer_requests') return Promise.resolve(eq('report_id') === 'demo-r2' ? [{ id: 'demo-pr1', member_id: 'demo-c2-m0', content: '(예시) 수술이 잘 되고 빨리 회복되도록' }] : []);
+  return Promise.resolve([]);
+}
+function renderDemoBar() {
+  let bar = document.getElementById('demobar');
+  if (!DEMO.role) { if (bar) bar.remove(); return; }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'demobar'; document.body.prepend(bar); }
+  bar.innerHTML = `<div style="background:#2F5D50;color:#fff;padding:10px 16px;position:sticky;top:0;z-index:50">
+    <div style="font-size:15px;margin-bottom:8px">📱 <b>화면 미리보기</b> · 예시 데이터이며 저장되지 않습니다</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${Object.entries(DEMO_ROLE).map(([k, t]) => `<button class="btn sm" data-act="demo" data-v="${k}" style="min-height:40px;${DEMO.role === k ? 'background:#fff;color:#2F5D50' : 'background:transparent;color:#fff;border:1px solid #fff'}">${t}</button>`).join('')}
+    <button class="btn sm" data-act="demo-end" style="min-height:40px;margin-left:auto;background:#fff;color:#2F5D50">끝내기</button></div></div>`;
+}
+async function demoStart(role) {
+  if (!DEMO.role) DEMO.saved = { tab: S.tab };
+  DEMO.week = DEMO.week || S.ctx.this_week; DEMO.today = DEMO.today || S.ctx.today;
+  DEMO.role = role; S.tab = null; S.stack = [];
+  Object.assign(MSG, { contacts: null, sel: [], draft: '', reply: '' });
+  renderDemoBar(); window.scrollTo(0, 0);
+  return loadContext();
+}
+async function demoEnd() {
+  DEMO.role = null; DEMO.week = null; DEMO.today = null; E = null; hideFooter();
+  Object.assign(MSG, { contacts: null, sel: [], draft: '', reply: '' });
+  renderDemoBar(); S.tab = 'admin'; S.stack = [];
+  return loadContext();
+}
+
+/* =====================================================================
    메시지 — 목사님·사모님 → 셀리더, 셀리더 → 교역자·목사님·사모님 (보고서 함께 보내기)
    대화에 들어 있는 분만 읽을 수 있습니다. 담임 목사님이 계신 대화는 자동으로 번역해 둡니다.
    ===================================================================== */
@@ -2087,6 +2231,7 @@ async function viewThread(app, v) {
 const DIG = { lang: null, data: {}, busy: false, err: '' };
 async function viewDigest(app) {
   setTop(tr('주간 요약 메일', 'Weekly email'), true); renderTabs(false);
+  if (DEMO.role) { app.innerHTML = '<p class="empty">화면 미리보기에서는 주간 요약 메일을 볼 수 없습니다.</p>'; return; }
   const lang = DIG.lang || (EN() ? 'en' : 'ko');
   let h = `<h1>${tr('주간 요약 메일 미리 보기', 'Weekly email preview')}</h1>
     <p class="sub">${tr('매주 금요일 밤 11:59에 담임 목사님(영어)과 사모님(한국어)께 보내는 메일입니다. 지금까지 들어온 보고서로 만든 모습입니다.', 'Sent every Friday at 11:59 PM. This preview uses the reports received so far.')}</p>
@@ -2191,7 +2336,9 @@ async function viewAdminHome(app) {
       <span class="top"><b>${title}</b><span class="pill ${id === 'requests' && count ? 'warn' : ''}">${count}</span></span></button>
     ${ADMIN.open === id ? '<div class="stack" style="margin-top:8px">' + body + '</div>' : ''}`;
 
-  let h = `<h1>${tr('관리', 'Admin')}</h1>` + (ov ? overviewBlock(ov, week) : '') + `
+  let h = `<h1>${tr('관리', 'Admin')}</h1>
+    <div class="card stack" style="margin-top:8px"><div><b>📱 ${tr('화면 미리보기', 'Screen preview')}</b><div class="small muted">${tr('셀리더, 교역자, 목사님·사모님 화면이 어떻게 보이는지 예시 데이터로 둘러봅니다. 실제 명단과 내용은 보이지 않고, 아무것도 저장되지 않습니다.', 'Browse each role’s screens with sample data. Nothing is saved.')}</div></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">${Object.entries(DEMO_ROLE).map(([k, t]) => `<button class="btn sm ghost" data-act="demo" data-v="${k}">${t}</button>`).join('')}</div></div>` + (ov ? overviewBlock(ov, week) : '') + `
     <h2>${tr('등록·명단', 'Registration & cells')}</h2>
     <div class="stats" style="margin-top:12px">
       <div class="stat ${reqs.length ? 'warn' : ''}"><div class="v">${reqs.length}</div><div class="k">${tr('승인 대기', 'Pending')}</div></div>
@@ -2368,7 +2515,7 @@ document.addEventListener('click', async (e) => {
     case 'back': if (E) { await save(); E = null; hideFooter(); } return back();
     case 'reload': return render();
     case 'tab': if (E) { await save(); E = null; hideFooter(); } return switchTab(d.id);
-    case 'logout': PUSH.synced = false; if (E) { await save(); E = null; hideFooter(); } await sb.auth.signOut(); Object.assign(LOGIN, { sent: false, msg: '', busy: false }); S.ctx = null; S.tab = null; return viewLogin();
+    case 'logout': if (DEMO.role) return demoEnd(); PUSH.synced = false; if (E) { await save(); E = null; hideFooter(); } await sb.auth.signOut(); Object.assign(LOGIN, { sent: false, msg: '', busy: false }); S.ctx = null; S.tab = null; return viewLogin();
     case 'send-login': return sendLogin();
     case 'verify-code': return verifyCode();
     case 'login-reset': Object.assign(LOGIN, { sent: false, msg: '' }); return viewLogin();
@@ -2479,6 +2626,8 @@ document.addEventListener('click', async (e) => {
     case 'open-group': return go({ name: 'group', key: d.key, week: d.week });
     case 'lh-week': return go({ name: 'leadershipHome', week: d.week }, { replace: true });
     case 'ad-week': ADMIN.week = d.week; return render();
+    case 'demo': return demoStart(d.v);
+    case 'demo-end': return demoEnd();
     case 'db-week': return go({ name: 'dashboard', week: d.week }, { replace: true });
     case 'db-filter': DASH.filter = d.v; return render();
     case 'db-campus': DASH.campus = d.v || ''; return render();
