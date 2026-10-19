@@ -439,6 +439,9 @@ async function sendLogin() {
   LOGIN.busy = false;
   if (error) {
     const m = error.message || ''; const code = error.code || '';
+    const report = (kind) => { sb.rpc('report_login_problem', { p_kind: kind, p_detail: m }).then(() => fetch('api/notify-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alert: true }) })).catch(() => {}); };
+    if (/sending|smtp|email.*(fail|error)/i.test(m)) report('mail');
+    else if (/rate limit|email rate/i.test(m)) report('rate');
     if (/sending|smtp|email.*(fail|error)/i.test(m)) LOGIN.msg = '지금 로그인 메일을 보내는 데 문제가 있습니다. 승인과는 상관없는 일시적인 문제이니, 김도현 간사에게 알려 주시고 잠시 후 다시 시도해 주세요.';
     else if (code === 'unexpected_failure' || /Database error|NOT_APPROVED/i.test(m)) LOGIN.msg = '아직 승인되지 않은 이메일입니다. 아래 「등록 신청하기」로 먼저 신청해 주세요. 이미 신청하셨다면 승인 후 다시 시도해 주세요.';
     else if (code === 'signup_disabled' || /for this instance/i.test(m)) LOGIN.msg = '등록은 되어 있지만 아직 초대를 수락하지 않으셨어요. 받으신 초대 메일의 링크를 먼저 눌러 주세요. 메일이 없다면 담당 교역자에게 초대를 다시 요청해 주세요.';
@@ -1642,9 +1645,17 @@ function lrItemEdit(i) {
 async function lrAutosave() {
   // 작성 중일 때만 자동으로 임시 저장 (제출한 보고는 「고친 내용 저장」을 눌러야 반영)
   if (!(LR.data && LR.data.status === 'submitted')) {
-    try { LR.data = await rpc('lr_save', { p_week: LR.week, p_summary: LR.summary, p_items: LR.items, p_submit: false }); } catch (e) { toast(errText(e), 5000); }
+    try { LR.data = await rpc('lr_save', { p_week: LR.week, p_summary: LR.summary, p_items: LR.items, p_submit: false }); lrSkipped(); } catch (e) { toast(errText(e), 5000); }
   }
   render();
+}
+// 그 사이 맡은 셀에서 빠진 분은 보고에서 빼고 저장됨 → 알려 드림 (이미 저장돼 있던 분은 그대로 남음)
+function lrSkipped() {
+  const sk = (LR.data && LR.data.skipped) || [];
+  if (!sk.length) return false;
+  if (LR.data.items) LR.items = LR.data.items.map(i => ({ kind: i.kind, person_id: i.person_id, person_name: i.person_name, group_name: i.group_name, category: i.category, content: i.content }));
+  toast(sk.join(', ') + '님은 지금 맡으신 명단에 없어 보고에서 빠졌습니다. 내용이 필요하면 「한 주 요약」에 적어 주세요.', 7000);
+  return true;
 }
 async function lrSave(submit) {
   lrSync();
@@ -1652,6 +1663,7 @@ async function lrSave(submit) {
   LR.busy = true; render();
   try {
     LR.data = await rpc('lr_save', { p_week: LR.week, p_summary: LR.summary, p_items: LR.items, p_submit: submit });
+    if (lrSkipped()) { LR.busy = false; return render(); }
     toast(submit ? (LR.data.status === 'submitted' ? '교역자 보고를 제출했습니다. 목사님·사모님께 바로 보입니다.' : '저장했습니다.') : '임시 저장했습니다.');
     if (submit) { LR.week = null; LR.busy = false; return back(); }
   } catch (e) { toast(errText(e), 5000); }
@@ -2326,7 +2338,7 @@ function isRegistered(p) { return !!p.email; }
 async function viewAdminHome(app) {
   setTop(tr('관리', 'Admin'), false); renderTabs(true);
   const week = ADMIN.week || S.ctx.this_week;
-  const [{ reqs, P, C, closed }, ov] = await Promise.all([loadAdminData(), rpc('admin_overview', { p_week: week }).catch(() => null)]);
+  const [{ reqs, P, C, closed }, ov, al] = await Promise.all([loadAdminData(), rpc('admin_overview', { p_week: week }).catch(() => null), rpc('admin_alerts').catch(() => null)]);
   const people = [...P.values()].filter(p => p.active);
   const stopped = [...P.values()].filter(p => !p.active).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   const waiting = people.filter(p => !isRegistered(p));
@@ -2337,7 +2349,7 @@ async function viewAdminHome(app) {
       <span class="top"><b>${title}</b><span class="pill ${id === 'requests' && count ? 'warn' : ''}">${count}</span></span></button>
     ${ADMIN.open === id ? '<div class="stack" style="margin-top:8px">' + body + '</div>' : ''}`;
 
-  let h = `<h1>${tr('관리', 'Admin')}</h1>
+  let h = `<h1>${tr('관리', 'Admin')}</h1>` + loginAlertBanner(al) + `
     <div class="card stack" style="margin-top:8px"><div><b>📱 ${tr('화면 미리보기', 'Screen preview')}</b><div class="small muted">${tr('셀리더, 교역자, 목사님·사모님 화면이 어떻게 보이는지 예시 데이터로 둘러봅니다. 실제 명단과 내용은 보이지 않고, 아무것도 저장되지 않습니다.', 'Browse each role’s screens with sample data. Nothing is saved.')}</div></div>
       <div class="row" style="gap:8px;flex-wrap:wrap">${Object.entries(DEMO_ROLE).map(([k, t]) => `<button class="btn sm ghost" data-act="demo" data-v="${k}">${t}</button>`).join('')}</div></div>` + (ov ? overviewBlock(ov, week) : '') + `
     <h2>${tr('등록·명단', 'Registration & cells')}</h2>
@@ -2443,6 +2455,18 @@ async function adminChangeEmail(id, email, name) {
     toast(tr('이메일을 바꿨습니다. 이제 ' + email + ' 로 로그인하실 수 있습니다.', 'Email updated. They can now sign in with ' + email + '.'), 4000);
   } catch (e) { toast(errText(e), 4500); }
   finally { ADMIN.busy = false; render(); }
+}
+/* 관리 — 로그인 메일 문제 경고 (최근 7일, 그 뒤 누군가 로그인에 성공했으면 「해결된 것 같아요」) */
+function loginAlertBanner(a) {
+  if (!a || (!a.mail_fail_last && !a.rate_last)) return '';
+  const t = (x) => x ? dateTime(x) : '';
+  const solved = (x) => x && a.last_login && new Date(a.last_login) > new Date(x);
+  let h = '';
+  if (a.mail_fail_last) h += solved(a.mail_fail_last)
+    ? `<div class="banner small" style="margin-top:8px"><b>로그인 메일 발송 실패가 있었어요 (${t(a.mail_fail_last)})</b>그 뒤 로그인에 성공한 분이 있어 지금은 해결된 것 같아요.</div>`
+    : `<div class="banner danger" style="margin-top:8px"><b>⚠️ 로그인 메일이 나가지 않고 있어요 (${t(a.mail_fail_last)}부터)</b>지금은 아무도 로그인 코드를 받지 못합니다. Supabase → Authentication → Emails → SMTP 설정의 Gmail 앱 비밀번호를 확인해 주세요.</div>`;
+  if (a.rate_last) h += `<div class="banner ${solved(a.rate_last) ? '' : 'warn'} small" style="margin-top:8px"><b>로그인 메일 한도(한 시간 수)에 걸린 적이 있어요 (${t(a.rate_last)})</b>한꺼번에 로그인하는 분이 많았던 것 같아요. 계속되면 Supabase → Authentication → Rate Limits에서 「emails」 숫자를 올려 주세요.</div>`;
+  return h;
 }
 /* 관리 — 한 주 큰 그림 (숫자와 이름만, 보고서 내용 없음) */
 function overviewBlock(o, week) {
