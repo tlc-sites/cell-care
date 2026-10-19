@@ -1,3 +1,4 @@
+// (api/cron.js?job=review 로 불림)
 // 금요일 오후 1시: 분파리더에게 "셀보고서 확인 + 교역자 보고 작성" 알림 (Vercel Cron, CRON_SECRET 필요)
 //   이번 주 교역자 보고를 아직 제출하지 않은 분파리더만
 const { serviceRpc, sendAll, seoulToday, env } = require('./_lib');

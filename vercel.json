@@ -1,27 +1,27 @@
 {
   "crons": [
     {
-      "path": "/api/cron-reminder",
+      "path": "/api/cron?job=reminder",
       "schedule": "0 0 * * 1"
     },
     {
-      "path": "/api/cron-reminder",
+      "path": "/api/cron?job=reminder",
       "schedule": "0 13 * * 4"
     },
     {
-      "path": "/api/cron-reminder",
+      "path": "/api/cron?job=reminder",
       "schedule": "0 1 * * 5"
     },
     {
-      "path": "/api/cron-review",
+      "path": "/api/cron?job=review",
       "schedule": "0 4 * * 5"
     },
     {
-      "path": "/api/cron-senior",
+      "path": "/api/cron?job=senior",
       "schedule": "0 8 * * 5"
     },
     {
-      "path": "/api/cron-senior?job=digest",
+      "path": "/api/cron?job=digest",
       "schedule": "59 14 * * 5"
     }
   ],
@@ -59,14 +59,14 @@
     "api/pastor-message.js": {
       "maxDuration": 60
     },
-    "api/cron-senior.js": {
+    "api/cron.js": {
       "maxDuration": 60
     }
   },
   "rewrites": [
     {
       "source": "/api/weekly-digest",
-      "destination": "/api/cron-senior?job=digest"
+      "destination": "/api/cron?job=digest"
     },
     {
       "source": "/api/message",

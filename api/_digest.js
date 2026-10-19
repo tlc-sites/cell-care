@@ -1,4 +1,4 @@
-// (api/cron-senior.js?job=digest 로 불림 — Vercel 무료 요금제 함수 12개 제한 때문에 합침)
+// (api/cron.js?job=digest 로 불림 — Vercel 무료 요금제 함수 12개 제한 때문에 합침)
 // 주간 요약 메일 (금요일 밤 11:59, Vercel Cron)
 //  · 셀보고서 미제출 / 교역자 보고 미제출 (누적 포함) + 이번 주 셀보고서 중요 내용 요약
 //  · 받는 분: 담임 목사님(영어) · 사모님(한국어) — 앱에 등록된 이메일. 아직 없으면 DIGEST_EN_TO / DIGEST_KO_TO 에 적은 주소

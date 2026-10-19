@@ -1,8 +1,7 @@
+// (api/cron.js?job=senior 로 불림)
 // 금요일 오후 5시: 담임 목사님·사모님께 "이번 주 교역자 보고가 준비되었습니다" 알림 (Vercel Cron, CRON_SECRET 필요)
 const { serviceRpc, sendAll, seoulToday, env } = require('./_lib');
-const digestJob = require('./_digest');
 module.exports = async (req, res) => {
-  if ((req.query && req.query.job) === 'digest') return digestJob(req, res);
   try {
     if ((req.headers.authorization || '') !== 'Bearer ' + env('CRON_SECRET')) return res.status(401).json({ error: 'unauthorized' });
     const t = seoulToday();
