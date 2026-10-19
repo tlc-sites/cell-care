@@ -517,7 +517,7 @@ async function viewLeaderHome(app) {
     return Date.now() > new Date(d).getTime() ? ' 마감이 지났지만 지금이라도 작성해 주세요.' : ' 마감: ' + dayLabel(kstDate(d)) + ' 낮 12시까지';
   };
   let h = `<h1>안녕하세요, ${esc(honorific(S.me.name))}</h1>`;
-  h += msgEntry(await rpc('msg_unread').catch(() => 0), '교역자·목사님·사모님과 메시지를 주고받습니다');
+  h += msgEntry(await rpc('msg_unread').catch(() => 0), '담임 목사님, 사모님, 교역자들에게 셀 보고서에 담지 못한 내용을 직접 전달하실 수 있습니다.');
   if (revs.length) {
     h += '<div class="stack" style="margin-top:12px">' + revs.map(r => `
       <div class="banner warn"><b>${esc(r.cell_name)} · ${weekLabel(r.week_start)} 보고서에 수정 요청이 있습니다</b>
@@ -1256,9 +1256,11 @@ async function viewLeadershipHome(app, v) {
   const today = S.ctx.today;
   const current = new Set(asg.filter(a => a.start_date <= today && (!a.end_date || a.end_date >= today)).map(a => a.cell_id));
   const busan = rows.filter(r => r.campus === '부산' && !r.i_am_leader).sort((a, b) => a.cell_name.localeCompare(b.cell_name, 'ko'));
-  const mine = rows.filter(r => r.campus !== '부산' && !r.i_am_leader && r.review_mode === 'leadership' && (current.has(r.cell_id) || r.responsible_leadership_id === S.me.id || r.i_can_review));
+  const mineBundang = rows.filter(r => r.campus !== '부산' && !r.i_am_leader && r.review_mode === 'leadership' && (current.has(r.cell_id) || r.responsible_leadership_id === S.me.id || r.i_can_review));
   const showBusan = busan.length > 0 || rows.some(r => r.i_am_leader && campusOf(r) === '부산');
   const onBusan = showBusan && CAMP.v === '부산';
+  // 분당·부산 탭 모두 같은 구성: 부산은 교역자 모두가 함께 맡는 셀이 「담당 셀」
+  const mine = onBusan ? busan : mineBundang;
   const own = rows.filter(r => r.i_am_leader && (!showBusan || campusOf(r) === CAMP.v)).sort((a, b) => a.cell_name.localeCompare(b.cell_name, 'ko'));
   const submitted = mine.filter(r => r.status === 'submitted');
   const need = mine.filter(r => r.i_can_review);
@@ -1273,9 +1275,8 @@ async function viewLeadershipHome(app, v) {
     h += `<div class="card stack" style="margin-bottom:12px"><div class="row"><h3 style="margin:0">교역자 보고</h3><span class="spacer"></span><span class="${st[0]}">${st[1]}</span></div>
       <p class="muted small" style="margin:0">${lr && lr.status === 'submitted' ? dateTime(lr.submitted_at) + ' 제출 · 담임 목사님·사모님께서 보고 계십니다.' : '맡으신 분들 가운데 목사님께 전할 소식을 직접 정리해 주세요. 제출하면 바로 목사님·사모님께 보입니다.'}</p>
       <button class="btn ${lr && lr.status === 'submitted' ? 'ghost' : ''}" data-act="lr-edit-open" data-week="${week}">${!lr ? '교역자 보고 쓰기' : lr.status === 'submitted' ? '보고 보기 · 고치기' : '이어서 쓰기'}</button></div>
-      <button class="listitem" data-act="open-issues" style="margin-bottom:12px"><span class="top"><b>셀원 이슈 보기</b><span class="small muted">내 분파 · 교회 전체 →</span></span><span class="small muted">관계, 장기결석, 건강 등 이슈별로, 사람별로 모아 봅니다.</span></button>` + msgEntry(unread, '셀리더·목사님·사모님과 주고받은 메시지');
+      <button class="listitem" data-act="open-issues" style="margin-bottom:12px"><span class="top"><b>셀원 이슈 보기</b><span class="small muted">내 분파 · 교회 전체 →</span></span><span class="small muted">관계, 장기결석, 건강 등 이슈별로, 사람별로 모아 봅니다.</span></button>` + msgEntry(unread, '셀리더나 목사님·사모님께서 보낸 메시지를 보고 답장할 수 있습니다.');
   }
-  if (!onBusan) {
   h += need.length
     ? `<div class="banner warn"><b>확인이 필요한 보고서가 ${need.length}건 있습니다</b><div style="margin-top:10px"><button class="btn warn sm" data-act="open-detail" data-id="${need[0].report_id}">확인하러 가기</button></div></div>`
     : mine.length ? '<div class="banner"><b>지금 확인할 보고서가 없습니다</b>제출되는 대로 여기에 표시됩니다.</div>' : '';
@@ -1286,20 +1287,14 @@ async function viewLeadershipHome(app, v) {
     <div class="stat"><div class="v">${reviewed.length}</div><div class="k">확인 완료</div></div>
     <div class="stat ${need.length ? 'warn' : ''}"><div class="v">${need.length}</div><div class="k">확인 필요</div></div>
     <div class="stat ${concern.length ? 'warn' : ''}"><div class="v">${concern.length}</div><div class="k">목양 관심</div></div></div>`;
-  h += '<h2>담당 셀</h2>' + (mine.length ? '<div class="stack">' + mine.map(r => cellItem(r)).join('') + '</div>' : '<p class="empty">이 주에 담당한 셀이 없습니다.</p>');
-  const manage = mine.filter(r => current.has(r.cell_id));
+  h += '<h2>담당 셀</h2>' + (onBusan ? '<p class="sub" style="margin-top:0">부산 캠퍼스 셀은 교역자 모두가 함께 맡습니다. 먼저 확인하신 분 이름으로 기록됩니다.</p>' : '')
+    + (mine.length ? '<div class="stack">' + mine.map(r => cellItem(r)).join('') + '</div>' : '<p class="empty">' + (onBusan ? '이 주에 부산 캠퍼스 셀이 없습니다.' : '이 주에 담당한 셀이 없습니다.') + '</p>');
+  const manage = onBusan ? mine : mine.filter(r => current.has(r.cell_id));
   if (manage.length) h += '<h3 style="margin:20px 0 8px">셀원 관리</h3><div class="chips">' + manage.map(r => `<button class="chip" data-act="open-members" data-cell="${r.cell_id}" data-name="${esc(r.cell_name)}">${esc(r.cell_name)}</button>`).join('') + '</div>';
-  }
-  if (onBusan && !busan.length) h += '<p class="empty">이 주에 부산 캠퍼스 셀이 없습니다.</p>';
-  if (onBusan && busan.length) {
-    const bNeed = busan.filter(r => r.i_can_review), bSub = busan.filter(r => r.status === 'submitted');
-    h += `<h2>부산 캠퍼스 셀 <span class="tiny muted" style="font-weight:400">교역자 모두가 함께 맡습니다</span></h2>
-      <p class="sub" style="margin-top:0">제출 ${bSub.length} / ${busan.length}${bNeed.length ? ' · <b style="color:var(--warn)">확인 필요 ' + bNeed.length + '</b>' : ''} · 먼저 확인하신 분 이름으로 기록됩니다.</p>`;
-    h += '<div class="stack">' + busan.sort((a, b) => order(a) - order(b) || a.cell_name.localeCompare(b.cell_name, 'ko')).map(r => cellItem(r)).join('') + '</div>';
-    h += '<div class="chips" style="margin-top:10px">' + busan.map(r => `<button class="chip" data-act="open-members" data-cell="${r.cell_id}" data-name="${esc(r.cell_name)}">${esc(r.cell_name.replace(/^부산 /, ''))} 셀원 관리</button>`).join('') + '</div>';
-  }
   if (own.length) {
-    h += '<h2>내 셀</h2><p class="sub">직접 인도하는 셀입니다. 확인은 ' + (own.some(r => r.review_mode === 'senior_direct') ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님' : '담당 분파셀리더') + '께서 하십니다.</p>';
+    const ownWho = own.every(r => r.review_mode === 'none') ? '검토 없이 제출하는 셀입니다.' + (onBusan ? ' 교역자 누구나 보고서를 쓸 수 있습니다.' : '')
+      : '확인은 ' + (own.some(r => r.review_mode === 'senior_direct') ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님' : '담당 분파셀리더') + '께서 하십니다.';
+    h += '<h2>내 셀</h2><p class="sub">직접 인도하는 셀입니다. ' + ownWho + '</p>';
     h += '<div class="stack">' + own.map(r => ownCellItem(r, week)).join('') + '</div>';
   }
   if (!S.ctx.leader_cells.length) h += '<div id="pushbox"></div>';
@@ -1408,7 +1403,7 @@ async function viewDashboard(app, v) {
 
   let h = `<h1>${tr('전체 현황', 'Overview')}</h1>` + weekNav(week, 'db-week');
   if (hasBusan) h += campusSeg();
-  h += msgEntry(unread, tr('셀리더에게 메시지 보내기 · 받은 답장 보기', 'Message cell leaders · see replies'));
+  h += msgEntry(unread, tr('셀리더에게 보고서와 상관없이 직접 말씀을 전하고, 셀리더가 보낸 메시지와 답장을 봅니다.', 'Send a note to cell leaders anytime and read their messages and replies.'));
   if (pmsgs.length) {
     const short = (t) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > 70 ? t.slice(0, 68) + '…' : t; };
     h += `<h2 style="margin-top:8px">${tr('목사님께 온 말씀', 'Messages for you')} <span class="muted" style="font-weight:400">${pmsgs.length}</span></h2><div class="stack" style="gap:8px">` +
@@ -2026,19 +2021,31 @@ async function msgNotify(post) {
     fetch('api/message', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ post }) }).catch(() => {});
   } catch (_) {}
 }
+function msgHelp() {
+  const li = (t) => `<li style="margin:4px 0">${t}</li>`;
+  return `<details class="cellbox" style="margin-top:16px"${MSG.helpOpen ? ' open' : ''}><summary class="small"><b>${tr('받는 분께는 어떻게 보이나요?', 'How do recipients see it?')}</b></summary>
+    <ul class="small" style="margin:8px 0 0;padding-left:20px">
+      ${li(tr('받는 분이 앱을 열면 첫 화면의 「✉️ 메시지」 칸에 <b>「새 메시지」</b> 표시가 생깁니다. 목사님·사모님은 「전체 현황」, 교역자는 「분파셀리더」, 셀리더는 「셀리더」 첫 화면입니다.', 'A “new message” badge appears on the Messages card of their home screen.'))}
+      ${li(tr('알림을 켜 두신 분께는 휴대폰 알림(<b>✉️ 보낸 분 이름 + 내용 앞부분</b>)이 바로 갑니다.', 'If notifications are on, they get a phone notification right away.'))}
+      ${li(tr('받는 분이 열면 대화 화면에서 내용을 보고 바로 <b>답장</b>할 수 있고, 답장이 오면 나에게도 같은 방식으로 알려 드립니다.', 'They can reply in the conversation, and you are notified the same way.'))}
+      ${li(tr('담임 목사님께는 <b>영어 번역</b>과 원문이 함께 보이고, 목사님이 영어로 쓰신 글은 한국어로 번역되어 보입니다.', 'Pastor Scott sees an English translation with the original.'))}
+      ${li(tr('보고서를 함께 보내면 받는 분도 그 보고서를 열어 볼 수 있습니다.', 'If you attach a report, recipients can open it.'))}
+      ${li(tr('<b>대화에 들어 있는 분만</b> 볼 수 있습니다. 다른 셀리더나 교역자에게는 보이지 않습니다.', 'Only the people in the conversation can see it.'))}
+    </ul></details>`;
+}
 async function viewMessages(app) {
   setTop(tr('메시지', 'Messages'), true); renderTabs(true);
   const [list, contacts] = await Promise.all([rpc('msg_list'), rpc('msg_contacts').catch(() => [])]);
   MSG.contacts = contacts || [];
   let h = `<h1>${tr('메시지', 'Messages')}</h1>`;
   if (MSG.contacts.length) h += `<button class="btn" style="margin:8px 0 4px" data-act="msg-new">${tr('새 메시지 보내기', 'New message')}</button>
-    <p class="tiny muted" style="margin:0 0 12px">${isSenior() ? tr('셀리더 한 분이나 여러 분께 보낼 수 있습니다.', 'Send to one or more cell leaders.') : tr('교역자·목사님·사모님 중에서 골라 보낼 수 있습니다.', 'Send to staff, Pastor or Mrs. Brenner.')}</p>`;
+    <p class="small muted" style="margin:0 0 12px">${isSenior() ? tr('셀리더 한 분이나 여러 분께, 보고서와 상관없이 언제든 말씀을 전하실 수 있습니다.', 'Send a note to one or more cell leaders anytime.') : tr('담임 목사님, 사모님, 교역자들에게 셀 보고서에 담지 못한 내용을 직접 전달하실 수 있습니다.', 'Send what didn’t fit in the report directly to staff, Pastor or Mrs. Brenner.')}</p>`;
   h += list.length ? '<div class="stack">' + list.map(t => `<button class="listitem" data-act="msg-thread" data-id="${t.id}"${t.unread ? ' style="border-color:var(--accent);background:#F7F9FC"' : ''}>
       <span class="top"><b>${esc(t.people || tr('(나만)', '(only me)'))}</b>${t.unread ? `<span class="pill warn">${tr('새 ' + t.unread, t.unread + ' new')}</span>` : `<span class="tiny muted">${dateTime(t.last_at)}</span>`}</span>
       ${t.report_label ? `<span class="tiny"><span class="pill">${tr('📎 보고서', '📎 Report')}: ${esc(t.report_label)}</span></span>` : ''}
       <span class="small muted">${esc(t.last_author || '')}: ${(() => { const x = msgText(t.last_body, t.last_body_tr, true); return x.length > 80 ? x.slice(0, 78) + '…' : x; })()}</span></button>`).join('') + '</div>'
     : '<p class="empty">' + tr('아직 주고받은 메시지가 없습니다.', 'No messages yet.') + '</p>';
-  h += '<p class="tiny muted" style="margin-top:16px">' + tr('메시지는 대화에 들어 있는 분들만 볼 수 있습니다. 함께 보낸 보고서도 받은 분이 볼 수 있게 됩니다.', 'Only people in a conversation can read it. Shared reports become visible to the recipients.') + '</p>';
+  h += msgHelp();
   app.innerHTML = h;
 }
 async function viewMsgNew(app, v) {
@@ -2048,7 +2055,7 @@ async function viewMsgNew(app, v) {
   const staff = C.filter(c => c.kind === 'staff'), leaders = C.filter(c => c.kind === 'leader');
   const row = (c) => `<button class="pickrow" data-act="msg-pick" data-id="${c.id}" data-msg-name="${esc((c.name + ' ' + (c.info || '')).toLowerCase())}" aria-pressed="${MSG.sel.includes(c.id)}">
       <span class="box">✓</span><span><b>${esc(c.name)}</b><br><span class="tiny muted">${esc(c.kind === 'staff' ? tr(c.info, { '담임 목사님': 'Senior Pastor', '사모님': 'Mrs. Brenner', '교역자': 'Staff' }[c.info] || c.info) : (c.info || ''))}</span></span></button>`;
-  let h = `<h1>${tr('새 메시지', 'New message')}</h1>`;
+  let h = `<h1>${tr('새 메시지', 'New message')}</h1><p class="sub">${isSenior() ? tr('받는 셀리더의 첫 화면과 휴대폰 알림으로 전달됩니다.', 'Delivered to the cell leader’s home screen and phone notifications.') : tr('받는 분의 첫 화면 「✉️ 메시지」 칸과 휴대폰 알림으로 전달되고, 받는 분이 답장할 수 있습니다. 대화에 들어 있는 분만 볼 수 있어요.', 'Delivered to their home screen and phone; they can reply. Only people in the conversation can see it.')}</p>`;
   if (v.report) h += `<div class="banner small" style="margin:8px 0"><b>${tr('📎 함께 보내는 보고서', '📎 Report attached')}</b>${esc(v.label || '')}<br>${tr('받는 분도 이 보고서를 볼 수 있게 됩니다.', 'Recipients will be able to read this report.')}</div>`;
   h += `<h2>${tr('받는 분', 'To')} <span class="small muted" id="msg-count" style="font-weight:400">${MSG.sel.length ? tr(MSG.sel.length + '분 선택', MSG.sel.length + ' selected') : ''}</span></h2>`;
   if (C.length > 8) h += `<input type="search" id="msg-q" placeholder="${tr('이름이나 셀 이름으로 찾기', 'Search by name or cell')}" style="margin-bottom:10px">`;
