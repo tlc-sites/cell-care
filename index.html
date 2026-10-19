@@ -1497,11 +1497,59 @@ async function issuesTranslate() {
   } catch (e) { ISS.txErr = 'Could not translate right now. Please try again in a moment.'; }
   finally { ISS.txBusy = false; render(); }
 }
+// 셀원 이슈 → 셀리더에게 코멘트 / 담당 교역자에게 전달 (메시지로 보냄, 받는 분만 봄)
+async function issSendOpen(btn, id, kind) {
+  document.querySelectorAll('[data-iss-send]').forEach(x => { if (x.dataset.issSend !== id) x.innerHTML = ''; });
+  const box = document.querySelector(`[data-iss-send="${id}"]`); if (!box) return;
+  if (box.dataset.kind === kind && box.innerHTML) { box.innerHTML = ''; box.dataset.kind = ''; return; }
+  const r = (ISS.rows || []).find(x => x.item_id === id); if (!r) return;
+  box.dataset.kind = kind; box.innerHTML = `<p class="tiny muted" style="margin:8px 0">${tr('받는 분을 찾고 있습니다…', 'Loading…')}</p>`;
+  let reach = [], contacts = [];
+  try { [reach, contacts] = await Promise.all([rpc('issue_reach', { p_cell: r.cell_id }), kind === 'staff' ? rpc('msg_contacts').catch(() => []) : Promise.resolve([])]); }
+  catch (e) { box.innerHTML = `<p class="small" style="color:var(--danger)">${esc(errText(e))}</p>`; return; }
+  let people;
+  if (kind === 'leader') people = (reach || []).filter(x => x.kind === 'leader').map(x => ({ id: x.id, name: x.name, on: true }));
+  else {
+    const resp = (reach || []).filter(x => x.kind === 'staff').map(x => x.id);
+    people = (contacts || []).filter(x => x.kind === 'staff' && x.info === '교역자').map(x => ({ id: x.id, name: x.name, on: resp.includes(x.id) }))
+      .sort((a, b) => (b.on - a.on) || a.name.localeCompare(b.name, 'ko'));
+  }
+  if (!people.length) { box.innerHTML = `<p class="small muted" style="margin:8px 0">${kind === 'leader' ? tr('이 셀에 지금 메시지를 받을 수 있는 셀리더가 없습니다.', 'No cell leader can receive messages for this cell right now.') : tr('메시지를 받을 수 있는 교역자가 없습니다.', 'No staff can receive messages right now.')}</p>`; return; }
+  const hint = kind === 'leader'
+    ? tr('셀리더께 메시지로 전해집니다. 이 이슈 내용이 함께 붙습니다.', 'Sent to the cell leader as a message, with this issue attached.')
+    : (people.some(p => p.on) ? tr('이 셀의 담당 교역자를 먼저 골라 두었습니다. 다른 분을 더 고르셔도 됩니다.', 'The staff in charge of this cell is selected. You can add others.') : tr('전달할 교역자를 골라 주세요.', 'Choose who to forward to.'));
+  box.innerHTML = `<div class="cellbox stack" style="margin-top:10px">
+    <p class="tiny muted" style="margin:0">${hint}</p>
+    <div class="chips">${people.map(p => `<button class="chip" data-act="iss-pick" data-id="${p.id}" aria-pressed="${p.on}">${esc(p.name)}</button>`).join('')}</div>
+    <textarea rows="3" maxlength="3000" data-iss-text placeholder="${kind === 'leader' ? tr('예: 이 부분 함께 기도하겠습니다. 다음 주에 어떻게 지내시는지 알려 주세요.', 'e.g. We are praying with you. Please let us know how they are doing next week.') : tr('예: 이 성도님 한번 연락해 주실 수 있을까요?', 'e.g. Could you reach out to this person?')}"></textarea>
+    <div class="row" style="gap:8px"><button class="btn sm" data-act="iss-send-go" data-id="${id}">${tr('보내기', 'Send')}</button><button class="btn sm ghost" data-act="iss-send-x" data-id="${id}">${tr('취소', 'Cancel')}</button></div></div>`;
+  box.querySelector('[data-iss-text]')?.focus();
+}
+async function issSendGo(id) {
+  const box = document.querySelector(`[data-iss-send="${id}"]`); const r = (ISS.rows || []).find(x => x.item_id === id); if (!box || !r) return;
+  const to = [...box.querySelectorAll('[data-act=iss-pick][aria-pressed=true]')].map(b => b.dataset.id);
+  const text = (box.querySelector('[data-iss-text]')?.value || '').trim();
+  if (!to.length) return toast(tr('받는 분을 골라 주세요.', 'Please choose who to send to.'));
+  if (!text) return toast(tr('보낼 내용을 적어 주세요.', 'Please write a message.'));
+  const btn = box.querySelector('[data-act=iss-send-go]'); if (btn.disabled) return; btn.disabled = true;
+  // 붙는 이슈 내용은 받는 분(셀리더·교역자)이 읽기 쉽게 한국어로
+  const L0 = LANG; let block;
+  try { LANG = 'ko'; block = '\n\n― 셀원 이슈 ―\n' + r.person_name + ' · ' + noteCat(r.category) + ' · ' + dayLabel(r.on_date) + ' · ' + (r.cell_name || '') + '\n'
+    + (r.relation_kind && r.related_name ? relText(r.person_name, r.related_name, r.relation_kind) + '\n' : '') + (r.content || ''); } finally { LANG = L0; }
+  const body = text + block;
+  try {
+    const res = await rpc('msg_start', { p_to: to, p_body: body.slice(0, 4000), p_report: null });
+    msgNotify(res.post);
+    box.innerHTML = `<p class="small" style="margin:8px 0;color:var(--ok, inherit)">${tr('보냈습니다. 「메시지」에서 답장을 보실 수 있습니다.', 'Sent. Replies will appear in Messages.')}</p>`; box.dataset.kind = '';
+    toast(tr('보냈습니다.', 'Sent.'));
+  } catch (e) { btn.disabled = false; toast(errText(e), 4500); }
+}
 async function viewIssues(app, v) {
   setTop(tr('셀원 이슈', 'Member issues'), true); renderTabs(true);
   const senior = isSenior();
   const scope = senior ? 'all' : ISS.scope;
   const rows = await rpc('issue_board', { p_weeks: ISS.weeks, p_scope: scope });
+  ISS.rows = rows || [];
   const list = ISS.cat ? rows.filter(r => r.category === ISS.cat || (ISS.cat === 'relationship' && r.relation_kind)) : rows;
   const cnt = {}; rows.forEach(r => { cnt[r.category] = (cnt[r.category] || 0) + 1; });
   let h = `<h1>${tr('셀원 이슈 보기', 'Member issues')}</h1><p class="sub">${tr('셀보고서의 셀 케어 기록과 볼 수 있는 성도 동정을 모았습니다.', 'Care notes from cell reports and the pastoral notes you can see.')}</p>`;
@@ -1521,7 +1569,8 @@ async function viewIssues(app, v) {
       <div class="row" style="flex-wrap:wrap;gap:6px"><span class="pill">${noteCat(r.category)}</span>${r.source === 'note' ? `<span class="pill accent">${tr('성도 동정', 'Pastoral note')}</span>` : ''}${asOther ? `<span class="pill warn">${tr('상대로 언급됨', 'Mentioned as the other person')}</span>` : ''}<span class="spacer"></span><span class="tiny muted">${dayLabel(r.on_date)}</span></div>
       ${r.relation_kind && relOther(r) ? `<div class="small" style="margin-top:4px"><b>${esc(relText(r.person_name, relOther(r), r.relation_kind))}</b></div>` : ''}
       <div class="small" style="margin-top:4px">${(() => { const en = EN() && ISS.tx && ISS.tx['iss:' + r.source + ':' + r.item_id]; return en ? nl2br(en) + '<div class="tiny muted" style="margin-top:2px">' + nl2br(r.content) + '</div>' : nl2br(r.content); })()}</div>
-      <div class="tiny muted" style="margin-top:2px">${r.source === 'report' ? esc(r.cell_name || '') + (r.resp_name ? ' · ' + esc(r.resp_name) : '') + ' · ' + tr('셀리더 ', 'by ') + esc(r.author_name || '') : tr('쓴 분: ', 'By ') + esc(r.author_name || '')}</div></div>`;
+      <div class="tiny muted" style="margin-top:2px">${r.source === 'report' ? esc(r.cell_name || '') + (r.resp_name ? ' · ' + esc(r.resp_name) : '') + ' · ' + tr('셀리더 ', 'by ') + esc(r.author_name || '') : tr('쓴 분: ', 'By ') + esc(r.author_name || '')}</div>
+      ${senior && r.source === 'report' && r.cell_id ? `<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn sm ghost" data-act="iss-send" data-id="${r.item_id}" data-v="leader">${tr('셀리더에게 코멘트', 'Comment to cell leader')}</button><button class="btn sm ghost" data-act="iss-send" data-id="${r.item_id}" data-v="staff">${tr('담당 교역자에게 전달', 'Forward to staff')}</button></div><div data-iss-send="${r.item_id}"></div>` : ''}</div>`;
 
   // 관계 한눈에: 누가 누구와
   const rels = list.filter(r => r.relation_kind && relOther(r));
@@ -2569,6 +2618,10 @@ document.addEventListener('click', async (e) => {
     case 'iss-weeks': ISS.weeks = +d.v; return render();
     case 'iss-cat': ISS.cat = d.v; return render();
     case 'iss-view': ISS.view = d.v; return render();
+    case 'iss-send': return issSendOpen(el, d.id, d.v);
+    case 'iss-pick': el.setAttribute('aria-pressed', el.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); return;
+    case 'iss-send-x': { const b = document.querySelector(`[data-iss-send="${d.id}"]`); if (b) { b.innerHTML = ''; b.dataset.kind = ''; } return; }
+    case 'iss-send-go': return issSendGo(d.id);
     case 'iss-open': {
       ISS.open = ISS.open === d.k ? null : d.k;
       document.querySelectorAll('[data-iss-card]').forEach(c => {
