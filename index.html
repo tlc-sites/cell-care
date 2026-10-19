@@ -439,7 +439,8 @@ async function sendLogin() {
   LOGIN.busy = false;
   if (error) {
     const m = error.message || ''; const code = error.code || '';
-    if (code === 'unexpected_failure' || /Database error|NOT_APPROVED/i.test(m)) LOGIN.msg = '아직 승인되지 않은 이메일입니다. 아래 「등록 신청하기」로 먼저 신청해 주세요. 이미 신청하셨다면 승인 후 다시 시도해 주세요.';
+    if (/sending|smtp|email.*(fail|error)/i.test(m)) LOGIN.msg = '지금 로그인 메일을 보내는 데 문제가 있습니다. 승인과는 상관없는 일시적인 문제이니, 김도현 간사에게 알려 주시고 잠시 후 다시 시도해 주세요.';
+    else if (code === 'unexpected_failure' || /Database error|NOT_APPROVED/i.test(m)) LOGIN.msg = '아직 승인되지 않은 이메일입니다. 아래 「등록 신청하기」로 먼저 신청해 주세요. 이미 신청하셨다면 승인 후 다시 시도해 주세요.';
     else if (code === 'signup_disabled' || /for this instance/i.test(m)) LOGIN.msg = '등록은 되어 있지만 아직 초대를 수락하지 않으셨어요. 받으신 초대 메일의 링크를 먼저 눌러 주세요. 메일이 없다면 담당 교역자에게 초대를 다시 요청해 주세요.';
     else if (code === 'otp_disabled' || /signup|not allowed|not found|Signups/i.test(m)) LOGIN.msg = '아직 등록되지 않은 이메일입니다. 담당 교역자에게 문의해 주세요.';
     else if (/rate|security purposes|seconds/i.test(m)) LOGIN.msg = '메일을 너무 자주 요청했습니다. 잠시 후 다시 시도해 주세요.';
