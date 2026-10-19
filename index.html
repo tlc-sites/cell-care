@@ -1485,7 +1485,7 @@ async function viewGroup(app, v) {
    내 분파 / 교회 전체, 기간·이슈 구분별, 사람별 묶음. 관계는 누구와 어려운지 한눈에.
    (셀보고서 셀 케어 기록 + 내가 볼 수 있는 성도 동정)
    ===================================================================== */
-const ISS = { scope: 'mine', weeks: 8, cat: '', view: 'person', open: {}, tx: null, txWeeks: 0, txBusy: false, txErr: '' };
+const ISS = { scope: 'mine', weeks: 8, cat: '', view: 'person', open: null, tx: null, txWeeks: 0, txBusy: false, txErr: '' };
 async function issuesTranslate() {
   const weeks = ISS.weeks; ISS.txBusy = true; ISS.txErr = ''; render();
   try {
@@ -1557,11 +1557,12 @@ async function viewIssues(app, v) {
       .sort((a, b) => b.items.length - a.items.length || (b.last > a.last ? 1 : -1));
     h += `<h2>${tr('사람별', 'By person')} <span class="muted" style="font-weight:400">${arr.length}${tr('명', '')}</span></h2><div class="stack">` + arr.map(g => {
       const cats = [...new Set(g.items.map(x => x.r.category))];
-      const open = ISS.open[g.k];
-      return `<div class="card"><button class="row" data-act="iss-open" data-k="${esc(g.k)}" style="all:unset;display:flex;width:100%;gap:8px;align-items:center;flex-wrap:wrap;cursor:pointer">
+      // 하나만 열림 (다른 카드를 열면 닫힘). 열고 닫을 때 다시 불러오지 않고 화면에서 바로 펼침
+      const open = ISS.open === g.k;
+      return `<div class="card" data-iss-card="${esc(g.k)}"><button class="row" data-act="iss-open" data-k="${esc(g.k)}" aria-expanded="${open}" style="all:unset;display:flex;width:100%;gap:8px;align-items:center;flex-wrap:wrap;cursor:pointer">
           <b style="font-size:1.05em">${esc(g.name)}</b><span class="tiny muted">${esc(g.cell || '')}</span><span class="spacer"></span>
-          ${cats.map(c => `<span class="pill">${noteCat(c)}</span>`).join('')}<span class="tiny muted">${tr(g.items.length + '건', g.items.length + '')} ${open ? '▲' : '▼'}</span></button>
-        ${open ? g.items.sort((a, b) => (b.r.on_date > a.r.on_date ? 1 : -1)).map(x => item(x.r, x.asOther)).join('') : ''}</div>`;
+          ${cats.map(c => `<span class="pill">${noteCat(c)}</span>`).join('')}<span class="tiny muted">${tr(g.items.length + '건', g.items.length + '')} <span data-iss-arrow>${open ? '▲' : '▼'}</span></span></button>
+        <div data-iss-body${open ? '' : ' hidden'}>${g.items.sort((a, b) => (b.r.on_date > a.r.on_date ? 1 : -1)).map(x => item(x.r, x.asOther)).join('')}</div></div>`;
     }).join('') + '</div>';
   }
   app.innerHTML = h;
@@ -2568,7 +2569,17 @@ document.addEventListener('click', async (e) => {
     case 'iss-weeks': ISS.weeks = +d.v; return render();
     case 'iss-cat': ISS.cat = d.v; return render();
     case 'iss-view': ISS.view = d.v; return render();
-    case 'iss-open': ISS.open[d.k] = !ISS.open[d.k]; return render();
+    case 'iss-open': {
+      ISS.open = ISS.open === d.k ? null : d.k;
+      document.querySelectorAll('[data-iss-card]').forEach(c => {
+        const on = c.dataset.issCard === ISS.open;
+        const body = c.querySelector('[data-iss-body]'); if (body) body.hidden = !on;
+        const ar = c.querySelector('[data-iss-arrow]'); if (ar) ar.textContent = on ? '▲' : '▼';
+        const b = c.querySelector('[data-act=iss-open]'); if (b) b.setAttribute('aria-expanded', on);
+      });
+      if (ISS.open) { const c = el.closest('[data-iss-card]'); const top = c.getBoundingClientRect().top; if (top < 70) window.scrollBy({ top: top - 80, behavior: 'smooth' }); }
+      return;
+    }
     case 'lr-notes': NOTE.filter = 'week'; NOTE.week = d.week; return switchTab('notes');
     case 'lr-cat': LR.cat = d.v; document.querySelectorAll('[data-act=lr-cat]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === d.v))); return;
     case 'lr-add': return lrAdd();
