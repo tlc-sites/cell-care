@@ -2048,7 +2048,7 @@ async function viewMembers(app, v) {
       actions = `<div class="banner warn small" style="margin-top:8px"><b>${tr(esc(m.name) + '님을 셀원 명단에서 삭제할까요?', 'Delete ' + esc(m.name) + ' from this cell?')}</b>${tr('중복으로 들어갔거나 잘못 넣은 분일 때만 지워 주세요. 이미 제출된 지난 보고서 기록은 그대로 남습니다.', 'Only for duplicates or mistakes. Past submitted reports stay as they are.')}
         <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="mem-del" data-id="${m.id}">${tr('삭제', 'Delete')}</button><button class="btn sm ghost" data-act="mem-cancel">${tr('취소', 'Cancel')}</button></div></div>`;
     } else if (confirming) {
-      actions = `<div class="banner warn small" style="margin-top:8px"><b>${m.state === 'visitor' ? tr(esc(m.name) + '님을 방문자 목록에서 내릴까요?', 'Remove ' + esc(m.name) + ' from visitors?') : tr(esc(m.name) + '님을 이번 주부터 출석 명단에서 내릴까요?', 'Remove ' + esc(m.name) + ' from attendance from this week?')}</b>${tr('지난 출석 기록은 그대로 남고, 언제든 다시 올릴 수 있습니다.', 'Past attendance stays, and you can add them back anytime.')}
+      actions = `<div class="banner warn small" style="margin-top:8px"><b>${m.state === 'visitor' ? tr(esc(m.name) + '님을 방문자 목록에서 내릴까요?', 'Remove ' + esc(m.name) + ' from visitors?') : tr(esc(m.name) + '님을 이번 주부터 출석 명단에서 내릴까요?', 'Remove ' + esc(m.name) + ' from attendance from this week?')}</b>${m.state === 'visitor' ? tr('내리면 셀원 관리 화면에서도 보이지 않습니다. 지난 출석 기록은 그대로 남습니다.', 'They will no longer appear here. Past attendance stays.') : tr('지난 출석 기록은 그대로 남고, 언제든 다시 올릴 수 있습니다.', 'Past attendance stays, and you can add them back anytime.')}
         <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="mem-leave" data-id="${m.id}">${tr('내리기', 'Remove')}</button><button class="btn sm ghost" data-act="mem-cancel">${tr('취소', 'Cancel')}</button></div></div>`;
     } else if (m.state === 'left' || m.state === 'hidden') {
       actions = `<div class="row" style="gap:12px;margin-top:6px"><button class="link" data-act="mem-restore" data-id="${m.id}">${tr('다시 올리기', 'Add back')}</button></div>`;
@@ -2064,7 +2064,8 @@ async function viewMembers(app, v) {
       ${m.state === 'left' && m.left_at ? `<div class="tiny muted">${tr(dayLabel(addDays(m.left_at, 1)) + '부터 출석 명단에서 내림', 'Removed from ' + dayLabel(addDays(m.left_at, 1)))}</div>` : ''}${actions}</div>`;
   };
   const now = rows.filter(m => m.state === 'member' || m.state === 'visitor');
-  const gone = rows.filter(m => m.state === 'left' || m.state === 'hidden');
+  // 목록에서 내린 방문자(이번 주에 넣었다가 내린 분 포함)는 아예 보이지 않게
+  const gone = rows.filter(m => m.state === 'left');
   let h = `<h1>${esc(v.cellName)} · ${tr('셀원 관리', 'Members')}</h1><p class="sub">${tr('이번 주 출석 명단에 나오는 분들입니다. 바꾼 내용은 기록으로 남습니다.', 'People on this week’s attendance list. Changes are recorded.')}</p>
     <div class="card stack" style="margin-top:12px"><label class="field">${tr('새 셀원 추가', 'Add a member')}
       <input type="text" id="mem-new" maxlength="40" placeholder="${tr('이름 (동명이인은 김민수A처럼)', 'Name')}"></label>
@@ -2687,7 +2688,7 @@ document.addEventListener('click', async (e) => {
     case 'mem-move': { const to = $('#mem-move-to')?.value; if (!to) return toast(tr('옮길 셀을 골라 주세요.', 'Please choose a cell.'));
       const cn = (MEM.targets.find(c => c.id === to) || {}).name || '';
       MEM.move = null; return memAct('member_move', { p_member: d.id, p_target: to }, tr(cn + '로 옮겼습니다.', 'Moved to ' + cn + '.')); }
-    case 'mem-leave': return memAct('member_leave', { p_member: d.id }, tr('출석 명단에서 내렸습니다.', 'Removed from attendance.'));
+    case 'mem-leave': return memAct('member_leave', { p_member: d.id }, tr('명단에서 내렸습니다.', 'Removed.'));
     case 'mem-restore': return memAct('member_restore', { p_member: d.id }, tr('다시 올렸습니다.', 'Added back.'));
     case 'mem-register': return memAct('register_member', { p_member: d.id }, tr('정식 셀원으로 등록했습니다.', 'Registered as a member.'));
     case 'push-off': return pushOff();
