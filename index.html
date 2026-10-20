@@ -90,12 +90,17 @@ h3 { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
 .pill.ok { background: var(--ok-soft); color: var(--ok); }
 .pill.danger { background: var(--danger-soft); color: var(--danger); }
 .pill.accent { background: var(--accent-soft); color: var(--accent); }
+.ibtn { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent); background: #fff; font: italic 700 15px/1 Georgia, serif; vertical-align: 3px; margin-left: 8px; cursor: pointer; padding: 0; position: relative; }
+.ibtn::after { content: ''; position: absolute; inset: -9px; }
+.ibtn[aria-expanded="true"] { background: var(--accent); color: #fff; }
+.ibox { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; margin: 6px 0 12px; font-size: .95em; line-height: 1.6; }
+.ibox ul { margin: 4px 0 0; padding-left: 1.1em; }
 .banner { border-radius: 12px; padding: 14px 16px; background: var(--accent-soft); color: var(--ink); }
 .banner.warn { background: var(--warn-soft); }
 .banner.danger { background: var(--danger-soft); }
 .banner b { display: block; margin-bottom: 2px; }
 label.field { display: grid; gap: 6px; font-weight: 500; }
-input[type=text], input[type=search], input[type=email], input[type=date], textarea, select {
+input[type=text], input[type=search], input[type=email], input[type=date], input[type=time], textarea, select {
   width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff;
 }
 textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
@@ -341,6 +346,7 @@ async function render() {
     if (v.name === 'lrEdit') return await viewLrEdit(app, v);
     if (v.name === 'lrRead') return await viewLrRead(app, v);
     if (v.name === 'issues') return await viewIssues(app, v);
+    if (v.name === 'notices') return await viewNotices(app, v);
     if (v.name === 'messages') return await viewMessages(app, v);
     if (v.name === 'digest') return await viewDigest(app, v);
     if (v.name === 'msgNew') return await viewMsgNew(app, v);
@@ -522,6 +528,7 @@ async function viewLeaderHome(app) {
     return Date.now() > new Date(d).getTime() ? ' 마감이 지났지만 지금이라도 작성해 주세요.' : ' 마감: ' + dayLabel(kstDate(d)) + ' 낮 12시까지';
   };
   let h = `<h1>안녕하세요, ${esc(honorific(S.me.name))}</h1>`;
+  h += noticeCard(await rpc('notice_list', { p_limit: 3 }).catch(() => []), false);
   h += msgEntry(await rpc('msg_unread').catch(() => 0), '담임 목사님, 사모님, 교역자들에게 셀 보고서에 담지 못한 내용을 직접 전달하실 수 있습니다.');
   if (revs.length) {
     h += '<div class="stack" style="margin-top:12px">' + revs.map(r => `
@@ -661,6 +668,16 @@ async function pushTest() {
 /* 호칭: 이름에 직분이 붙어 있으면(예: 장주상 전도사) '님'만, 없으면 '셀리더님' */
 function honorific(name) { name = (name || '').trim(); return /\s/.test(name) ? name + '님' : name + ' 셀리더님'; }
 
+const DAYS7 = ['월', '화', '수', '목', '금', '토', '일'];
+function timeText(t) { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); if (!m) return t || ''; const h = +m[1]; return (h < 12 ? '오전 ' : '오후 ') + (h % 12 || 12) + ':' + m[2]; }
+function schedText(c) { return [c.meet_day ? c.meet_day + '요일' : '', c.meet_time ? timeText(c.meet_time) : '', c.meet_place || ''].filter(Boolean).join(' · '); }
+// 대신 쓰기: 이 셀의 담당 교역자(부산은 교역자 모두)이고 셀리더 본인이 아닐 때
+function canProxy(r) { return !!r && !r.i_am_leader && (S.ctx.roles || []).includes('leadership') && (r.responsible_leadership_id === S.me.id || r.campus === '부산'); }
+function writerLabel(leaders, submitter) {
+  const ls = String(leaders || '').split(',').map(x => x.trim()).filter(Boolean);
+  if (!submitter || !ls.length || ls.includes(submitter)) return submitter || '';
+  return ls.join(', ') + '(' + submitter + ')';
+}
 async function startReport(cell, week) {
   try {
     const id = await rpc('start_report', { p_cell: cell, p_week_start: week });
@@ -672,6 +689,25 @@ async function startReport(cell, week) {
    보고서 작성 (5단계) — 제출 전에는 수정, 제출 후에는 읽기 화면
    ===================================================================== */
 const STEPS = ['모임', '출석', '셀 케어', '은혜', '확인'];
+/* ⓘ 안내: 제목 옆 ⓘ를 누르면 아래에 설명이 펼쳐짐. info(k) → [버튼, 설명칸] */
+const INFO = {
+  meet: '셀모임을 했는지와 모인 날짜를 고릅니다.<ul><li>다른 주의 날짜를 고르면 그 주 보고서로 옮길 수 있습니다.</li><li>모이지 못했으면 이유를 짧게 적어 주세요.</li><li>쓰는 동안 자동으로 저장됩니다.</li></ul>',
+  att: '셀원마다 참석·결석을 누릅니다.<ul><li>「정식 셀원 모두 참석으로」를 누르면 한 번에 참석으로 바뀝니다.</li><li>새로 온 분은 아래 「+ 새 참석자 추가」로 넣습니다.</li><li>「따로 만나는 셀원」은 결석으로 세지 않습니다.</li></ul>',
+  care: '셀원들과 함께 나누며 기도하고 감사했던 일을 중심으로 적습니다.<ul><li>지난 기도제목은 「계속 기도」·「응답됨」·「종료」 중에 고릅니다.</li><li>유형은 여러 개 고를 수 있고, 「관계」를 고르면 누구와의 관계인지 함께 남깁니다.</li><li>꼭 알려야 할 일은 「확인 필요」에 체크해 주세요.</li></ul>',
+  grace: '이번 셀모임 가운데 하나님께서 주신 은혜와 감사한 일을 나눠 주세요. 짧게 적으셔도 괜찮습니다.',
+  confirm: '지금까지 적은 내용을 한눈에 확인하고 제출합니다.<ul><li>「고치기」를 누르면 그 단계로 돌아갑니다.</li><li>「담임목사님께 드리는 말씀」은 쓰신 분과 목사님·사모님만 봅니다.</li><li>제출한 뒤에도 확인 전까지는 고칠 수 있습니다.</li></ul>',
+  lhCells: '맡으신 셀의 이번 주 보고서입니다. 셀을 누르면 보고서가 열리고, 확인하거나 수정 요청을 보낼 수 있습니다. 셀이 많으면 위 검색 칸에 셀 이름이나 셀리더 이름을 쳐 보세요.',
+  issues: '셀보고서의 셀 케어 기록과, 내가 볼 수 있는 성도 동정을 모아 봅니다.<ul><li>기간·이슈 구분·분당/부산을 골라 좁혀 볼 수 있습니다.</li><li>「사람별」에서 이름을 누르면 그분의 기록이 펼쳐집니다.</li></ul>',
+  members: '이번 주 출석 명단에 나오는 분들입니다.<ul><li>새 셀원은 위에서 추가합니다.</li><li>셀을 떠나신 분은 「출석 명단에서 내리기」, 잠시 쉬시는 분은 「보류」로 옮겨 주세요.</li><li>바꾼 내용은 누가 바꿨는지 함께 기록됩니다.</li></ul>',
+  messages: '보고서와 별도로 주고받는 메시지입니다. 대화에 들어 있는 분만 볼 수 있습니다.',
+  notes: '교역자가 특별히 만난 분들의 소식입니다. 셀리더와 셀원에게는 보이지 않습니다. 「누가 볼 수 있나요?」에서 볼 사람을 정할 수 있습니다.',
+  dashCells: '이 주 모든 셀 보고서의 제출과 확인 현황입니다. 「모든 셀 보고서」를 펼치면 셀 이름으로 찾아 바로 열 수 있습니다.',
+  notice: '교역자와 목사님·사모님이 올린 공지입니다. 새 공지가 올라오면 휴대폰으로 알림이 갑니다.'
+};
+function info(k) {
+  return [`<button class="ibtn" data-act="info" data-k="${k}" aria-expanded="false" aria-controls="ib-${k}" aria-label="${tr('안내 보기', 'Show help')}">i</button>`,
+    `<div class="ibox" id="ib-${k}" hidden>${INFO[k] || ''}</div>`];
+}
 const HELP_LINE = () => `<p class="tiny muted" style="text-align:center;margin:16px 0 0">${tr('앱 사용 중 문제가 있으면 김도현 간사에게 문의해 주세요.', 'If you have any trouble with the app, please contact Dohyun Kim.')}</p>`;
 const catsLabel = (n) => ((n.categories && n.categories.length) ? n.categories : (n.category ? [n.category] : [])).map(k => LX('care', k)).join(', ');
 const reviewerName = (mode) => mode === 'senior_direct' ? '담임 목사님·사모님' : '담당 분파셀리더';
@@ -697,16 +733,20 @@ async function loadEditor(id) {
     rpc('pastor_msg_get', { p_report: id }).catch(() => [])
   ]).then(x => { PMSG_LOADED = (x[6] && x[6][0]) ? x[6][0].content : ''; return x; });
   const sep = new Set(((await rpc('separate_members', { p_cell: rep.cell_id }).catch(() => [])) || []).map(x => x.member_id));
+  const sched = ((await rpc('cell_schedule', { p_cell: rep.cell_id }).catch(() => [])) || [])[0] || null;
+  const proxy = !(S.ctx.leader_cells || []).some(c => c.cell_id === rep.cell_id);
   roster.forEach(x => { x.separate = sep.has(x.member_id); });
   const att = {};
   for (const m of roster) if (m.attendance) att[m.member_id] = { status: m.attendance, absence_reason: m.absence_reason || '' };
   const pu = {};
   for (const p of prayers) if (p.this_week_status) pu[p.prayer_id] = { status: p.this_week_status, note: p.this_week_note || '' };
   return {
-    id, rep, cell: cells[0] || { name: '' }, roster, visitors, prayers, revisions,
+    id, rep, cell: cells[0] || { name: '' }, roster, visitors, prayers, revisions, sched, proxy,
     step: E && E.id === id ? E.step : 0,
     m: {
       meeting_held: rep.meeting_held, meeting_date: rep.meeting_date || '', meeting_cancel_reason: rep.meeting_cancel_reason || '',
+      // 실제 모인 시간·장소: 비어 있으면 셀의 원래 시간·장소를 미리 채움
+      meeting_time: rep.meeting_time || (sched && sched.meet_time) || '', meeting_place: rep.meeting_place || (sched && sched.meet_place) || '',
       grace_notes: rep.grace_notes || '', grace_none: false, leader_message: rep.leader_message === 'share_up' ? 'none' : (rep.leader_message || 'none'), leader_message_note: rep.leader_message_note || '',
       att, pu,
       notes: notes.map(n => ({ member_id: n.member_id, categories: n.categories && n.categories.length ? n.categories.slice() : (n.category ? [n.category] : []), prayer: n.prayer || '', content: n.content, attention: n.leadership_attention_required, related_member_id: n.related_member_id || '', related_name: n.related_name || '', related_mode: n.related_member_id ? 'member' : n.related_name ? 'other' : '', relation_kind: n.relation_kind || 'mutual' })),
@@ -734,12 +774,13 @@ function renderEditor() {
   const openRev = E.revisions.find(x => !x.resolved_at);
   if (openRev) h += `<div class="banner warn" style="margin-top:8px"><b>${tr('수정 요청 사유', 'Revision request')}</b>${TX('rev:' + openRev.id, openRev.reason)}</div>`;
   if (!openRev && r.status === 'draft' && r.submission_no > 0) h += `<div class="banner warn" style="margin-top:8px"><b>제출했던 보고서를 고치는 중입니다</b>다 고치신 뒤 마지막 단계에서 <b style="display:inline">다시 제출하기</b>를 꼭 눌러 주세요. 다시 제출하기 전까지는 '고치는 중'으로 보입니다.</div>`;
+  if (E.proxy) h += `<div class="banner" style="margin-top:8px;border:1.5px solid var(--accent)"><b>✍️ 셀리더 대신 쓰는 중입니다</b>제출하면 「셀리더(${esc(S.me.name)})」로 표시됩니다. 셀리더도 같은 보고서를 함께 보고 고칠 수 있습니다.</div>`;
   if (E.conflict) h += `<div class="banner danger" role="alert" style="margin-top:8px"><b>다른 셀리더가 방금 이 보고서를 저장했습니다.</b>최신 내용을 불러온 뒤 이어서 작성해 주세요.<div style="margin-top:10px"><button class="btn sm" data-act="ed-reload">최신 내용 불러오기</button></div></div>`;
   h += '<div class="steps" aria-label="진행 단계">' + STEPS.map((s, i) => `<div class="${i < E.step ? 'done' : i === E.step ? 'now' : ''}">${i + 1}. ${s}</div>`).join('') + '</div>';
 
   if (E.step === 0) {
     const ldr = E.cell.review_mode === 'leadership' ? '담당 분파셀리더 확인' : E.cell.review_mode === 'senior_direct' ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님 확인' : '검토 없음';
-    h += `<h1>${weekLabel(r.week_start)} 셀모임</h1>
+    h += `<h1>${weekLabel(r.week_start)} 셀모임${info('meet')[0]}</h1>${info('meet')[1]}
       <div class="banner" style="margin:8px 0 12px"><b>셀 케어 안내</b>맡으신 셀원에 대한 일률적인 보고보다는, 셀원들과 함께 나누며 애통하고 기도했던 내용, 함께 기뻐하고 감사했던 내용을 중심으로 작성해 주시기 바랍니다.</div>
       <div class="card"><dl class="summary" style="margin:0">
         <dt>보고 주차</dt><dd>${weekLabel(r.week_start, true)} (${dayLabel(r.week_start)} ~ ${dayLabel(addDays(r.week_start, 6))})</dd>
@@ -754,7 +795,11 @@ function renderEditor() {
         ${m.meeting_date && !weekOK(m.meeting_date) ? (() => { const nw = mondayOf(m.meeting_date); return m.meeting_date > S.ctx.today
           ? `<div class="banner warn" style="margin-top:8px"><b>아직 오지 않은 날짜입니다</b>모임한 날짜를 다시 골라 주세요.</div>`
           : `<div class="banner warn" style="margin-top:8px" role="alertdialog"><b>${dayLabel(m.meeting_date)}은 ${weekLabel(nw)} (${dayLabel(nw)} ~ ${dayLabel(addDays(nw, 6))})입니다</b>이 보고서를 ${weekLabel(nw)} 보고서로 옮길까요? 적어 두신 출석·셀 케어·은혜와 나눔 내용은 그대로 함께 옮겨집니다.
-            <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="ed-move" ${E.moving ? 'disabled' : ''}>${weekLabel(nw)} 보고서로 옮기기</button><button class="btn quiet sm" data-act="ed-move-cancel">날짜 다시 고르기</button></div></div>`; })() : ''}</div>`;
+            <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="ed-move" ${E.moving ? 'disabled' : ''}>${weekLabel(nw)} 보고서로 옮기기</button><button class="btn quiet sm" data-act="ed-move-cancel">날짜 다시 고르기</button></div></div>`; })() : ''}
+        <div class="row" style="gap:10px;margin-top:12px;flex-wrap:wrap;align-items:flex-end">
+          <label class="field" style="flex:1 1 130px;margin:0">모인 시간<input type="time" data-bind="meeting_time" value="${esc(m.meeting_time)}"></label>
+          <label class="field" style="flex:2 1 180px;margin:0">모인 장소<input type="text" data-bind="meeting_place" maxlength="80" placeholder="예: 셀리더 댁, 교회 2층 소그룹실" value="${esc(m.meeting_place)}"></label></div>
+        ${E.sched && (E.sched.meet_day || E.sched.meet_time || E.sched.meet_place) ? `<p class="tiny muted" style="margin:6px 0 0">원래 모임: ${esc(schedText(E.sched))} · 다르게 모였으면 고쳐 주세요.</p>` : ''}</div>`;
     if (m.meeting_held === false) h += `<div style="margin-top:16px"><label class="field">모임을 진행하지 못한 이유
         <textarea data-bind="meeting_cancel_reason" placeholder="예: 추석 연휴로 쉬었습니다">${esc(m.meeting_cancel_reason)}</textarea></label>
         <p class="tiny muted">모임을 하지 못한 주에도 보고서를 제출할 수 있습니다.</p></div>`;
@@ -764,7 +809,7 @@ function renderEditor() {
     const listed = E.roster.filter(x => x.listed && !x.separate);
     const separate = E.roster.filter(x => x.listed && x.separate);
     const others = E.roster.filter(x => !x.listed);
-    h += `<h1>출석</h1><p class="sub">셀원마다 참석 여부를 골라 주세요.</p>
+    h += `<h1>출석${info('att')[0]}</h1>${info('att')[1]}<p class="sub">셀원마다 참석 여부를 골라 주세요.</p>
       <button class="btn quiet sm" data-act="ed-allpresent" style="margin-bottom:8px">정식 셀원 모두 참석으로</button>
       <div class="card" style="padding-block:4px">`;
     const memRow = (x) => {
@@ -797,13 +842,13 @@ function renderEditor() {
   }
 
   if (E.step === 3) {
-    h += `<h1>은혜와 나눔</h1>
+    h += `<h1>은혜와 나눔${info('grace')[0]}</h1>${info('grace')[1]}
       <label class="field">이번 셀모임 가운데 하나님께서 주신 은혜와 감사한 일을 나눠 주세요.
         <textarea data-bind="grace_notes" rows="7">${esc(m.grace_notes)}</textarea></label>`;
   }
 
   if (E.step === 2) {
-    h += '<h1>셀 케어 <span style="font-weight:500;font-size:.7em">(셀원 근황)</span></h1>';
+    h += '<h1>셀 케어 <span style="font-weight:500;font-size:.7em">(셀원 근황)</span>' + info('care')[0] + '</h1>' + info('care')[1];
     if (E.prayers.length) {
       h += '<h2 style="margin-top:12px">지난 기도제목</h2><div class="stack">' + E.prayers.map(p => {
         const u = m.pu[p.prayer_id] || {};
@@ -845,9 +890,9 @@ function renderEditor() {
     const name = (id) => (E.roster.find(x => x.member_id === id) || {}).name || '';
     const present = att.filter(([, a]) => a.status === 'present').length;
     const absent = att.filter(([, a]) => a.status === 'absent');
-    h += `<h1>확인하고 제출하기</h1><div class="stack">
+    h += `<h1>확인하고 제출하기${info('confirm')[0]}</h1>${info('confirm')[1]}<div class="stack">
       <div class="card"><div class="row"><h3 style="margin:0">모임</h3><span class="spacer"></span><button class="link" data-act="ed-step" data-v="0">고치기</button></div>
-        ${m.meeting_held === true ? '진행함 · ' + (m.meeting_date ? dayLabel(m.meeting_date) : '<span style="color:var(--danger)">날짜를 입력해 주세요</span>')
+        ${m.meeting_held === true ? '진행함 · ' + (m.meeting_date ? dayLabel(m.meeting_date) : '<span style="color:var(--danger)">날짜를 입력해 주세요</span>') + (m.meeting_time ? ' ' + esc(timeText(m.meeting_time)) : '') + (m.meeting_place ? ' · ' + esc(m.meeting_place) : '')
           : m.meeting_held === false ? '진행하지 못함 · ' + esc(m.meeting_cancel_reason || '사유를 입력해 주세요') : '<span style="color:var(--danger)">진행 여부를 골라 주세요</span>'}</div>
       <div class="card"><div class="row"><h3 style="margin:0">출석</h3><span class="spacer"></span><button class="link" data-act="ed-step" data-v="1">고치기</button></div>
         참석 ${present}명 · 결석 ${absent.length}명${absent.length ? '<div class="small muted">' + absent.map(([id, a]) => esc(name(id)) + (a.absence_reason ? ' (' + esc(a.absence_reason) + ')' : '')).join(', ') + '</div>' : ''}</div>
@@ -892,6 +937,7 @@ function payload() {
   return {
     meeting_held: m.meeting_held, meeting_date: m.meeting_held ? (m.meeting_date || null) : null,
     meeting_cancel_reason: m.meeting_held === false ? m.meeting_cancel_reason : null,
+    meeting_time: m.meeting_held === true ? (m.meeting_time || '') : '', meeting_place: m.meeting_held === true ? (m.meeting_place || '') : '',
     grace_notes: m.grace_none ? null : m.grace_notes, grace_none: m.grace_none, leader_message: m.leader_message, leader_message_note: m.leader_message !== 'none' ? (m.leader_message_note || '').trim() : '',
     attendance: E.roster.filter(x => x.listed || m.att[x.member_id]).map(x => {
       const a = m.att[x.member_id] || { status: 'unknown' };
@@ -1004,7 +1050,7 @@ async function viewReportDetail(app, v) {
   const row = (wk || []).find(x => x.cell_id === rep.cell_id) || {};
   const nameOf = (id) => (people.find(p => p.user_id === id) || {}).name || '';
   const memName = (id) => (roster.find(x => x.member_id === id) || {}).name || '';
-  const canEdit = rep.status !== 'submitted' && row.i_am_leader;
+  const canEdit = rep.status !== 'submitted' && (row.i_am_leader || canProxy(row));
   if (TRANS.id !== rep.id) { TRANS.id = rep.id; TRANS.map = TX_CACHE['rep:' + rep.id] || null; TRANS.err = ''; }
   setTop((cell?.name || '') + ' · ' + weekLabel(rep.week_start), true); renderTabs(true);
 
@@ -1028,7 +1074,7 @@ async function viewReportDetail(app, v) {
           <p class="tiny muted" style="margin:6px 0 0">${rep.review_status === 'pending' ? '확인 전까지는 직접 고칠 수 있습니다.' : '제출한 보고서를 고칠 수 있습니다.'}</p></div>`;
   }
 
-  h += `<h1>${esc(cell?.name || '')}</h1><p class="sub">${weekLabel(rep.week_start, true)}${people.find(p => (p.roles_in_report || []).includes('submitted')) ? tr(' · 제출: ', ' · Submitted by ') + esc(people.filter(p => (p.roles_in_report || []).includes('submitted')).map(p => p.name).join(', ')) : ''}</p>`;
+  h += `<h1>${esc(cell?.name || '')}</h1><p class="sub">${weekLabel(rep.week_start, true)}${people.find(p => (p.roles_in_report || []).includes('submitted')) ? tr(' · 제출: ', ' · Submitted by ') + esc(writerLabel(row.leader_names, people.filter(p => (p.roles_in_report || []).includes('submitted')).map(p => p.name).join(', '))) : ''}</p>`;
 
   if (EN() && isSenior()) {
     h += txStatus(TRANS.map, TRANS.busy, TRANS.err, 'tx-report', rep.id);
@@ -1048,7 +1094,7 @@ async function viewReportDetail(app, v) {
   const abs = att.filter(x => x.attendance === 'absent');
   const visitors = att.filter(x => x.type_in_week === 'visitor' && x.attendance === 'present');
   h += `<div class="stack" style="margin-top:12px">
-    <div class="card"><h3>${tr('모임', 'Meeting')}</h3>${rep.meeting_held ? tr('진행함 · ', 'Held · ') + dayLabel(rep.meeting_date) : rep.meeting_held === false ? tr('진행하지 못함', 'Not held') + '<div class="small">' + TX('cancel', rep.meeting_cancel_reason) + '</div>' : '<span class="muted">' + tr('미입력', 'Not entered') + '</span>'}</div>
+    <div class="card"><h3>${tr('모임', 'Meeting')}</h3>${rep.meeting_held ? tr('진행함 · ', 'Held · ') + dayLabel(rep.meeting_date) + (rep.meeting_time ? ' ' + esc(timeText(rep.meeting_time)) : '') + (rep.meeting_place ? ' · ' + esc(rep.meeting_place) : '') : rep.meeting_held === false ? tr('진행하지 못함', 'Not held') + '<div class="small">' + TX('cancel', rep.meeting_cancel_reason) + '</div>' : '<span class="muted">' + tr('미입력', 'Not entered') + '</span>'}</div>
     <div class="card"><h3>${tr('출석', 'Attendance')}</h3><div class="num">${tr('셀원 ' + listedAtt.length + '명 중 참석 ' + pres.length + '명', pres.length + ' of ' + listedAtt.length + ' members present')}${visitors.length ? tr(' · 방문 ' + visitors.length + '명', ' · ' + visitors.length + ' visitor(s)') : ''}</div>
       ${pres.length ? '<div class="small muted">' + tr('참석', 'Present') + ': ' + pres.map(x => esc(x.name)).join(', ') + '</div>' : ''}
       ${abs.length ? '<div class="small" style="margin-top:4px">' + tr('결석', 'Absent') + ': ' + abs.map(x => esc(x.name) + (x.absence_reason ? ' (' + (TRANS.map && TRANS.map['absence:' + x.member_id] && EN() ? esc(TRANS.map['absence:' + x.member_id]) : esc(x.absence_reason)) + ')' : '')).join(', ') + '</div>' : ''}
@@ -1275,6 +1321,7 @@ async function viewLeadershipHome(app, v) {
   mine.sort((a, b) => order(a) - order(b) || a.cell_name.localeCompare(b.cell_name, 'ko'));
 
   let h = `<h1>${esc(S.me.name)}</h1>` + weekNav(week, 'lh-week') + (showBusan ? campusSeg() : '');
+  h += noticeCard(await rpc('notice_list', { p_limit: 3 }).catch(() => []), true);
   {
     const st = !lr ? ['pill warn', '아직 작성 전'] : lr.status === 'submitted' ? ['pill ok', '제출 완료 · ' + (lr.items || []).length + '명'] : ['pill accent', '작성 중'];
     h += `<div class="card stack" style="margin-bottom:12px"><div class="row"><h3 style="margin:0">교역자 보고</h3><span class="spacer"></span><span class="${st[0]}">${st[1]}</span></div>
@@ -1292,8 +1339,11 @@ async function viewLeadershipHome(app, v) {
     <div class="stat"><div class="v">${reviewed.length}</div><div class="k">확인 완료</div></div>
     <div class="stat ${need.length ? 'warn' : ''}"><div class="v">${need.length}</div><div class="k">확인 필요</div></div>
     <div class="stat ${concern.length ? 'warn' : ''}"><div class="v">${concern.length}</div><div class="k">목양 관심</div></div></div>`;
-  h += '<h2>담당 셀</h2>' + (onBusan ? '<p class="sub" style="margin-top:0">부산 캠퍼스 셀은 교역자 모두가 함께 맡습니다. 먼저 확인하신 분 이름으로 기록됩니다.</p>' : '')
-    + (mine.length ? '<div class="stack">' + mine.map(r => cellItem(r)).join('') + '</div>' : '<p class="empty">' + (onBusan ? '이 주에 부산 캠퍼스 셀이 없습니다.' : '이 주에 담당한 셀이 없습니다.') + '</p>');
+  h += '<h2>담당 셀' + info('lhCells')[0] + '</h2>' + info('lhCells')[1] + (onBusan ? '<p class="sub" style="margin-top:0">부산 캠퍼스 셀은 교역자 모두가 함께 맡습니다. 먼저 확인하신 분 이름으로 기록됩니다.</p>' : '')
+    + (mine.length ? (mine.length > 4 ? `<input type="search" id="lh-q" value="${esc(LHQ.q)}" placeholder="셀 이름이나 셀리더 이름으로 찾기" style="margin:4px 0 10px" autocomplete="off">` : '')
+      + '<div class="stack" id="lh-list">' + mine.map(r => `<div data-q="${esc((r.cell_name + ' ' + (r.leader_names || '')).toLowerCase())}">${cellItem(r)}${canProxy(r) && r.status !== 'submitted'
+          ? `<div style="text-align:right;margin-top:4px"><button class="btn sm ghost" ${r.report_id ? `data-act="open-report" data-id="${r.report_id}"` : `data-act="start-report" data-cell="${r.cell_id}" data-week="${week}"`}>✍️ ${r.report_id ? '대신 이어서 쓰기' : '셀리더 대신 쓰기'}</button></div>` : ''}</div>`).join('') + '</div><p class="empty" id="lh-none" hidden>찾는 셀이 없습니다.</p>'
+      : '<p class="empty">' + (onBusan ? '이 주에 부산 캠퍼스 셀이 없습니다.' : '이 주에 담당한 셀이 없습니다.') + '</p>');
   const manage = onBusan ? mine : mine.filter(r => current.has(r.cell_id));
   if (manage.length) h += '<h3 style="margin:20px 0 8px">셀원 관리</h3><div class="chips">' + manage.map(r => `<button class="chip" data-act="open-members" data-cell="${r.cell_id}" data-name="${esc(r.cell_name)}">${esc(r.cell_name)}</button>`).join('') + '</div>';
   if (own.length) {
@@ -1305,7 +1355,17 @@ async function viewLeadershipHome(app, v) {
   if (!S.ctx.leader_cells.length) h += '<div id="pushbox"></div>';
   h += '<p style="text-align:center;margin-top:24px"><a href="staff-guide.html" style="color:var(--accent);font-weight:500">📖 교역자 사용 안내</a></p>' + HELP_LINE();
   app.innerHTML = h;
+  bindListSearch('#lh-q', '#lh-list', '#lh-none', (v) => { LHQ.q = v; });
   renderPushBox();
+}
+// 목록 검색: 입력하면 data-q에 그 글자가 들어 있는 줄만 남김
+const LHQ = { q: '' };
+function bindListSearch(inputSel, listSel, noneSel, keep) {
+  const q = $(inputSel); if (!q) return;
+  const run = () => { const t = (q.value || '').trim().toLowerCase(); if (keep) keep(q.value); let n = 0;
+    document.querySelectorAll(listSel + ' > [data-q]').forEach(x => { const on = !t || x.dataset.q.includes(t); x.hidden = !on; if (on) n++; });
+    const none = $(noneSel); if (none) none.hidden = n > 0; };
+  q.addEventListener('input', run); run();
 }
 
 /* =====================================================================
@@ -1408,6 +1468,7 @@ async function viewDashboard(app, v) {
 
   let h = `<h1>${tr('전체 현황', 'Overview')}</h1>` + weekNav(week, 'db-week');
   if (hasBusan) h += campusSeg();
+  h += noticeCard(await rpc('notice_list', { p_limit: 3 }).catch(() => []), true);
   h += msgEntry(unread, tr('셀리더에게 보고서와 상관없이 직접 말씀을 전하고, 셀리더가 보낸 메시지와 답장을 봅니다.', 'Send a note to cell leaders anytime and read their messages and replies.'));
   if (pmsgs.length) {
     const short = (t) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > 70 ? t.slice(0, 68) + '…' : t; };
@@ -1430,7 +1491,7 @@ async function viewDashboard(app, v) {
       <button class="listitem" data-act="lr-notes" data-week="${week}"><span class="top"><b>${wkNotes.length ? tr(wkNotes.length + '건의 동정이 있습니다', wkNotes.length + ' note(s)') : tr('이 주에 올라온 동정이 없습니다', 'No notes this week')}</b>${needs ? `<span class="pill warn">${tr('확인 필요 ' + needs, needs + ' need you')}</span>` : ''}</span><span class="small muted">${tr('주간 정리 보기 →', 'Open weekly view →')}</span></button>`;
   }
   h += `<button class="listitem" data-act="open-issues" style="margin-top:8px"><span class="top"><b>${tr('셀원 이슈 보기', 'Member issues')}</b><span class="small muted">${tr('이슈별 · 사람별 →', 'By topic · by person →')}</span></span><span class="small muted">${tr('관계, 장기결석, 건강 등 교회 전체 셀원의 이슈를 모아 봅니다.', 'Relationships, long absences, health and more across the church.')}</span></button>`;
-  h += `<h2>${tr('셀리더 보고서', 'Cell reports')}</h2>`;
+  h += `<h2>${tr('셀리더 보고서', 'Cell reports')}${info('dashCells')[0]}</h2>${info('dashCells')[1]}`;
   if (pending.length) h += `<div class="banner warn"><b>${tr('분파셀리더 확인 대기 ' + pending.length + '건', pending.length + ' report(s) awaiting Leadership review')}</b><div style="margin-top:10px"><button class="btn warn sm" data-act="db-filter" data-v="unreviewed">${tr('미확인 보기', 'Show unreviewed')}</button></div></div>`;
   h += `<div class="stats" style="margin-top:12px">
     <div class="stat"><div class="v num">${N}</div><div class="k">${tr('전체 셀', 'Cells')}</div></div>
@@ -1572,7 +1633,7 @@ async function viewIssues(app, v) {
   rows.forEach(r => { r.cats = catsOf(r); });
   const list = ISS.cat ? rows.filter(r => r.cats.includes(ISS.cat)) : rows;
   const cnt = {}; rows.forEach(r => r.cats.forEach(k => { cnt[k] = (cnt[k] || 0) + 1; }));
-  let h = `<h1>${tr('셀원 이슈 보기', 'Member issues')}</h1><p class="sub">${tr('셀보고서의 셀 케어 기록과 볼 수 있는 성도 동정을 모았습니다.', 'Care notes from cell reports and the pastoral notes you can see.')}</p>`;
+  let h = `<h1>${tr('셀원 이슈 보기', 'Member issues')}${info('issues')[0]}</h1>${info('issues')[1]}<p class="sub">${tr('셀보고서의 셀 케어 기록과 볼 수 있는 성도 동정을 모았습니다.', 'Care notes from cell reports and the pastoral notes you can see.')}</p>`;
   h += campusSeg();
   if (!senior) h += `<div class="seg" style="--n:2;margin-top:12px"><button data-act="iss-scope" data-v="mine" aria-pressed="${ISS.scope === 'mine'}">내 분파</button><button data-act="iss-scope" data-v="all" aria-pressed="${ISS.scope === 'all'}">교회 전체</button></div>`;
   h += `<div class="chips" style="margin-top:10px">${[4, 8, 12].map(w => `<button class="chip" data-act="iss-weeks" data-v="${w}" aria-pressed="${ISS.weeks === w}">${tr('최근 ' + w + '주', 'Last ' + w + ' wks')}</button>`).join('')}</div>`;
@@ -1860,7 +1921,7 @@ async function viewNotesHome(app, v) {
   NOTE.list = rows;
   NOTE.cmts = {};
   if (rows.length) ((await rpc('note_comments_for', { p_notes: rows.map(r => r.id) }).catch(() => [])) || []).forEach(c => { (NOTE.cmts[c.note_id] = NOTE.cmts[c.note_id] || []).push(c); });
-  let h = `<h1>${tr('성도 동정', 'Pastoral notes')}</h1>
+  let h = `<h1>${tr('성도 동정', 'Pastoral notes')}${info('notes')[0]}</h1>${info('notes')[1]}
     <p class="sub">${tr('교역자가 특별히 만난 분들의 소식을 나눕니다. 목사님·사모님은 모든 동정을 보시고, 다른 교역자는 쓴 분이 고른 분만 봅니다.', 'Pastoral staff share news about people they met. Pastor Scott Brenner & Mrs. Sunghee Brenner see every note; other staff see only what is shared with them.')}</p>
     <div style="margin-top:12px"><button class="btn" data-act="note-new">${tr('+ 성도 동정 쓰기', '+ Write a note')}</button></div>`;
   if (canSeeAllNotes()) h += `<div class="chips" style="margin-top:16px">${[['all', tr('최근 순', 'Latest')], ['week', tr('주간 정리', 'By week')], ['needs', isSenior() ? tr('내가 확인할 동정', 'Needs my review') : tr('목사님 확인 필요', 'Needs pastor')], ['mine', tr('내가 쓴 것', 'Mine')]].map(([k, t]) =>
@@ -2036,9 +2097,9 @@ async function clAct(fn, args, okMsg, after) {
 }
 async function viewMembers(app, v) {
   setTop(tr('셀원 관리', 'Members'), true); renderTabs(false);
-  const [rows, targets, info] = await Promise.all([rpc('member_list', { p_cell: v.cell }), rpc('member_move_targets', { p_cell: v.cell }).catch(() => []), rpc('cell_admin_info', { p_cell: v.cell }).catch(() => null)]);
-  MEM.targets = targets || []; CL.info = info;
-  const label = { member: [tr('정식 셀원', 'Member'), ''], visitor: [tr('방문자', 'Visitor'), 'accent'], left: [tr('명단에서 내림', 'Removed from list'), ''], hidden: [tr('목록에서 내림', 'Hidden'), ''] };
+  const [rows, targets, cinfo, sch] = await Promise.all([rpc('member_list', { p_cell: v.cell }), rpc('member_move_targets', { p_cell: v.cell }).catch(() => []), rpc('cell_admin_info', { p_cell: v.cell }).catch(() => null), rpc('cell_schedule', { p_cell: v.cell }).then(x => (x || [])[0] || {}).catch(() => ({}))]);
+  MEM.targets = targets || []; CL.info = cinfo; MEM.sched = sch || {};
+  const label = { member: [tr('정식 셀원', 'Member'), ''], visitor: [tr('방문자', 'Visitor'), 'accent'], left: [tr('명단에서 내림', 'Removed from list'), ''], hidden: [tr('목록에서 내림', 'Hidden'), ''] , hold: [tr('보류', 'On hold'), 'warn'] };
   const item = (m) => {
     const [t, c] = label[m.state];
     const confirming = MEM.confirm === m.id;
@@ -2053,6 +2114,9 @@ async function viewMembers(app, v) {
     } else if (confirming) {
       actions = `<div class="banner warn small" style="margin-top:8px"><b>${m.state === 'visitor' ? tr(esc(m.name) + '님을 방문자 목록에서 내릴까요?', 'Remove ' + esc(m.name) + ' from visitors?') : tr(esc(m.name) + '님을 이번 주부터 출석 명단에서 내릴까요?', 'Remove ' + esc(m.name) + ' from attendance from this week?')}</b>${m.state === 'visitor' ? tr('내리면 셀원 관리 화면에서도 보이지 않습니다. 지난 출석 기록은 그대로 남습니다.', 'They will no longer appear here. Past attendance stays.') : tr('지난 출석 기록은 그대로 남고, 언제든 다시 올릴 수 있습니다.', 'Past attendance stays, and you can add them back anytime.')}
         <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="mem-leave" data-id="${m.id}">${tr('내리기', 'Remove')}</button><button class="btn sm ghost" data-act="mem-cancel">${tr('취소', 'Cancel')}</button></div></div>`;
+    } else if (m.state === 'hold') {
+      actions = `<div class="row" style="gap:12px;margin-top:6px;flex-wrap:wrap"><button class="link" data-act="mem-restore" data-id="${m.id}">${tr('다시 출석 명단으로', 'Back to attendance')}</button>
+        ${m.can_delete ? `<button class="link" data-act="mem-del-ask" data-id="${m.id}" style="color:var(--danger)">${tr('삭제', 'Delete')}</button>` : ''}</div>`;
     } else if (m.state === 'left' || m.state === 'hidden') {
       actions = `<div class="row" style="gap:12px;margin-top:6px"><button class="link" data-act="mem-restore" data-id="${m.id}">${tr('다시 올리기', 'Add back')}</button></div>`;
     } else {
@@ -2060,6 +2124,7 @@ async function viewMembers(app, v) {
         ${m.state === 'visitor' ? `<button class="link" data-act="mem-register" data-id="${m.id}">${tr('정식 셀원으로', 'Make a member')}</button>` : ''}
         ${m.state === 'member' ? `<button class="link" data-act="mem-sep" data-id="${m.id}" data-v="${m.meets_separately ? '0' : '1'}">${m.meets_separately ? tr('모임 셀원으로', 'Meets with the group') : tr('따로 만나는 셀원으로', 'Meets separately')}</button>` : ''}
         ${MEM.targets.length ? `<button class="link" data-act="mem-move-ask" data-id="${m.id}">${tr('다른 셀로 옮기기', 'Move to another cell')}</button>` : ''}
+        <button class="link" data-act="mem-hold" data-id="${m.id}">${tr('보류로 옮기기', 'Put on hold')}</button>
         <button class="link" data-act="mem-confirm" data-id="${m.id}">${m.state === 'visitor' ? tr('목록에서 내리기', 'Remove') : tr('출석 명단에서 내리기', 'Remove from attendance')}</button>
         ${m.can_delete ? `<button class="link" data-act="mem-del-ask" data-id="${m.id}" style="color:var(--danger)">${tr('삭제', 'Delete')}</button>` : ''}</div>`;
     }
@@ -2069,12 +2134,23 @@ async function viewMembers(app, v) {
   const now = rows.filter(m => m.state === 'member' || m.state === 'visitor');
   // 목록에서 내린 방문자(이번 주에 넣었다가 내린 분 포함)는 아예 보이지 않게
   const gone = rows.filter(m => m.state === 'left');
-  let h = `<h1>${esc(v.cellName)} · ${tr('셀원 관리', 'Members')}</h1><p class="sub">${tr('이번 주 출석 명단에 나오는 분들입니다. 바꾼 내용은 기록으로 남습니다.', 'People on this week’s attendance list. Changes are recorded.')}</p>
+  const hold = rows.filter(m => m.state === 'hold');
+  const sc = MEM.sched || {};
+  let h = `<h1>${esc(v.cellName)} · ${tr('셀원 관리', 'Members')}${info('members')[0]}</h1>${info('members')[1]}<p class="sub">${tr('이번 주 출석 명단에 나오는 분들입니다. 바꾼 내용은 기록으로 남습니다.', 'People on this week’s attendance list. Changes are recorded.')}</p>
     <div class="card stack" style="margin-top:12px"><label class="field">${tr('새 셀원 추가', 'Add a member')}
       <input type="text" id="mem-new" maxlength="40" placeholder="${tr('이름 (동명이인은 김민수A처럼)', 'Name')}"></label>
       <button class="btn" data-act="mem-add" ${MEM.busy ? 'disabled' : ''}>${tr('이번 주부터 셀원으로 추가', 'Add from this week')}</button></div>
     <h2>${tr('지금 셀원 ' + now.length + '명', 'Current members (' + now.length + ')')}</h2><div class="card">${now.length ? now.map(item).join('') : '<p class="empty">' + tr('셀원이 없습니다.', 'No members.') + '</p>'}</div>`;
+  if (hold.length) h += `<h2>${tr('보류 중인 셀원 ' + hold.length + '명', 'On hold (' + hold.length + ')')}</h2><p class="sub" style="margin-top:0">${tr('출석 명단에는 나오지 않고 결석으로도 세지 않습니다. 다시 모이시면 「다시 출석 명단으로」를 눌러 주세요.', 'Not on the attendance list and not counted as absent.')}</p><div class="card">${hold.map(item).join('')}</div>`;
   if (gone.length) h += `<h2>${tr('명단에서 내린 분', 'Removed')}</h2><div class="card">${gone.map(item).join('')}</div>`;
+  // 셀의 원래 모임 요일·시간·장소 (보고서 「모임」 단계에 미리 채워짐)
+  h += `<h2>${tr('모임 시간·장소', 'Meeting time & place')}</h2><div class="card stack">
+    <p class="tiny muted" style="margin:0">${tr('원래 모이는 요일·시간·장소입니다. 보고서를 쓸 때 미리 채워지고, 실제로 다르게 모인 주에는 보고서에서 고치면 됩니다.', 'Your usual meeting. It is pre-filled in reports.')}</p>
+    <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <label class="field" style="flex:1 1 110px;margin:0">${tr('요일', 'Day')}<select id="sc-day"><option value="">—</option>${DAYS7.map(d => `<option ${sc.meet_day === d ? 'selected' : ''}>${d}</option>`).join('')}</select></label>
+      <label class="field" style="flex:1 1 130px;margin:0">${tr('시간', 'Time')}<input type="time" id="sc-time" value="${esc(sc.meet_time || '')}"></label></div>
+    <label class="field" style="margin:0">${tr('장소', 'Place')}<input type="text" id="sc-place" maxlength="80" placeholder="${tr('예: 셀리더 댁, 교회 2층 소그룹실', 'e.g. Leader’s home')}" value="${esc(sc.meet_place || '')}"></label>
+    <button class="btn" data-act="sc-save" data-cell="${v.cell}" ${MEM.busy ? 'disabled' : ''}>${tr('모임 시간·장소 저장', 'Save')}</button></div>`;
   h += leaderBlock(v.cell);
   app.innerHTML = h;
 }
@@ -2181,7 +2257,7 @@ function demoRpc(name, a) {
   };
   if (Object.prototype.hasOwnProperty.call(R, name)) return Promise.resolve(JSON.parse(JSON.stringify(R[name])));
   if (/^(save_push_subscription|delete_push_subscription)$/.test(name)) return Promise.resolve(null);
-  if (/^(save|submit|request|review|reopen|move|add|member_|cell_|lr_save|pastor_msg|pastoral_note_(save|delete|ack)|note_comment_(add|delete)|senior_comment_(add|delete)|msg_(start|post)|individual_care_(add|remove)|admin_)/.test(name)) return Promise.reject(demoErr());
+  if (/^(save|submit|request|review|reopen|move|add|member_|cell_|notice_(create|delete)|lr_save|pastor_msg|pastoral_note_(save|delete|ack)|note_comment_(add|delete)|senior_comment_(add|delete)|msg_(start|post)|individual_care_(add|remove)|admin_)/.test(name)) return Promise.reject(demoErr());
   return Promise.resolve([]);
 }
 function demoTable(p) {
@@ -2262,11 +2338,63 @@ function msgHelp() {
       ${li(tr('<b>대화에 들어 있는 분만</b> 볼 수 있습니다. 다른 셀리더나 교역자에게는 보이지 않습니다.', 'Only the people in the conversation can see it.'))}
     </ul></details>`;
 }
+/* =====================================================================
+   공지 — 교역자·목사님·사모님·관리자가 쓰고, 로그인한 모든 분이 봄 (새 공지는 휴대폰 알림)
+   ===================================================================== */
+const NOTICE = { title: '', body: '', busy: false, del: null };
+const noticeSeen = () => { try { return localStorage.getItem('cc_notice_seen') || ''; } catch (_) { return ''; } };
+// 첫 화면 공지 칸: 14일 안의 최근 공지. 아직 안 보신 공지는 크게, 보신 공지는 한 줄로
+function noticeCard(list, canPost) {
+  list = list || [];
+  const recent = list.filter(n => Date.now() - new Date(n.created_at).getTime() < 14 * 86400000);
+  if (!recent.length) return canPost ? `<button class="listitem" data-act="notice-open" style="margin-bottom:12px"><span class="top"><b>📢 ${tr('공지', 'Notices')}</b><span class="small muted">${tr('공지 쓰기 →', 'Post →')}</span></span><span class="small muted">${tr('셀리더와 교역자 모두에게 알릴 내용을 올릴 수 있습니다.', 'Post a notice to everyone.')}</span></button>` : '';
+  const n = recent[0];
+  if (noticeSeen() === n.id) return `<button class="listitem" data-act="notice-open" style="margin-bottom:12px"><span class="top"><b>📢 ${esc(n.title)}</b><span class="small muted">${tr('공지 →', 'Notices →')}</span></span><span class="tiny muted">${esc(n.author)} · ${dateTime(n.created_at)}</span></button>`;
+  const short = String(n.body || '').replace(/\s+/g, ' ').trim();
+  return `<button class="listitem" data-act="notice-open" style="margin-bottom:12px;border:1.5px solid #C2410C;background:#FFF7ED">
+    <span class="top"><b>📢 ${esc(n.title)}</b><span class="pill warn">${tr('새 공지', 'New')}</span></span>
+    ${short ? `<span class="small">${esc(short.length > 90 ? short.slice(0, 88) + '…' : short)}</span>` : ''}
+    <span class="tiny muted">${esc(n.author)} · ${dateTime(n.created_at)} · ${tr('눌러서 보기', 'Tap to read')}</span></button>`;
+}
+async function viewNotices(app) {
+  setTop(tr('공지', 'Notices'), true); renderTabs(false);
+  const [list, canPost] = await Promise.all([rpc('notice_list', { p_limit: 50 }).catch(() => []), rpc('notice_can_post').catch(() => false)]);
+  if (list && list[0]) { try { localStorage.setItem('cc_notice_seen', list[0].id); } catch (_) {} }
+  let h = `<h1>${tr('공지', 'Notices')}${info('notice')[0]}</h1>${info('notice')[1]}`;
+  if (canPost === true) h += `<div class="card stack" style="margin-top:8px"><h3 style="margin:0">${tr('새 공지 쓰기', 'New notice')}</h3>
+      <label class="field" style="margin:0">${tr('제목', 'Title')}<input type="text" id="nt-title" maxlength="80" value="${esc(NOTICE.title)}" placeholder="${tr('예: 이번 주 셀보고서는 토요일까지 받습니다', 'Title')}"></label>
+      <label class="field" style="margin:0">${tr('내용', 'Message')}<textarea id="nt-body" rows="5" maxlength="3000" placeholder="${tr('자세한 내용을 적어 주세요 (선택)', 'Details (optional)')}">${esc(NOTICE.body)}</textarea></label>
+      <p class="tiny muted" style="margin:0">${tr('올리면 앱을 쓰는 모든 분(셀리더·교역자·목사님·사모님)의 첫 화면에 보이고, 알림을 켠 분께는 휴대폰 알림이 갑니다.', 'Everyone will see it on their home screen and get a notification.')}</p>
+      <button class="btn" data-act="notice-post" ${NOTICE.busy ? 'disabled' : ''}>${tr('공지 올리기', 'Post notice')}</button></div>`;
+  h += `<h2>${tr('지난 공지', 'All notices')} <span class="muted" style="font-weight:400">${(list || []).length}</span></h2>`;
+  h += (list && list.length) ? '<div class="stack">' + list.map(n => `<div class="card">
+      <div class="row" style="gap:8px;align-items:flex-start"><b style="font-size:1.05em">📢 ${esc(n.title)}</b><span class="spacer"></span></div>
+      <div class="tiny muted" style="margin:2px 0 6px">${esc(n.author)} · ${dateTime(n.created_at)}</div>
+      ${n.body ? `<div class="small">${nl2br(n.body)}</div>` : ''}
+      ${n.can_delete ? (NOTICE.del === n.id
+        ? `<div class="banner warn small" style="margin-top:8px"><b>${tr('이 공지를 내릴까요?', 'Remove this notice?')}</b><div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="notice-del" data-id="${n.id}">${tr('내리기', 'Remove')}</button><button class="btn sm ghost" data-act="notice-del-x">${tr('취소', 'Cancel')}</button></div></div>`
+        : `<div style="margin-top:8px"><button class="link" data-act="notice-del-ask" data-id="${n.id}" style="color:var(--danger)">${tr('공지 내리기', 'Remove')}</button></div>`) : ''}</div>`).join('') + '</div>'
+    : `<p class="empty">${tr('아직 올라온 공지가 없습니다.', 'No notices yet.')}</p>`;
+  app.innerHTML = h;
+}
+async function noticePost() {
+  const title = ($('#nt-title')?.value || '').trim(), body = ($('#nt-body')?.value || '').trim();
+  NOTICE.title = title; NOTICE.body = body;
+  if (!title) return toast(tr('공지 제목을 적어 주세요.', 'Please enter a title.'));
+  if (NOTICE.busy) return; NOTICE.busy = true;
+  try {
+    const id = await rpc('notice_create', { p_title: title, p_body: body });
+    NOTICE.title = ''; NOTICE.body = '';
+    try { const { data } = await sb.auth.getSession(); fetch('api/notify-note', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ notice: id }) }).catch(() => {}); } catch (_) {}
+    toast(tr('공지를 올렸습니다.', 'Posted.'));
+  } catch (e) { toast(errText(e), 4500); }
+  NOTICE.busy = false; render();
+}
 async function viewMessages(app) {
   setTop(tr('메시지', 'Messages'), true); renderTabs(true);
   const [list, contacts] = await Promise.all([rpc('msg_list'), rpc('msg_contacts').catch(() => [])]);
   MSG.contacts = contacts || [];
-  let h = `<h1>${tr('메시지', 'Messages')}</h1>`;
+  let h = `<h1>${tr('메시지', 'Messages')}${info('messages')[0]}</h1>${info('messages')[1]}`;
   if (MSG.contacts.length) h += `<button class="btn" style="margin:8px 0 4px" data-act="msg-new">${tr('새 메시지 보내기', 'New message')}</button>
     <p class="small muted" style="margin:0 0 12px">${isSenior() ? tr('셀리더 한 분이나 여러 분께, 보고서와 상관없이 언제든 말씀을 전하실 수 있습니다.', 'Send a note to one or more cell leaders anytime.') : tr('담임 목사님, 사모님, 교역자들에게 셀 보고서에 담지 못한 내용을 직접 전달하실 수 있습니다.', 'Send what didn’t fit in the report directly to staff, Pastor or Mrs. Brenner.')}</p>`;
   h += list.length ? '<div class="stack">' + list.map(t => `<button class="listitem" data-act="msg-thread" data-id="${t.id}"${t.unread ? ' style="border-color:var(--accent);background:#F7F9FC"' : ''}>
@@ -2609,6 +2737,12 @@ document.addEventListener('click', async (e) => {
   const a = el.dataset.act; const d = el.dataset;
   switch (a) {
     case 'noop': return;
+    case 'notice-open': return go({ name: 'notices' });
+    case 'notice-post': return noticePost();
+    case 'notice-del-ask': NOTICE.del = d.id; return render();
+    case 'notice-del-x': NOTICE.del = null; return render();
+    case 'notice-del': try { await rpc('notice_delete', { p_id: d.id }); toast(tr('공지를 내렸습니다.', 'Removed.')); } catch (e) { toast(errText(e), 4500); } NOTICE.del = null; return render();
+    case 'info': { const b = document.getElementById('ib-' + d.k); if (b) { b.hidden = !b.hidden; el.setAttribute('aria-expanded', String(!b.hidden)); } return; }
     case 'back': if (E) { await save(); E = null; hideFooter(); } return back();
     case 'reload': return render();
     case 'tab': if (E) { await save(); E = null; hideFooter(); } return switchTab(d.id);
@@ -2692,7 +2826,9 @@ document.addEventListener('click', async (e) => {
       const cn = (MEM.targets.find(c => c.id === to) || {}).name || '';
       MEM.move = null; return memAct('member_move', { p_member: d.id, p_target: to }, tr(cn + '로 옮겼습니다.', 'Moved to ' + cn + '.')); }
     case 'mem-leave': return memAct('member_leave', { p_member: d.id }, tr('명단에서 내렸습니다.', 'Removed.'));
-    case 'mem-restore': return memAct('member_restore', { p_member: d.id }, tr('다시 올렸습니다.', 'Added back.'));
+    case 'mem-restore': return memAct('member_restore', { p_member: d.id }, tr('다시 출석 명단에 올렸습니다.', 'Added back.'));
+    case 'mem-hold': return memAct('member_hold', { p_member: d.id }, tr('보류로 옮겼습니다. 아래 「보류 중인 셀원」에 있습니다.', 'Put on hold.'));
+    case 'sc-save': return memAct('cell_set_schedule', { p_cell: d.cell, p_day: $('#sc-day').value, p_time: $('#sc-time').value, p_place: $('#sc-place').value }, tr('모임 시간·장소를 저장했습니다.', 'Saved.'));
     case 'mem-register': return memAct('register_member', { p_member: d.id }, tr('정식 셀원으로 등록했습니다.', 'Registered as a member.'));
     case 'push-off': return pushOff();
     case 'push-test': return pushTest();
