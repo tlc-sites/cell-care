@@ -1563,14 +1563,17 @@ async function viewIssues(app, v) {
   setTop(tr('셀원 이슈', 'Member issues'), true); renderTabs(true);
   const senior = isSenior();
   const scope = senior ? 'all' : ISS.scope;
-  const rows = await rpc('issue_board', { p_weeks: ISS.weeks, p_scope: scope });
-  ISS.rows = rows || [];
+  const allRows = (await rpc('issue_board', { p_weeks: ISS.weeks, p_scope: scope })) || [];
+  ISS.rows = allRows;
+  // 분당 / 부산 탭 (분파셀리더 화면과 같은 선택을 함께 씀)
+  const rows = allRows.filter(r => (r.campus === '부산' ? '부산' : '분당') === CAMP.v);
   // 한 기록에 유형을 여러 개 고른 경우 모든 유형에서 보이게. 관계 상대를 적은 기록은 「관계」에도 들어감
   const catsOf = (r) => { const c = (r.categories && r.categories.length ? r.categories : [r.category]).filter(Boolean); if (r.relation_kind && !c.includes('relationship')) c.push('relationship'); return [...new Set(c)]; };
   rows.forEach(r => { r.cats = catsOf(r); });
   const list = ISS.cat ? rows.filter(r => r.cats.includes(ISS.cat)) : rows;
   const cnt = {}; rows.forEach(r => r.cats.forEach(k => { cnt[k] = (cnt[k] || 0) + 1; }));
   let h = `<h1>${tr('셀원 이슈 보기', 'Member issues')}</h1><p class="sub">${tr('셀보고서의 셀 케어 기록과 볼 수 있는 성도 동정을 모았습니다.', 'Care notes from cell reports and the pastoral notes you can see.')}</p>`;
+  h += campusSeg();
   if (!senior) h += `<div class="seg" style="--n:2;margin-top:12px"><button data-act="iss-scope" data-v="mine" aria-pressed="${ISS.scope === 'mine'}">내 분파</button><button data-act="iss-scope" data-v="all" aria-pressed="${ISS.scope === 'all'}">교회 전체</button></div>`;
   h += `<div class="chips" style="margin-top:10px">${[4, 8, 12].map(w => `<button class="chip" data-act="iss-weeks" data-v="${w}" aria-pressed="${ISS.weeks === w}">${tr('최근 ' + w + '주', 'Last ' + w + ' wks')}</button>`).join('')}</div>`;
   h += `<div class="chips" style="margin-top:6px"><button class="chip" data-act="iss-cat" data-v="" aria-pressed="${!ISS.cat}">${tr('전체', 'All')} ${rows.length}</button>${NOTE_CAT_KEYS.filter(k => cnt[k] || k === 'relationship').map(k => `<button class="chip" data-act="iss-cat" data-v="${k}" aria-pressed="${ISS.cat === k}">${noteCat(k)} ${cnt[k] || 0}</button>`).join('')}</div>`;
