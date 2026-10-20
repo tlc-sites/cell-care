@@ -1565,12 +1565,15 @@ async function viewIssues(app, v) {
   const scope = senior ? 'all' : ISS.scope;
   const rows = await rpc('issue_board', { p_weeks: ISS.weeks, p_scope: scope });
   ISS.rows = rows || [];
-  const list = ISS.cat ? rows.filter(r => r.category === ISS.cat || (ISS.cat === 'relationship' && r.relation_kind)) : rows;
-  const cnt = {}; rows.forEach(r => { cnt[r.category] = (cnt[r.category] || 0) + 1; });
+  // 한 기록에 유형을 여러 개 고른 경우 모든 유형에서 보이게. 관계 상대를 적은 기록은 「관계」에도 들어감
+  const catsOf = (r) => { const c = (r.categories && r.categories.length ? r.categories : [r.category]).filter(Boolean); if (r.relation_kind && !c.includes('relationship')) c.push('relationship'); return [...new Set(c)]; };
+  rows.forEach(r => { r.cats = catsOf(r); });
+  const list = ISS.cat ? rows.filter(r => r.cats.includes(ISS.cat)) : rows;
+  const cnt = {}; rows.forEach(r => r.cats.forEach(k => { cnt[k] = (cnt[k] || 0) + 1; }));
   let h = `<h1>${tr('셀원 이슈 보기', 'Member issues')}</h1><p class="sub">${tr('셀보고서의 셀 케어 기록과 볼 수 있는 성도 동정을 모았습니다.', 'Care notes from cell reports and the pastoral notes you can see.')}</p>`;
   if (!senior) h += `<div class="seg" style="--n:2;margin-top:12px"><button data-act="iss-scope" data-v="mine" aria-pressed="${ISS.scope === 'mine'}">내 분파</button><button data-act="iss-scope" data-v="all" aria-pressed="${ISS.scope === 'all'}">교회 전체</button></div>`;
   h += `<div class="chips" style="margin-top:10px">${[4, 8, 12].map(w => `<button class="chip" data-act="iss-weeks" data-v="${w}" aria-pressed="${ISS.weeks === w}">${tr('최근 ' + w + '주', 'Last ' + w + ' wks')}</button>`).join('')}</div>`;
-  h += `<div class="chips" style="margin-top:6px"><button class="chip" data-act="iss-cat" data-v="" aria-pressed="${!ISS.cat}">${tr('전체', 'All')} ${rows.length}</button>${NOTE_CAT_KEYS.filter(k => cnt[k]).map(k => `<button class="chip" data-act="iss-cat" data-v="${k}" aria-pressed="${ISS.cat === k}">${noteCat(k)} ${cnt[k]}</button>`).join('')}</div>`;
+  h += `<div class="chips" style="margin-top:6px"><button class="chip" data-act="iss-cat" data-v="" aria-pressed="${!ISS.cat}">${tr('전체', 'All')} ${rows.length}</button>${NOTE_CAT_KEYS.filter(k => cnt[k] || k === 'relationship').map(k => `<button class="chip" data-act="iss-cat" data-v="${k}" aria-pressed="${ISS.cat === k}">${noteCat(k)} ${cnt[k] || 0}</button>`).join('')}</div>`;
   if (EN() && senior && rows.length) {
     if (ISS.txWeeks !== ISS.weeks && !ISS.txBusy) { ISS.tx = null; ISS.txErr = ''; }
     h += txStatus(ISS.tx, ISS.txBusy, ISS.txErr, 'iss-tx');
@@ -1581,7 +1584,7 @@ async function viewIssues(app, v) {
   const who = (r) => r.source === 'report' ? 'm:' + r.person_id : 'n:' + r.person_name;
   const relOther = (r) => r.related_name || '';
   const item = (r, asOther) => `<div class="note${r.attention ? ' attn' : ''}" style="margin-top:8px">
-      <div class="row" style="flex-wrap:wrap;gap:6px"><span class="pill">${noteCat(r.category)}</span>${r.source === 'note' ? `<span class="pill accent">${tr('성도 동정', 'Pastoral note')}</span>` : ''}${asOther ? `<span class="pill warn">${tr('상대로 언급됨', 'Mentioned as the other person')}</span>` : ''}<span class="spacer"></span><span class="tiny muted">${dayLabel(r.on_date)}</span></div>
+      <div class="row" style="flex-wrap:wrap;gap:6px">${(r.cats || [r.category]).map(k => `<span class="pill">${noteCat(k)}</span>`).join('')}${r.source === 'note' ? `<span class="pill accent">${tr('성도 동정', 'Pastoral note')}</span>` : ''}${asOther ? `<span class="pill warn">${tr('상대로 언급됨', 'Mentioned as the other person')}</span>` : ''}<span class="spacer"></span><span class="tiny muted">${dayLabel(r.on_date)}</span></div>
       ${r.relation_kind && relOther(r) ? `<div class="small" style="margin-top:4px"><b>${esc(relText(r.person_name, relOther(r), r.relation_kind))}</b></div>` : ''}
       <div class="small" style="margin-top:4px">${(() => { const en = EN() && ISS.tx && ISS.tx['iss:' + r.source + ':' + r.item_id]; return en ? nl2br(en) + '<div class="tiny muted" style="margin-top:2px">' + nl2br(r.content) + '</div>' : nl2br(r.content); })()}</div>
       <div class="tiny muted" style="margin-top:2px">${r.source === 'report' ? esc(r.cell_name || '') + (r.resp_name ? ' · ' + esc(r.resp_name) : '') + ' · ' + tr('셀리더 ', 'by ') + esc(r.author_name || '') : tr('쓴 분: ', 'By ') + esc(r.author_name || '')}</div>
@@ -1620,7 +1623,7 @@ async function viewIssues(app, v) {
     const arr = [...groups.entries()].map(([k, g]) => ({ k, ...g, last: g.items.reduce((m, x) => x.r.on_date > m ? x.r.on_date : m, '') }))
       .sort((a, b) => b.items.length - a.items.length || (b.last > a.last ? 1 : -1));
     h += `<h2>${tr('사람별', 'By person')} <span class="muted" style="font-weight:400">${arr.length}${tr('명', '')}</span></h2><div class="stack">` + arr.map(g => {
-      const cats = [...new Set(g.items.map(x => x.r.category))];
+      const cats = [...new Set(g.items.flatMap(x => x.r.cats || [x.r.category]))];
       // 하나만 열림 (다른 카드를 열면 닫힘). 열고 닫을 때 다시 불러오지 않고 화면에서 바로 펼침
       const open = ISS.open === g.k;
       return `<div class="card" data-iss-card="${esc(g.k)}"><button class="row" data-act="iss-open" data-k="${esc(g.k)}" aria-expanded="${open}" style="all:unset;display:flex;width:100%;gap:8px;align-items:center;flex-wrap:wrap;cursor:pointer">
