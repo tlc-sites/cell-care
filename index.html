@@ -207,7 +207,7 @@ const L = {
   escalation: { normal: '일반', attention: '관심 필요', pastoral: '목양 확인 필요', urgent: '긴급 확인 필요' },
   message: {
     none: '없음', prayer: '기도가 필요합니다', contact: '연락 또는 상담이 필요합니다',
-    advice: '분파셀리더의 조언이 필요합니다', share_up: '상위 Leadership 공유가 필요합니다'
+    advice: '교역자의 조언이 필요합니다', share_up: '상위 Leadership 공유가 필요합니다'
   },
   att: { present: '참석', absent: '결석', unknown: '미확인' },
   care: {
@@ -283,7 +283,7 @@ function isSenior() { return hasRole('senior_pastor') || hasRole('samonim'); }
 function availableTabs() {
   const t = [];
   if (S.ctx.leader_cells.length || S.ctx.my_open_reports.length) t.push({ id: 'leader', label: tr('셀리더', 'Cell Leader') });
-  if (hasRole('leadership')) t.push({ id: 'leadership', label: tr('분파셀리더', 'Leadership') });
+  if (hasRole('leadership')) t.push({ id: 'leadership', label: S.me?.name || tr('교역자', 'Pastoral staff') });
   if (isSenior()) t.push({ id: 'senior', label: tr('전체 현황', 'Overview') });
   if (hasRole('leadership') || isSenior()) t.push({ id: 'notes', label: tr('성도 동정', 'Notes') });
   if (hasRole('admin')) t.push({ id: 'admin', label: tr('관리', 'Admin') });
@@ -498,8 +498,8 @@ function leaderCardState(r) {
   if (!r) return { pill: '<span class="pill">작성 전</span>', text: '아직 작성하지 않았습니다.', btn: '보고서 작성하기', cls: '' };
   if (r.status === 'draft' && r.submission_no > 0) return { pill: '<span class="pill warn">고치는 중</span>', text: '제출했던 보고서를 고치는 중입니다. 다시 제출해야 반영됩니다.', btn: '고친 보고서 다시 제출하기', cls: 'warn' };
   if (r.status === 'draft') return { pill: '<span class="pill accent">작성 중</span>', text: '작성 중인 보고서가 있습니다. 자동으로 저장되어 있어요.', btn: '작성 계속하기', cls: '' };
-  if (r.status === 'revision_requested') return { pill: '<span class="pill warn">수정 요청</span>', text: reviewerName(r.review_mode) + (r.review_mode === 'senior_direct' ? '께서 수정을 요청하셨습니다.' : '가 수정을 요청했습니다.'), btn: '수정해서 다시 제출하기', cls: 'warn' };
-  if (r.review_status === 'reviewed') return { pill: '<span class="pill ok">확인 완료</span>', text: '제출한 보고서를 ' + reviewerName(r.review_mode) + (r.review_mode === 'senior_direct' ? '께서 확인하셨습니다.' : '가 확인했습니다.'), btn: '제출한 보고서 보기', cls: 'quiet' };
+  if (r.status === 'revision_requested') return { pill: '<span class="pill warn">수정 요청</span>', text: reviewerName(r.review_mode, r.responsible_leadership_name || r.leadership || assignedName(r.cell_id)) + '께서 수정을 요청하셨습니다.', btn: '수정해서 다시 제출하기', cls: 'warn' };
+  if (r.review_status === 'reviewed') return { pill: '<span class="pill ok">확인 완료</span>', text: '제출한 보고서를 ' + reviewerName(r.review_mode, r.responsible_leadership_name || r.leadership || assignedName(r.cell_id)) + '께서 확인하셨습니다.', btn: '제출한 보고서 보기', cls: 'quiet' };
   if (r.review_status === 'not_required') return { pill: '<span class="pill ok">제출 완료</span>', text: '보고서를 제출했습니다. 고칠 내용이 있으면 보고서를 열어 고칠 수 있어요.', btn: '제출한 보고서 보기', cls: 'quiet' };
   return { pill: '<span class="pill ok">제출 완료</span>', text: '제출했습니다. 확인을 기다리고 있어요. 확인 전까지는 직접 고칠 수 있습니다.', btn: '제출한 보고서 보기', cls: 'quiet' };
 }
@@ -537,7 +537,7 @@ async function viewLeaderHome(app) {
         <div style="margin-top:10px"><button class="btn warn sm" data-act="open-report" data-id="${r.report_id}">수정하러 가기</button></div></div>`).join('') + '</div>';
   }
   for (const c of ctx.leader_cells) {
-    const leadershipLine = c.review_mode === 'leadership' ? ('담당 분파셀리더: ' + esc(c.leadership || '배정 전'))
+    const leadershipLine = c.review_mode === 'leadership' ? esc(c.leadership || '담당 배정 전')
       : c.review_mode === 'senior_direct' ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인' : '검토 없이 제출만 하는 셀';
     h += `<div class="row" style="margin-top:28px;align-items:center"><h2 style="margin:0">${esc(c.name)}</h2><span class="spacer"></span><button class="btn sm ghost" data-act="open-members" data-cell="${c.cell_id}" data-name="${esc(c.name)}">셀원 관리</button></div><p class="sub">${leadershipLine}${c.leaders && c.leaders.length > 1 ? ' · 공동 셀리더: ' + esc(c.leaders.join(', ')) : ''}</p><div class="stack">`;
     const weeks = [thisWeek];
@@ -571,7 +571,7 @@ async function viewLeaderHome(app) {
   h += '<h2>최근 보고서</h2>';
   h += recent.length ? '<div class="stack">' + recent.slice(0, 8).map(r => {
     const cell = ctx.leader_cells.find(c => c.cell_id === r.cell_id);
-    const rv = r.review_status === 'reviewed' ? '<span class="pill ok">분파셀리더 확인 완료</span>' : r.review_status === 'not_required' ? '<span class="pill ok">제출 완료</span>' : '<span class="pill">확인 대기</span>';
+    const rv = r.review_status === 'reviewed' ? '<span class="pill ok">교역자 확인 완료</span>' : r.review_status === 'not_required' ? '<span class="pill ok">제출 완료</span>' : '<span class="pill">확인 대기</span>';
     return `<button class="listitem" data-act="open-report" data-id="${r.id}"><span class="top"><b>${weekLabel(r.week_start)}${ctx.leader_cells.length > 1 ? ' · ' + esc(cell?.name || '') : ''}</b>${rv}</span></button>`;
   }).join('') + '</div>' : '<p class="empty">아직 제출한 보고서가 없습니다.</p>';
   h += HELP_LINE();
@@ -709,8 +709,9 @@ function info(k) {
     `<div class="ibox" id="ib-${k}" hidden>${INFO[k] || ''}</div>`];
 }
 const HELP_LINE = () => `<p class="tiny muted" style="text-align:center;margin:16px 0 0">${tr('앱 사용 중 문제가 있으면 김도현 간사에게 문의해 주세요.', 'If you have any trouble with the app, please contact Dohyun Kim.')}</p>`;
-const catsLabel = (n) => ((n.categories && n.categories.length) ? n.categories : (n.category ? [n.category] : [])).map(k => LX('care', k)).join(', ');
-const reviewerName = (mode) => mode === 'senior_direct' ? '담임 목사님·사모님' : '담당 분파셀리더';
+const catsLabel = (n) => ((n.categories && n.categories.length) ? n.categories : (n.category ? [n.category] : ((n.prayer || '').trim() ? ['prayer'] : []))).map(k => LX('care', k)).join(', ');
+const reviewerName = (mode, name) => mode === 'senior_direct' ? '담임 목사님·사모님' : (name || '담당자');
+const assignedName = (cellId) => (S.ctx?.leader_cells || []).find(c => c.cell_id === cellId)?.leadership || '';
 /* 관계 기록: 서로 어려워함 / 이 분이 상대 때문에 어려워함 */
 function relText(subject, other, kind) {
   if (!other) return '';
@@ -747,7 +748,7 @@ async function loadEditor(id) {
       meeting_held: rep.meeting_held, meeting_date: rep.meeting_date || '', meeting_cancel_reason: rep.meeting_cancel_reason || '',
       // 실제 모인 시간·장소: 비어 있으면 셀의 원래 시간·장소를 미리 채움
       meeting_time: rep.meeting_time || (sched && sched.meet_time) || '', meeting_place: rep.meeting_place || (sched && sched.meet_place) || '',
-      grace_notes: rep.grace_notes || '', grace_none: false, leader_message: rep.leader_message === 'share_up' ? 'none' : (rep.leader_message || 'none'), leader_message_note: rep.leader_message_note || '',
+      grace_notes: rep.grace_notes || '', grace_none: rep.grace_none === true, leader_message: rep.leader_message === 'share_up' ? 'none' : (rep.leader_message || 'none'), leader_message_note: rep.leader_message_note || '',
       att, pu,
       notes: notes.map(n => ({ member_id: n.member_id, categories: n.categories && n.categories.length ? n.categories.slice() : (n.category ? [n.category] : []), prayer: n.prayer || '', content: n.content, attention: n.leadership_attention_required, related_member_id: n.related_member_id || '', related_name: n.related_name || '', related_mode: n.related_member_id ? 'member' : n.related_name ? 'other' : '', relation_kind: n.relation_kind || 'mutual' })),
       hasCare: true
@@ -779,7 +780,7 @@ function renderEditor() {
   h += '<div class="steps" aria-label="진행 단계">' + STEPS.map((s, i) => `<div class="${i < E.step ? 'done' : i === E.step ? 'now' : ''}">${i + 1}. ${s}</div>`).join('') + '</div>';
 
   if (E.step === 0) {
-    const ldr = E.cell.review_mode === 'leadership' ? '담당 분파셀리더 확인' : E.cell.review_mode === 'senior_direct' ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님 확인' : '검토 없음';
+    const ldr = E.cell.review_mode === 'leadership' ? reviewerName('leadership', assignedName(E.cell.id)) + ' 확인' : E.cell.review_mode === 'senior_direct' ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님 확인' : '검토 없음';
     h += `<h1>${weekLabel(r.week_start)} 셀모임${info('meet')[0]}</h1>${info('meet')[1]}
       <div class="banner" style="margin:8px 0 12px"><b>셀 케어 안내</b>맡으신 셀원에 대한 일률적인 보고보다는, 셀원들과 함께 나누며 애통하고 기도했던 내용, 함께 기뻐하고 감사했던 내용을 중심으로 작성해 주시기 바랍니다.</div>
       <div class="card"><dl class="summary" style="margin:0">
@@ -843,8 +844,10 @@ function renderEditor() {
 
   if (E.step === 3) {
     h += `<h1>은혜와 나눔${info('grace')[0]}</h1>${info('grace')[1]}
+      <label class="check"><input type="checkbox" data-bind-check="grace_none" ${m.grace_none ? 'checked' : ''}><span>이번 주 특별히 나눌 내용이 없습니다</span></label>
+      <p class="tiny muted">기도제목만 있는 경우 위 항목을 선택해 주세요. 셀 케어에 적은 기도제목은 그대로 제출됩니다.</p>
       <label class="field">이번 셀모임 가운데 하나님께서 주신 은혜와 감사한 일을 나눠 주세요.
-        <textarea data-bind="grace_notes" rows="7">${esc(m.grace_notes)}</textarea></label>`;
+        <textarea data-bind="grace_notes" rows="7" ${m.grace_none ? 'disabled' : ''}>${esc(m.grace_notes)}</textarea></label>`;
   }
 
   if (E.step === 2) {
@@ -857,7 +860,7 @@ function renderEditor() {
           ${u.status ? `<input type="text" data-pu-note="${p.prayer_id}" placeholder="이번 주 소식 (선택)" value="${esc(u.note || '')}">` : ''}</div>`;
       }).join('') + '</div>';
     }
-    h += `<h2>이번 주 특별히 나눌 셀원이 있나요?</h2>
+    h += `<h2>이번 주 나눌 내용이나 기도제목이 있나요?</h2><p class="tiny muted">기도제목만 있어도 「있음」을 골라 적어 주세요. 유형과 내용은 비워 두셔도 됩니다.</p>
       <div class="seg" style="--n:2"><button data-act="ed-care" data-v="false" aria-pressed="${m.hasCare === false}">없음</button>
       <button data-act="ed-care" data-v="true" aria-pressed="${m.hasCare === true}">있음</button></div>`;
     if (m.hasCare) {
@@ -867,7 +870,7 @@ function renderEditor() {
         <div class="card stack"><div class="row"><b>기록 ${i + 1}</b><span class="spacer"></span><button class="link" data-act="ed-delnote" data-i="${i}">삭제</button></div>
           <label class="field">셀원<select data-note="${i}" data-f="member_id"><option value="">골라 주세요</option>
             ${people.map(p => `<option value="${p.member_id}" ${p.member_id === n.member_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
-          <div><div style="font-weight:500;margin-bottom:6px">유형 <span class="tiny muted" style="font-weight:400">여러 개 고를 수 있습니다</span></div><div class="chips">${Object.keys(L.care).map(k =>
+          <div><div style="font-weight:500;margin-bottom:6px">유형 <span class="tiny muted" style="font-weight:400">여러 개 선택 · 기도제목만 적을 때는 선택하지 않아도 됩니다</span></div><div class="chips">${Object.keys(L.care).map(k =>
             `<button class="chip" data-act="ed-cat" data-i="${i}" data-v="${k}" aria-pressed="${n.categories.includes(k)}">${LX('care', k)}</button>`).join('')}</div></div>
           ${n.categories.includes('relationship') ? `<div class="stack" style="gap:8px;background:var(--accent-soft);border-radius:12px;padding:10px 12px">
             <label class="field" style="margin:0">누구와의 관계인가요? <span class="tiny muted" style="font-weight:400">알면 골라 주세요</span><select data-note="${i}" data-f="related"><option value="">고르지 않음</option>
@@ -876,9 +879,9 @@ function renderEditor() {
             ${n.related_mode === 'other' ? `<input type="text" data-note="${i}" data-f="related_name" maxlength="60" placeholder="상대 이름 (예: 홍길동 집사)" value="${esc(n.related_name || '')}">` : ''}
             ${n.related_member_id || n.related_mode === 'other' ? `<div class="seg" style="--n:2"><button data-act="ed-relkind" data-i="${i}" data-v="mutual" aria-pressed="${n.relation_kind !== 'one_way'}">서로 어려워함</button><button data-act="ed-relkind" data-i="${i}" data-v="one_way" aria-pressed="${n.relation_kind === 'one_way'}">이 분이 상대 때문에 어려워함</button></div>` : ''}
           </div>` : ''}
-          <label class="field">내용<textarea data-note="${i}" data-f="content" rows="4" placeholder="나누고 싶은 내용을 적어 주세요.">${esc(n.content)}</textarea></label>
+          <label class="field">내용 <span class="tiny muted" style="font-weight:400">기도제목만 적을 때는 비워 두셔도 됩니다</span><textarea data-note="${i}" data-f="content" rows="4" placeholder="나누고 싶은 내용을 적어 주세요.">${esc(n.content)}</textarea></label>
           <label class="field">개인 기도제목 <span class="tiny muted" style="font-weight:400">있으면 적어 주세요 · 다음 주부터 「지난 기도제목」으로 이어집니다</span><textarea data-note="${i}" data-f="prayer" rows="2" placeholder="이 분을 위해 함께 기도할 제목">${esc(n.prayer || '')}</textarea></label>
-          <label class="check"><input type="checkbox" data-note-attn="${i}" ${n.attention ? 'checked' : ''}><span>${E.cell.review_mode === 'senior_direct' ? '목사님·사모님 확인 필요' : '분파셀리더 확인 필요'}</span></label>
+          <label class="check"><input type="checkbox" data-note-attn="${i}" ${n.attention ? 'checked' : ''}><span>${E.cell.review_mode === 'senior_direct' ? '목사님·사모님 확인 필요' : '교역자 확인 필요'}</span></label>
         </div>`).join('') + '</div>' +
         `<button class="btn ghost" data-act="ed-addnote" style="margin-top:12px">+ 셀원 더 추가</button>`;
       if (!people.length) h += '<p class="tiny muted">출석 단계에서 셀원을 먼저 확인해 주세요.</p>';
@@ -897,19 +900,19 @@ function renderEditor() {
       <div class="card"><div class="row"><h3 style="margin:0">출석</h3><span class="spacer"></span><button class="link" data-act="ed-step" data-v="1">고치기</button></div>
         참석 ${present}명 · 결석 ${absent.length}명${absent.length ? '<div class="small muted">' + absent.map(([id, a]) => esc(name(id)) + (a.absence_reason ? ' (' + esc(a.absence_reason) + ')' : '')).join(', ') + '</div>' : ''}</div>
       <div class="card"><div class="row"><h3 style="margin:0">셀 케어 (셀원 근황)</h3><span class="spacer"></span><button class="link" data-act="ed-step" data-v="2">고치기</button></div>
-        ${m.notes.filter(n => n.content.trim() || (n.prayer || '').trim()).length ? m.notes.filter(n => n.content.trim() || (n.prayer || '').trim()).map(n => `<div class="note ${n.attention ? 'attn' : ''}"><b>${esc(name(n.member_id))}</b> · ${catsLabel(n)}${n.attention ? ' · <span style="color:var(--warn)">' + (E.cell.review_mode === 'senior_direct' ? '목사님·사모님 확인 필요' : '분파셀리더 확인 필요') + '</span>' : ''}${n.categories.includes('relationship') && (n.related_member_id || (n.related_mode === 'other' && n.related_name)) ? '<div class="tiny muted">' + esc(relText(name(n.member_id), n.related_member_id ? name(n.related_member_id) : n.related_name, n.relation_kind)) + '</div>' : ''}<div class="small">${nl2br(n.content)}</div>${(n.prayer || '').trim() ? '<div class="small"><b>기도제목</b> · ' + nl2br(n.prayer) + '</div>' : ''}</div>`).join('') : '<span class="muted">나눌 셀원 없음</span>'}
+        ${m.notes.filter(n => n.content.trim() || (n.prayer || '').trim()).length ? m.notes.filter(n => n.content.trim() || (n.prayer || '').trim()).map(n => `<div class="note ${n.attention ? 'attn' : ''}"><b>${esc(name(n.member_id))}</b> · ${catsLabel(n)}${n.attention ? ' · <span style="color:var(--warn)">' + (E.cell.review_mode === 'senior_direct' ? '목사님·사모님 확인 필요' : '교역자 확인 필요') + '</span>' : ''}${n.categories.includes('relationship') && (n.related_member_id || (n.related_mode === 'other' && n.related_name)) ? '<div class="tiny muted">' + esc(relText(name(n.member_id), n.related_member_id ? name(n.related_member_id) : n.related_name, n.relation_kind)) + '</div>' : ''}<div class="small">${nl2br(n.content)}</div>${(n.prayer || '').trim() ? '<div class="small"><b>기도제목</b> · ' + nl2br(n.prayer) + '</div>' : ''}</div>`).join('') : '<span class="muted">나눌 셀원 없음</span>'}
         ${Object.keys(m.pu).length ? '<div class="small muted" style="margin-top:6px">지난 기도제목 ' + Object.keys(m.pu).length + '건 업데이트</div>' : ''}</div>
       <div class="card"><div class="row"><h3 style="margin:0">은혜와 나눔</h3><span class="spacer"></span><button class="link" data-act="ed-step" data-v="3">고치기</button></div>
         ${m.grace_none ? '<span class="muted">특별히 나눌 내용이 없습니다</span>' : m.grace_notes ? nl2br(m.grace_notes) : '<span class="muted">비어 있음</span>'}</div>
     </div>
-    <h2>${E.cell.review_mode === 'senior_direct' ? '담임 목사님·사모님께' : '담당 분파셀리더에게'} 특별히 전달하고 싶은 내용이 있나요?</h2>
+    <h2>${E.cell.review_mode === 'senior_direct' ? '담임 목사님·사모님께' : '담당 교역자에게'} 특별히 전달하고 싶은 내용이 있나요?</h2>
     <div class="stack">${Object.keys(L.message).filter(k => k !== 'share_up').map(k => `<button class="btn ${m.leader_message === k ? '' : 'quiet'}" data-act="ed-set" data-k="leader_message" data-v="${k}" aria-pressed="${m.leader_message === k}">${LX('message', k)}</button>`).join('')}</div>
-    ${m.leader_message && m.leader_message !== 'none' ? `<label class="field" style="margin-top:12px">${m.leader_message === 'contact' ? '연락이나 상담이 필요한 사유' : '자세한 내용'} <span class="tiny muted" style="font-weight:400">${E.cell.review_mode === 'senior_direct' ? '목사님·사모님께' : '담당 분파셀리더에게'} 함께 전달됩니다</span>
+    ${m.leader_message && m.leader_message !== 'none' ? `<label class="field" style="margin-top:12px">${m.leader_message === 'contact' ? '연락이나 상담이 필요한 사유' : '자세한 내용'} <span class="tiny muted" style="font-weight:400">${E.cell.review_mode === 'senior_direct' ? '목사님·사모님께' : '담당 교역자에게'} 함께 전달됩니다</span>
       <textarea data-bind="leader_message_note" rows="3" maxlength="2000" placeholder="${m.leader_message === 'contact' ? '예: 최근 직장 문제로 많이 힘들어하셔서 직접 연락드려 주시면 좋겠습니다.' : '적어 주시면 더 잘 도울 수 있습니다.'}">${esc(m.leader_message_note || '')}</textarea></label>` : ''}
     <h2>담임목사님께 드리는 말씀 <span class="tiny muted" style="font-weight:400">있을 때만</span></h2>
     <p class="sub" style="margin-top:0">담임목사님께 직접 전하고 싶은 말씀이 있다면 이곳에 작성해 주세요. 작성해 주신 내용은 자동으로 번역되어 담임목사님께 바로 전달됩니다.</p>
     <textarea data-pmsg="1" rows="4" maxlength="4000" placeholder="담임목사님께 전하고 싶은 말씀">${esc(E.pmsg || '')}</textarea>
-    <p class="tiny muted" style="margin:4px 0 0">담임 목사님·사모님만 보십니다. 담당 분파셀리더에게는 보이지 않습니다.</p>`;
+    <p class="tiny muted" style="margin:4px 0 0">담임 목사님·사모님만 보십니다. 담당 교역자에게는 보이지 않습니다.</p>`;
     if (E.confirm) h += `<div class="banner warn" style="margin-top:16px" role="alertdialog"><b>${E.rep.submission_no > 0 ? '고친 보고서를 다시 제출하시겠어요?' : '제출하시겠어요?'}</b>${E.cell.review_mode === 'none' ? '제출한 뒤에도 보고서를 열어 고칠 수 있습니다.' : '제출한 뒤에도 확인 전까지는 보고서를 열어 직접 고칠 수 있습니다.'}
       <div class="row" style="margin-top:12px"><button class="btn sm" data-act="ed-submit">${E.rep.submission_no > 0 ? '다시 제출합니다' : '제출합니다'}</button><button class="btn quiet sm" data-act="ed-confirm-cancel">다시 볼게요</button></div></div>`;
   }
@@ -932,6 +935,14 @@ function hideFooter() { const b = document.getElementById('footer-bar'); if (b) 
 
 function markDirty(rerender) { E.dirty = true; E.saveMsg = '저장 전'; const s = $('#savestate'); if (s) s.textContent = E.saveMsg; clearTimeout(E.timer); E.timer = setTimeout(save, 1200); if (rerender) renderEditor(); }
 
+// 기도제목만 있는 기록도 기존 DB의 기도 유형으로 저장한다.
+function careCategories(n) {
+  return n.categories.length ? n.categories : ((n.prayer || '').trim() && !n.content.trim() ? ['prayer'] : []);
+}
+function invalidCareNote(n) {
+  const hasText = !!(n.content.trim() || (n.prayer || '').trim());
+  return (hasText || !!n.member_id || !!n.categories.length) && (!n.member_id || !hasText || !careCategories(n).length);
+}
 function payload() {
   const m = E.m;
   return {
@@ -943,8 +954,8 @@ function payload() {
       const a = m.att[x.member_id] || { status: 'unknown' };
       return { member_id: x.member_id, status: a.status, absence_reason: a.status === 'absent' ? (a.absence_reason || '') : '' };
     }),
-    care_notes: m.hasCare ? m.notes.filter(n => n.member_id && n.categories.length && (n.content.trim() || (n.prayer || '').trim()))
-      .map(n => ({ member_id: n.member_id, category: n.categories[0], categories: n.categories, content: n.content.trim(), prayer: (n.prayer || '').trim(), leadership_attention_required: !!n.attention,
+    care_notes: m.hasCare ? m.notes.filter(n => n.member_id && careCategories(n).length && (n.content.trim() || (n.prayer || '').trim()))
+      .map(n => ({ member_id: n.member_id, category: careCategories(n)[0], categories: careCategories(n), content: n.content.trim(), prayer: (n.prayer || '').trim(), leadership_attention_required: !!n.attention,
         related_member_id: n.categories.includes('relationship') ? (n.related_member_id || '') : '', related_name: n.categories.includes('relationship') && n.related_mode === 'other' ? (n.related_name || '') : '', relation_kind: n.relation_kind || 'mutual' })) : [],
     prayer_updates: Object.entries(m.pu).filter(([, u]) => u.status).map(([id, u]) => ({ prayer_id: id, status: u.status, note: u.note || '' }))
   };
@@ -982,7 +993,7 @@ function validateForSubmit() {
   if (m.meeting_held && !weekOK(m.meeting_date)) return [0, '셀모임 날짜를 ' + dayLabel(w) + '부터 ' + dayLabel(addDays(w, 6)) + ' 사이로 입력해 주세요.'];
   if (m.meeting_held === false && !m.meeting_cancel_reason.trim()) return [0, '모임을 진행하지 못한 이유를 적어 주세요.'];
   if (m.meeting_held && !m.grace_none && !m.grace_notes.trim()) return [3, '은혜와 나눔을 적어 주세요.'];
-  if (m.hasCare && m.notes.some(n => (n.content.trim() || (n.prayer || '').trim() || n.member_id) && (!n.member_id || !n.categories.length || !(n.content.trim() || (n.prayer || '').trim())))) return [2, '셀 케어 기록마다 셀원, 유형, 내용(또는 기도제목)을 채워 주세요.'];
+  if (m.hasCare && m.notes.some(invalidCareNote)) return [2, '셀원과 내용 또는 기도제목을 적어 주세요. 기도제목만 적을 때는 유형을 고르지 않아도 됩니다.'];
   return null;
 }
 async function submitReport() {
@@ -1057,7 +1068,7 @@ async function viewReportDetail(app, v) {
   let h = '';
   const cur = reviews.find(x => x.submission_no === rep.submission_no && rep.review_status === 'reviewed');
   if (rep.status === 'submitted') {
-    if (rep.review_status === 'pending') h += `<div class="banner warn" style="margin-top:8px"><b>${rep.review_mode === 'senior_direct' ? tr('확인 전', 'Awaiting review') : tr('분파셀리더 확인 전', 'Awaiting Leadership review')}</b>${row.responsible_leadership_name ? tr('확인 책임: ', 'Reviewer: ') + esc(row.responsible_leadership_name) + ' · ' : ''}${tr(dateTime(rep.submitted_at) + ' 제출', 'Submitted ' + dateTime(rep.submitted_at))}${rep.submission_no > 1 ? tr(' (' + rep.submission_no + '번째 제출)', ' (submission #' + rep.submission_no + ')') : ''}${row.is_late ? tr(' · 마감 후 제출', ' · late') : ''}</div>`;
+    if (rep.review_status === 'pending') h += `<div class="banner warn" style="margin-top:8px"><b>${rep.review_mode === 'senior_direct' ? tr('확인 전', 'Awaiting review') : tr('교역자 확인 전', 'Awaiting Leadership review')}</b>${row.responsible_leadership_name ? tr('확인 책임: ', 'Reviewer: ') + esc(row.responsible_leadership_name) + ' · ' : ''}${tr(dateTime(rep.submitted_at) + ' 제출', 'Submitted ' + dateTime(rep.submitted_at))}${rep.submission_no > 1 ? tr(' (' + rep.submission_no + '번째 제출)', ' (submission #' + rep.submission_no + ')') : ''}${row.is_late ? tr(' · 마감 후 제출', ' · late') : ''}</div>`;
     else if (rep.review_status === 'reviewed') h += `<div class="banner" style="margin-top:8px"><b>${tr('확인 완료', 'Reviewed')}</b>${esc(nameOf(rep.reviewed_by))} · ${dateTime(rep.reviewed_at)}${cur ? tr(' · 상위 보고 수준: ', ' · Escalation: ') + LX('escalation', cur.escalation_level) : ''}</div>`;
     else if (rep.review_status === 'not_required') h += `<div class="banner" style="margin-top:8px"><b>${tr('검토 없이 제출하는 셀', 'Cell without review')}</b>${tr(dateTime(rep.submitted_at) + ' 제출', 'Submitted ' + dateTime(rep.submitted_at))}</div>`;
   } else {
@@ -1100,12 +1111,12 @@ async function viewReportDetail(app, v) {
       ${abs.length ? '<div class="small" style="margin-top:4px">' + tr('결석', 'Absent') + ': ' + abs.map(x => esc(x.name) + (x.absence_reason ? ' (' + (TRANS.map && TRANS.map['absence:' + x.member_id] && EN() ? esc(TRANS.map['absence:' + x.member_id]) : esc(x.absence_reason)) + ')' : '')).join(', ') + '</div>' : ''}
       ${sepMet.length ? '<div class="small muted" style="margin-top:4px">' + tr('따로 만남', 'Met separately') + ': ' + sepMet.map(x => esc(x.name)).join(', ') + '</div>' : ''}
       ${visitors.length ? '<div class="small muted" style="margin-top:4px">' + tr('방문', 'Visitors') + ': ' + visitors.map(x => esc(x.name) + (x.member_type_now === 'member' ? tr(' → 지금은 셀원', ' → now a member') : '')).join(', ') + '</div>' : ''}</div>
-    <div class="card"><h3>${tr('셀 케어 (셀원 근황)', 'Member care')}</h3>${notes.length ? notes.map(n => `<div class="note ${n.leadership_attention_required ? 'attn' : ''}"><b>${esc(memName(n.member_id))}</b> · ${catsLabel(n)}${n.leadership_attention_required ? ' · <span style="color:var(--warn)">' + tr('분파셀리더 확인 필요', 'Flagged for Leadership') + '</span>' : ''}${n.relation_kind && (n.related_member_id || n.related_name) ? '<div class="tiny muted">' + esc(relText(memName(n.member_id), n.related_member_id ? (memName(n.related_member_id) || n.related_name || '') : n.related_name, n.relation_kind)) + '</div>' : ''}${n.content ? '<div class="small">' + TX('care:' + n.id, n.content) + '</div>' : ''}${n.prayer ? '<div class="small"><b>' + tr('기도제목', 'Prayer request') + '</b> · ' + TX('careprayer:' + n.id, n.prayer) + '</div>' : ''}</div>`).join('') : '<span class="muted">' + tr('나눌 셀원 없음', 'No care notes') + '</span>'}</div>
+    <div class="card"><h3>${tr('셀 케어 (셀원 근황)', 'Member care')}</h3>${notes.length ? notes.map(n => `<div class="note ${n.leadership_attention_required ? 'attn' : ''}"><b>${esc(memName(n.member_id))}</b> · ${catsLabel(n)}${n.leadership_attention_required ? ' · <span style="color:var(--warn)">' + tr('교역자 확인 필요', 'Flagged for Leadership') + '</span>' : ''}${n.relation_kind && (n.related_member_id || n.related_name) ? '<div class="tiny muted">' + esc(relText(memName(n.member_id), n.related_member_id ? (memName(n.related_member_id) || n.related_name || '') : n.related_name, n.relation_kind)) + '</div>' : ''}${n.content ? '<div class="small">' + TX('care:' + n.id, n.content) + '</div>' : ''}${n.prayer ? '<div class="small"><b>' + tr('기도제목', 'Prayer request') + '</b> · ' + TX('careprayer:' + n.id, n.prayer) + '</div>' : ''}</div>`).join('') : '<span class="muted">' + tr('나눌 셀원 없음', 'No care notes') + '</span>'}</div>
     <div class="card"><h3>${tr('기도제목', 'Prayer requests')}</h3>${prayers.length || newPrayers.length ? '' : '<span class="muted">' + tr('없음', 'None') + '</span>'}
       ${newPrayers.map(p => `<div class="note"><b>${esc(memName(p.member_id))}</b> · <span class="pill accent">${tr('새 기도제목', 'New')}</span><div class="small">${TX('newprayer:' + p.id, p.content)}</div></div>`).join('')}
       ${prayers.map(p => `<div class="note"><b>${esc(p.member_name)}</b> · ${p.this_week_status ? LX('prayer', p.this_week_status) : '<span class="muted">' + tr('업데이트 없음', 'No update') + '</span>'}<div class="small">${TX('prayer:' + p.prayer_id, p.content)}${p.this_week_note ? '<br><span class="muted">' + tr('이번 주: ', 'This week: ') + (TRANS.map && TRANS.map['prayernote:' + p.prayer_id] && EN() ? esc(TRANS.map['prayernote:' + p.prayer_id]) : esc(p.this_week_note)) + '</span>' : ''}</div></div>`).join('')}</div>
     <div class="card"><h3>${tr('은혜와 나눔', 'Grace & sharing')}</h3>${rep.grace_none ? '<span class="muted">' + tr('특별히 나눌 내용이 없습니다', 'Nothing in particular to share') + '</span>' : rep.grace_notes ? TX('grace', rep.grace_notes) : '<span class="muted">' + tr('비어 있음', 'Empty') + '</span>'}</div>
-    <div class="card"><h3>${tr('분파셀리더에게 전할 말', 'Message to Leadership')}</h3>${LX('message', rep.leader_message || 'none')}${rep.leader_message && rep.leader_message !== 'none' && rep.leader_message_note ? '<div class="small" style="margin-top:4px">' + TX('lmnote', rep.leader_message_note) + '</div>' : ''}</div>
+    <div class="card"><h3>${tr('교역자에게 전할 말', 'Message to Leadership')}</h3>${LX('message', rep.leader_message || 'none')}${rep.leader_message && rep.leader_message !== 'none' && rep.leader_message_note ? '<div class="small" style="margin-top:4px">' + TX('lmnote', rep.leader_message_note) + '</div>' : ''}</div>
     ${pmsg ? `<div class="card" style="border-color:#C9D3E4;background:#F7F9FC"><h3>${tr('담임목사님께 드리는 말씀', 'A message for Pastor Scott Brenner')}</h3>${EN() && (pmsg.content_en || (TRANS.map && TRANS.map.pmsg)) ? nl2br(pmsg.content_en || TRANS.map.pmsg) + '<div class="tiny muted" style="margin-top:4px">' + nl2br(pmsg.content) + '</div>' : nl2br(pmsg.content)}
       <div class="tiny muted" style="margin-top:4px">${tr('담임 목사님·사모님만 보십니다', 'Only visible to Pastor Scott Brenner & Mrs. Sunghee Brenner')}${pmsg.sent_at ? ' · ' + tr(dateTime(pmsg.sent_at) + ' 전달됨', 'Sent ' + dateTime(pmsg.sent_at)) : ''}</div>
       ${commentBlock(cmts, 'pastor_msg', rep)}</div>` : ''}
@@ -1121,7 +1132,7 @@ async function viewReportDetail(app, v) {
     if (!row.i_can_review && rep.review_status === 'reviewed') h += '<p class="small muted" style="margin:0">' + tr('이미 확인한 보고서입니다. 고칠 부분이 있으면 셀리더에게 수정을 요청할 수 있습니다.', 'This report has already been reviewed. You can still ask the cell leader to revise it.') + '</p>';
     if (row.i_can_review) h += `
       <label class="field">${tr('확인 메모 (목사님·사모님께 전할 내용)', 'Review note (for the senior pastor)')}
-        <span class="tiny muted" style="font-weight:400;display:block;margin-top:2px">${tr('보고서를 확인하며 남기는 기록입니다. 담임 목사님·사모님과 담당 분파셀리더가 보고서의 「확인 기록」에서 보시고, 셀리더에게는 보이지 않습니다.', 'Kept with this review. Seen by Pastor Scott Brenner & Mrs. Sunghee Brenner and Leadership in “Review history” — not by the cell leader.')}</span>
+        <span class="tiny muted" style="font-weight:400;display:block;margin-top:2px">${tr('보고서를 확인하며 남기는 기록입니다. 담임 목사님·사모님과 담당 교역자가 보고서의 「확인 기록」에서 보시고, 셀리더에게는 보이지 않습니다.', 'Kept with this review. Seen by Pastor Scott Brenner & Mrs. Sunghee Brenner and Leadership in “Review history” — not by the cell leader.')}</span>
         <textarea id="rv-note" rows="3" placeholder="${tr('예: 최근 3주 결석 중. 연락 예정.', 'e.g. Absent 3 weeks — will call.')}">${esc(R.note)}</textarea></label>
       <div><div style="font-weight:500;margin-bottom:2px">${tr('상위 보고 상태', 'Escalation')}</div><div class="tiny muted" style="margin-bottom:6px">${tr('목사님·사모님께서 이 셀을 얼마나 살펴보셔야 하는지 골라 주세요.', 'How closely should the senior pastor look at this cell?')}</div><div class="sel">${Object.keys(L.escalation).map(k =>
         `<button class="chip" data-act="rv-level" data-v="${k}" aria-pressed="${R.level === k}" style="min-height:48px">${LX('escalation', k)}</button>`).join('')}</div></div>
@@ -1138,7 +1149,7 @@ async function viewReportDetail(app, v) {
   }
 
   if (reviews.length) {
-    h += '<h2>' + tr('분파셀리더가 확인한 내용', 'Leadership review') + '</h2><p class="tiny muted" style="margin:-4px 0 8px">' + tr('분파셀리더가 이 보고서를 확인하며 남긴 메모와 상위 보고 상태입니다. 담임 목사님·사모님과 분파셀리더만 보고, 셀리더에게는 보이지 않습니다.', 'The note and escalation level Leadership left when reviewing this report. Not visible to the cell leader.') + '</p><div class="stack">' + reviews.map(x => `<div class="card small"><div class="row"><b>${tr(x.submission_no + '번째 제출 확인', 'Submission #' + x.submission_no + ' reviewed')}</b><span class="pill ${x.escalation_level === 'normal' ? '' : 'warn'}">${tr('상위 보고: ', 'Escalation: ')}${LX('escalation', x.escalation_level)}</span>${x.submission_no !== rep.submission_no ? '<span class="pill">' + tr('이전 제출', 'Earlier') + '</span>' : ''}</div>
+    h += '<h2>' + tr('교역자가 확인한 내용', 'Leadership review') + '</h2><p class="tiny muted" style="margin:-4px 0 8px">' + tr('교역자가 이 보고서를 확인하며 남긴 메모와 상위 보고 상태입니다. 담임 목사님·사모님과 교역자만 보고, 셀리더에게는 보이지 않습니다.', 'The note and escalation level Leadership left when reviewing this report. Not visible to the cell leader.') + '</p><div class="stack">' + reviews.map(x => `<div class="card small"><div class="row"><b>${tr(x.submission_no + '번째 제출 확인', 'Submission #' + x.submission_no + ' reviewed')}</b><span class="pill ${x.escalation_level === 'normal' ? '' : 'warn'}">${tr('상위 보고: ', 'Escalation: ')}${LX('escalation', x.escalation_level)}</span>${x.submission_no !== rep.submission_no ? '<span class="pill">' + tr('이전 제출', 'Earlier') + '</span>' : ''}</div>
       <div class="muted">${esc(nameOf(x.reviewer_id))} · ${dateTime(x.reviewed_at)}${x.edited_at ? tr(' · ' + dateTime(x.edited_at) + ' 고침', ' · edited ' + dateTime(x.edited_at)) : ''}</div>
       ${RVE.id === x.id ? `<div class="stack" style="margin-top:8px;gap:8px">
           <textarea id="rve-note" rows="3" maxlength="4000">${esc(RVE.note)}</textarea>
@@ -1155,7 +1166,7 @@ async function viewReportDetail(app, v) {
   app.innerHTML = h;
 }
 const DETAIL = { id: null, note: '', level: 'normal', revOpen: false, reason: '', busy: false, reopen: null };
-/* 확인 메모 고치기 (직접 확인한 분파셀리더만) */
+/* 확인 메모 고치기 (직접 확인한 교역자만) */
 const RVE = { id: null, note: '', level: 'normal', busy: false, list: [] };
 document.addEventListener('input', (e) => { if (e.target.id === 'rve-note') RVE.note = e.target.value; });
 async function reviewEditSave() {
@@ -1170,7 +1181,7 @@ function commentBlock(cmts, target, rep) {
   const list = cmts.filter(c => c.target === target);
   const hasHangul = (s) => /[가-힣]/.test(s || '');
   let h = list.map(c => {
-    // 목사님·사모님 화면은 쓰신 그대로, 셀리더·분파셀리더 화면은 한국어 번역을 먼저
+    // 목사님·사모님 화면은 쓰신 그대로, 셀리더·교역자 화면은 한국어 번역을 먼저
     const showKo = !isSenior() && c.content_ko && !hasHangul(c.content);
     return `<div class="note" style="border-left:3px solid var(--accent);padding-left:10px;margin-top:10px">
       <div><b>${esc(c.author_name)}</b> <span class="tiny muted">${dateTime(c.created_at)}</span></div>
@@ -1183,7 +1194,7 @@ function commentBlock(cmts, target, rep) {
   if (isSenior()) {
     const who = target === 'pastor_msg'
       ? tr('이 말씀을 쓴 셀리더만 봅니다.', 'Only the cell leader who wrote this message will see your reply.')
-      : tr('셀리더와 담당 분파셀리더가 봅니다.', 'The cell leader and their Leadership will see this.');
+      : tr('셀리더와 담당 교역자가 봅니다.', 'The cell leader and their Leadership will see this.');
     h += `<div style="margin-top:10px"><textarea data-cmt="${target}" rows="3" maxlength="3000" style="width:100%" placeholder="${target === 'pastor_msg' ? tr('이 말씀에 답글을 남겨 주세요', 'Reply to this message') : tr('보고서에 코멘트를 남겨 주세요', 'Leave a comment on this report')}">${esc(CMT.draft[target] || '')}</textarea>
       <p class="tiny muted" style="margin:4px 0 8px">${who} ${tr('영어로 쓰시면 한국어 번역이 함께 전달됩니다.', 'Written in English, it will be sent with a Korean translation.')}</p>
       <button class="btn sm" data-act="cmt-add" data-target="${target}" data-id="${rep.id}" ${CMT.busy ? 'disabled' : ''}>${CMT.busy ? tr('보내는 중…', 'Sending…') : target === 'pastor_msg' ? tr('답글 보내기', 'Send reply') : tr('코멘트 남기기', 'Post comment')}</button></div>`;
@@ -1258,7 +1269,7 @@ function rowState(r) {
   const late = r.is_late ? tr(' (마감 후)', ' (late)') : '';
   if (r.review_status === 'reviewed') return { t: tr('제출 완료', 'Submitted') + late + tr(' · 확인 완료', ' · Reviewed'), c: 'ok' };
   if (r.review_status === 'not_required') return { t: tr('제출 완료', 'Submitted') + late + tr(' · 검토 없음', ' · No review'), c: 'ok' };
-  return { t: tr('제출 완료', 'Submitted') + late + ' · ' + (r.review_mode === 'senior_direct' ? tr('확인 대기', 'Awaiting review') : tr('분파셀리더 확인 대기', 'Awaiting Leadership review')), c: 'warn' };
+  return { t: tr('제출 완료', 'Submitted') + late + ' · ' + (r.review_mode === 'senior_direct' ? tr('확인 대기', 'Awaiting review') : tr('교역자 확인 대기', 'Awaiting Leadership review')), c: 'warn' };
 }
 const isConcern = (r) => r.escalation_level && r.escalation_level !== 'normal';
 function weekNav(week, act) {
@@ -1274,7 +1285,7 @@ function cellItem(r, opts = {}) {
     <span class="top"><b>${esc(r.cell_name)}</b><span class="pill ${st.c}">${st.t}</span></span>
     <span class="small muted">Cell Leader: ${esc(r.leader_names || tr('배정 전', 'Not assigned'))}${opts.showResp && r.responsible_leadership_name ? tr(' · 담당: ', ' · Leadership: ') + esc(r.responsible_leadership_name) : ''}</span>
     ${isConcern(r) ? `<span class="small" style="color:var(--warn)">${tr('상위 보고', 'Escalation')}: ${LX('escalation', r.escalation_level)}</span>` : ''}
-    ${r.attention_items ? `<span class="small" style="color:var(--warn)">${tr('분파셀리더 확인 필요 항목 ' + r.attention_items + '건', r.attention_items + ' item(s) flagged for Leadership')}</span>` : ''}
+    ${r.attention_items ? `<span class="small" style="color:var(--warn)">${tr('교역자 확인 필요 항목 ' + r.attention_items + '건', r.attention_items + ' item(s) flagged for Leadership')}</span>` : ''}
   </button>`;
 }
 
@@ -1296,7 +1307,7 @@ function ownCellItem(r, week) {
    Leadership 홈
    ===================================================================== */
 async function viewLeadershipHome(app, v) {
-  setTop(tr('분파셀리더', 'Leadership'), false); renderTabs(true);
+  setTop(S.me?.name || tr('교역자', 'Pastoral staff'), false); renderTabs(true);
   const week = v.week || S.ctx.this_week;
   const [rows, asg, lr, unread] = await Promise.all([
     rpc('get_week_status', { p_week_start: week }),
@@ -1348,7 +1359,7 @@ async function viewLeadershipHome(app, v) {
   if (manage.length) h += '<h3 style="margin:20px 0 8px">셀원 관리</h3><div class="chips">' + manage.map(r => `<button class="chip" data-act="open-members" data-cell="${r.cell_id}" data-name="${esc(r.cell_name)}">${esc(r.cell_name)}</button>`).join('') + '</div>';
   if (own.length) {
     const ownWho = own.every(r => r.review_mode === 'none') ? '검토 없이 제출하는 셀입니다.' + (onBusan ? ' 교역자 누구나 보고서를 쓸 수 있습니다.' : '')
-      : '확인은 ' + (own.some(r => r.review_mode === 'senior_direct') ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님' : '담당 분파셀리더') + '께서 하십니다.';
+      : '확인은 ' + (own.some(r => r.review_mode === 'senior_direct') ? '스캇 브래너 담임 목사님 / 성희 브래너 사모님' : '담당 교역자') + '께서 하십니다.';
     h += '<h2>내 셀</h2><p class="sub">직접 인도하는 셀입니다. ' + ownWho + '</p>';
     h += '<div class="stack">' + own.map(r => ownCellItem(r, week)).join('') + '</div>';
   }
@@ -1382,7 +1393,7 @@ function groupKey(r) {
   if (r.campus === '부산') return { key: 'busan', name: tr('부산 캠퍼스 (교역자 공동)', 'Busan campus (all staff)'), mode: 'leadership' };
   if (r.review_mode === 'none') return { key: 'none', name: tr('검토 없음 셀', 'Cells without review'), mode: 'none' };
   if (r.review_mode === 'senior_direct') return { key: 'senior', name: tr('스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인', 'Reviewed by Pastor Scott Brenner & Mrs. Sunghee Brenner'), mode: 'senior' };
-  return { key: r.responsible_leadership_id || 'unassigned', name: r.responsible_leadership_name ? r.responsible_leadership_name : tr('담당 분파셀리더 없음', 'No Leadership assigned'), mode: 'leadership' };
+  return { key: r.responsible_leadership_id || 'unassigned', name: r.responsible_leadership_name ? r.responsible_leadership_name : tr('담당 교역자 없음', 'No Leadership assigned'), mode: 'leadership' };
 }
 function groupRows(rows) {
   const g = new Map();
@@ -1492,16 +1503,16 @@ async function viewDashboard(app, v) {
   }
   h += `<button class="listitem" data-act="open-issues" style="margin-top:8px"><span class="top"><b>${tr('셀원 이슈 보기', 'Member issues')}</b><span class="small muted">${tr('이슈별 · 사람별 →', 'By topic · by person →')}</span></span><span class="small muted">${tr('관계, 장기결석, 건강 등 교회 전체 셀원의 이슈를 모아 봅니다.', 'Relationships, long absences, health and more across the church.')}</span></button>`;
   h += `<h2>${tr('셀리더 보고서', 'Cell reports')}${info('dashCells')[0]}</h2>${info('dashCells')[1]}`;
-  if (pending.length) h += `<div class="banner warn"><b>${tr('분파셀리더 확인 대기 ' + pending.length + '건', pending.length + ' report(s) awaiting Leadership review')}</b><div style="margin-top:10px"><button class="btn warn sm" data-act="db-filter" data-v="unreviewed">${tr('미확인 보기', 'Show unreviewed')}</button></div></div>`;
+  if (pending.length) h += `<div class="banner warn"><b>${tr('교역자 확인 대기 ' + pending.length + '건', pending.length + ' report(s) awaiting Leadership review')}</b><div style="margin-top:10px"><button class="btn warn sm" data-act="db-filter" data-v="unreviewed">${tr('미확인 보기', 'Show unreviewed')}</button></div></div>`;
   h += `<div class="stats" style="margin-top:12px">
     <div class="stat"><div class="v num">${N}</div><div class="k">${tr('전체 셀', 'Cells')}</div></div>
     <div class="stat"><div class="v num">${sub.length}<span class="small muted"> / ${N}</span></div><div class="k">${tr('제출 완료', 'Submitted')}</div></div>
     <div class="stat ${N - sub.length ? 'warn' : ''}"><div class="v num">${N - sub.length}</div><div class="k">${tr('미제출', 'Not submitted')}</div></div>
-    <div class="stat"><div class="v num">${reviewed.length}<span class="small muted"> / ${needsReview.length}</span></div><div class="k">${tr('분파셀리더 확인 완료', 'Reviewed by Leadership')}</div></div>
-    <div class="stat ${pending.length ? 'warn' : ''}"><div class="v num">${pending.length}</div><div class="k">${tr('분파셀리더 확인 대기', 'Awaiting review')}</div></div>
+    <div class="stat"><div class="v num">${reviewed.length}<span class="small muted"> / ${needsReview.length}</span></div><div class="k">${tr('교역자 확인 완료', 'Reviewed by Leadership')}</div></div>
+    <div class="stat ${pending.length ? 'warn' : ''}"><div class="v num">${pending.length}</div><div class="k">${tr('교역자 확인 대기', 'Awaiting review')}</div></div>
     <div class="stat ${concern.length ? 'warn' : ''}"><div class="v num">${concern.length}</div><div class="k">${tr('목양 관심 필요', 'Pastoral attention')}</div></div></div>`;
 
-  // 모든 셀 보고서: 분파셀리더를 거치지 않고 셀 이름·셀리더 이름으로 바로 찾기
+  // 모든 셀 보고서: 교역자를 거치지 않고 셀 이름·셀리더 이름으로 바로 찾기
   {
     const all = [...rows].sort((a, b) => a.cell_name.localeCompare(b.cell_name, 'ko'));
     h += `<details class="cellbox" id="db-all" style="margin-top:12px;border:1.5px solid var(--accent)"${DASH.allOpen ? ' open' : ''}><summary><b>${tr('모든 셀 보고서', 'All cell reports')}</b> <span class="tiny muted">${tr('셀 ' + all.length + '개 · 제출 ' + sub.length, all.length + ' cells · ' + sub.length + ' submitted')}</span></summary>
@@ -1509,8 +1520,8 @@ async function viewDashboard(app, v) {
       <div class="stack" id="db-all-list" style="gap:8px">${all.map(r => `<div data-q="${esc((r.cell_name + ' ' + (r.leader_names || '')).toLowerCase())}">${cellItem(r, { showResp: true })}</div>`).join('')}</div>
       <p class="empty" id="db-all-none" hidden>${tr('찾는 셀이 없습니다.', 'No matching cell.')}</p></details>`;
   }
-  h += `<h2>${tr('분파셀리더별 현황', 'By Leadership')}</h2>
-    <div class="stack" style="gap:8px"><div class="chips">${[['all', tr('전체', 'All')], ['missing', tr('미제출', 'Not submitted')], ['unreviewed', tr('분파셀리더 미확인', 'Unreviewed')], ['concern', tr('목양 관심 필요', 'Pastoral attention')], ['urgent', tr('긴급 확인 필요', 'Urgent')]].map(([k, t]) =>
+  h += `<h2>${tr('교역자별 현황', 'By Leadership')}</h2>
+    <div class="stack" style="gap:8px"><div class="chips">${[['all', tr('전체', 'All')], ['missing', tr('미제출', 'Not submitted')], ['unreviewed', tr('교역자 미확인', 'Unreviewed')], ['concern', tr('목양 관심 필요', 'Pastoral attention')], ['urgent', tr('긴급 확인 필요', 'Urgent')]].map(([k, t]) =>
       `<button class="chip" data-act="db-filter" data-v="${k}" aria-pressed="${DASH.filter === k}">${t}</button>`).join('')}</div>
     <label class="field small" style="font-weight:400">${tr('정렬', 'Sort')}<select id="db-sort">${[['unreviewed', tr('미확인 많은 순', 'Most unreviewed')], ['missing', tr('미제출 많은 순', 'Most missing')], ['concern', tr('목양 관심 많은 순', 'Most attention')], ['name', tr('이름순', 'By name')]].map(([k, t]) =>
       `<option value="${k}" ${DASH.sort === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>`;
@@ -1521,7 +1532,7 @@ async function viewDashboard(app, v) {
       ${g.mode === 'none' ? '<span class="bar"><span>' + tr('확인', 'Reviewed') + '</span><span class="small muted">' + tr('검토 없음', 'No review') + '</span><span></span></span>'
         : `<span class="bar"><span>${tr('확인', 'Reviewed')}</span><span class="track"><span class="fill rv ${g.rev < g.sub ? 'low' : ''}" style="width:${pct(g.rev, g.sub)}%"></span></span><span class="num">${g.rev} / ${g.sub}</span></span>`}
       ${g.unrev || g.concern ? `<span class="small" style="color:var(--warn)">${g.unrev ? tr('미확인 ' + g.unrev + '건', g.unrev + ' unreviewed') : ''}${g.unrev && g.concern ? ' · ' : ''}${g.concern ? tr('목양 관심 ' + g.concern + '건', g.concern + ' need attention') : ''}</span>` : ''}
-    </button>`).join('') : '<p class="empty">' + tr('조건에 맞는 분파셀리더가 없습니다.', 'Nothing matches this filter.') + '</p>') + '</div>';
+    </button>`).join('') : '<p class="empty">' + tr('조건에 맞는 교역자가 없습니다.', 'Nothing matches this filter.') + '</p>') + '</div>';
   h += `<button class="listitem" data-act="dg-open" style="margin-top:16px"><span class="top"><b>📧 ${tr('주간 요약 메일 미리 보기', 'Weekly email preview')}</b><span class="small muted">→</span></span><span class="small muted">${tr('금요일 밤 11:59에 보내는 미제출 명단·중요 내용 요약', 'Missing reports & key points, sent Friday 11:59 PM')}</span></button>`;
   h += '<h2>' + tr('주의 필요', 'Watch list') + '</h2><div id="signals" class="stack"><p class="muted small">' + tr('확인하는 중…', 'Checking…') + '</p></div><div id="pushbox"></div>' + HELP_LINE();
   app.innerHTML = h;
@@ -1541,7 +1552,7 @@ async function viewDashboard(app, v) {
   }).catch(() => { const box = $('#signals'); if (box) box.innerHTML = '<p class="muted small">' + tr('주의 신호를 불러오지 못했습니다.', 'Could not load the watch list.') + '</p>'; });
 }
 async function viewGroup(app, v) {
-  setTop(tr('분파셀리더 상세', 'Leadership detail'), true); renderTabs(true);
+  setTop(tr('교역자 상세', 'Leadership detail'), true); renderTabs(true);
   const rows = await rpc('get_week_status', { p_week_start: v.week });
   const g = groupRows(rows).find(x => x.key === v.key);
   if (!g) { app.innerHTML = '<p class="empty">' + tr('이 주에 해당하는 셀이 없습니다.', 'No cells for this week.') + '</p>'; return; }
@@ -1557,7 +1568,7 @@ async function viewGroup(app, v) {
 }
 
 /* =====================================================================
-   셀원 이슈 보기 — 분파리더·목사님·사모님
+   셀원 이슈 보기 — 교역자·목사님·사모님
    내 분파 / 교회 전체, 기간·이슈 구분별, 사람별 묶음. 관계는 누구와 어려운지 한눈에.
    (셀보고서 셀 케어 기록 + 내가 볼 수 있는 성도 동정)
    ===================================================================== */
@@ -1626,7 +1637,7 @@ async function viewIssues(app, v) {
   const scope = senior ? 'all' : ISS.scope;
   const allRows = (await rpc('issue_board', { p_weeks: ISS.weeks, p_scope: scope })) || [];
   ISS.rows = allRows;
-  // 분당 / 부산 탭 (분파셀리더 화면과 같은 선택을 함께 씀)
+  // 분당 / 부산 탭 (교역자 화면과 같은 선택을 함께 씀)
   const rows = allRows.filter(r => (r.campus === '부산' ? '부산' : '분당') === CAMP.v);
   // 한 기록에 유형을 여러 개 고른 경우 모든 유형에서 보이게. 관계 상대를 적은 기록은 「관계」에도 들어감
   const catsOf = (r) => { const c = (r.categories && r.categories.length ? r.categories : [r.category]).filter(Boolean); if (r.relation_kind && !c.includes('relationship')) c.push('relationship'); return [...new Set(c)]; };
@@ -1700,7 +1711,7 @@ async function viewIssues(app, v) {
 }
 
 /* =====================================================================
-   교역자 보고 — 분파리더가 한 주에 하나, 빈칸에서 직접 작성
+   교역자 보고 — 교역자가 한 주에 하나, 빈칸에서 직접 작성
    (셀리더 보고서 내용은 참고로만 보이고 복사되지 않음, 제출하면 목사님·사모님께 바로 보임)
    ===================================================================== */
 const LR = { week: null, data: null, people: [], items: [], summary: '', pick: '', cat: 'update', content: '', editing: null, busy: false, ind: '' };
@@ -1984,13 +1995,13 @@ function viewNoteEdit(app, v) {
           <button class="segbutton" data-act="nt-vis" data-v="all" aria-pressed="${f.visibility === 'all'}">${tr('교역자 모두', 'All staff')}</button>
           <button class="segbutton" data-act="nt-vis" data-v="selected" aria-pressed="${f.visibility === 'selected'}">${tr('골라서 보이기', 'Choose people')}</button></div>
         ${f.visibility === 'selected' ? `<div class="stack" style="gap:4px;margin-top:8px"><p class="tiny muted" style="margin:0">${tr('담임 목사님·사모님은 고르지 않으셔도 늘 보십니다.', 'Pastor Scott Brenner & Mrs. Sunghee Brenner always see every note.')}</p>${(NOTE.staff || []).map(p => `<label class="check"><input type="checkbox" data-ntviewer="${p.id}" ${f.viewers.includes(p.id) ? 'checked' : ''}><span>${esc(p.name)}</span></label>`).join('') || '<p class="tiny muted">' + tr('고를 수 있는 교역자가 없습니다.', 'No staff to choose.') + '</p>'}</div>` : ''}
-        <p class="tiny muted" style="margin:6px 0 0">${tr('목사님·사모님은 모든 동정을 보시고, 새 동정이 올라오면 바로 알림을 받으십니다. ', 'Pastor Scott Brenner & Mrs. Sunghee Brenner see every note and are notified right away. ')}${f.visibility === 'all' ? tr('분파리더와 목사님·사모님이 모두 볼 수 있습니다.', 'All Leadership and Pastor Scott Brenner & Mrs. Sunghee Brenner can see it.') : tr('고른 분과 목사님·사모님만 볼 수 있고, 고른 분께 알림이 갑니다. 아무도 고르지 않으면 목사님·사모님만 보십니다.', 'Only the people you choose and Pastor Scott Brenner & Mrs. Sunghee Brenner can see it. If you choose no one, only they can see it.')}</p></div>
+        <p class="tiny muted" style="margin:6px 0 0">${tr('목사님·사모님은 모든 동정을 보시고, 새 동정이 올라오면 바로 알림을 받으십니다. ', 'Pastor Scott Brenner & Mrs. Sunghee Brenner see every note and are notified right away. ')}${f.visibility === 'all' ? tr('교역자와 목사님·사모님이 모두 볼 수 있습니다.', 'All Leadership and Pastor Scott Brenner & Mrs. Sunghee Brenner can see it.') : tr('고른 분과 목사님·사모님만 볼 수 있고, 고른 분께 알림이 갑니다. 아무도 고르지 않으면 목사님·사모님만 보십니다.', 'Only the people you choose and Pastor Scott Brenner & Mrs. Sunghee Brenner can see it. If you choose no one, only they can see it.')}</p></div>
       <label class="check"><input type="checkbox" id="nt-needs" ${f.needs_pastor ? 'checked' : ''}><span>${tr('목사님 확인이 필요합니다', 'The pastor should see this')} <span class="tiny muted">${tr('(목사님 확인 목록에 따로 표시됩니다)', '(shown in the pastor\'s to-review list)')}</span></span></label>
       <button class="btn" data-act="nt-save" ${NOTE.busy ? 'disabled' : ''}>${NOTE.busy ? tr('저장하는 중…', 'Saving…') : tr('저장하기', 'Save')}</button>
       ${f.id ? (f.confirmDel ? `<div class="banner warn small"><b>${tr('이 동정을 지울까요?', 'Delete this note?')}</b><div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="nt-del">${tr('지우기', 'Delete')}</button><button class="btn sm ghost" data-act="nt-del-cancel">${tr('취소', 'Cancel')}</button></div></div>`
         : `<button class="link" data-act="nt-del-ask">${tr('이 동정 지우기', 'Delete this note')}</button>`) : ''}
     </div>
-    <p class="tiny muted">${tr('교역자(분파리더·목사님·사모님)만 쓰고 볼 수 있습니다. 셀리더와 셀원에게는 보이지 않습니다.', 'Only pastoral staff can write and see notes. Never shown to cell leaders or members.')}</p>`;
+    <p class="tiny muted">${tr('교역자(교역자·목사님·사모님)만 쓰고 볼 수 있습니다. 셀리더와 셀원에게는 보이지 않습니다.', 'Only pastoral staff can write and see notes. Never shown to cell leaders or members.')}</p>`;
 }
 function noteFormSync() {
   const f = NOTE.form; if (!f) return;
@@ -2063,7 +2074,7 @@ function leaderBlock(cellId) {
       ${CL.rm || CL.asg ? '' : whenSeg()}
       <label class="row small" style="gap:8px"><input type="checkbox" id="cl-primary"> ${tr('대표 셀리더로', 'Make lead')}</label>
       <button class="btn" data-act="cl-add" data-cell="${cellId}" ${CL.busy ? 'disabled' : ''}>${tr('셀리더로 넣기', 'Add as cell leader')}</button></div>`;
-  // 관리자: 담당 분파셀리더 / 셀 닫기
+  // 관리자: 담당 교역자 / 셀 닫기
   if (I.is_admin) {
     const c = I.cell;
     const asgNow = I.assignments.filter(a => !a.end_date || a.end_date >= w);
@@ -2071,9 +2082,9 @@ function leaderBlock(cellId) {
       : c.review_mode === 'senior_direct' ? tr('스캇 브래너 담임 목사님·성희 브래너 사모님이 직접 확인하십니다.', 'Reviewed directly by Pastor & Mrs. Brenner.')
       : c.review_mode === 'none' ? tr('검토 없는 셀입니다.', 'No review.')
       : asgNow.length ? asgNow.map(a => esc(a.name) + (a.start_date > w ? tr(' (' + dayLabel(a.start_date) + '부터)', ' (from ' + dayLabel(a.start_date) + ')') : a.end_date ? tr(' (' + dayLabel(a.end_date) + '까지)', ' (until ' + dayLabel(a.end_date) + ')') : '')).join(' → ')
-      : tr('담당 분파셀리더가 없습니다.', 'No Leadership assigned.');
+      : tr('담당 교역자가 없습니다.', 'No Leadership assigned.');
     const canAsg = !c.staff_shared && c.review_mode !== 'none';
-    h += `<h2>${tr('담당 분파셀리더', 'Leadership')} <span class="tiny muted">${tr('관리자만', 'Admin only')}</span></h2><div class="card stack">
+    h += `<h2>${tr('담당 교역자', 'Leadership')} <span class="tiny muted">${tr('관리자만', 'Admin only')}</span></h2><div class="card stack">
       <p style="margin:0">${asgText}</p>
       ${!canAsg ? '' : CL.asg ? `<label class="field small">${tr('새 담당', 'New Leadership')}<select id="cl-asg">
           <option value="">${tr('— 골라 주세요 —', '— Choose —')}</option>
@@ -2082,7 +2093,7 @@ function leaderBlock(cellId) {
         ${whenSeg()}
         <div class="row" style="gap:8px"><button class="btn sm" data-act="cl-asg-save" data-cell="${cellId}" ${CL.busy ? 'disabled' : ''}>${tr('저장', 'Save')}</button><button class="btn sm ghost" data-act="cl-cancel">${tr('취소', 'Cancel')}</button></div>`
       : `<button class="link" data-act="cl-asg-open">${tr('담당 바꾸기', 'Change')}</button>`}</div>
-    <div class="card stack">${CL.closeAsk ? `<div class="banner warn small"><b>${tr(esc(c.name) + '을 닫을까요?', 'Close ' + esc(c.name) + '?')}</b>${tr('닫으면 셀리더·분파셀리더 화면과 현황에서 보이지 않습니다. 지난 보고서와 기록은 그대로 남고, 관리 화면에서 언제든 다시 열 수 있습니다. 이번 주 보고서가 남아 있다면 먼저 제출한 뒤 닫아 주세요.', 'It disappears from all screens. Records stay, and you can reopen it in Admin. Submit this week’s report first if needed.')}
+    <div class="card stack">${CL.closeAsk ? `<div class="banner warn small"><b>${tr(esc(c.name) + '을 닫을까요?', 'Close ' + esc(c.name) + '?')}</b>${tr('닫으면 셀리더·교역자 화면과 현황에서 보이지 않습니다. 지난 보고서와 기록은 그대로 남고, 관리 화면에서 언제든 다시 열 수 있습니다. 이번 주 보고서가 남아 있다면 먼저 제출한 뒤 닫아 주세요.', 'It disappears from all screens. Records stay, and you can reopen it in Admin. Submit this week’s report first if needed.')}
         <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm warn" data-act="cl-close" data-cell="${cellId}">${tr('셀 닫기', 'Close cell')}</button><button class="btn sm ghost" data-act="cl-cancel">${tr('취소', 'Cancel')}</button></div></div>`
       : `<button class="link" data-act="cl-close-ask" style="color:var(--danger)">${tr('이 셀 닫기', 'Close this cell')}</button>`}</div>`;
   }
@@ -2166,7 +2177,7 @@ async function memAct(fn, args, okMsg) {
    실제 데이터는 불러오지 않고, 아무것도 저장되지 않습니다.
    ===================================================================== */
 const DEMO = { role: null, saved: null, week: null, today: null };
-const DEMO_ROLE = { leader: '셀리더', leadership: '분파셀리더(교역자)', senior: '목사님·사모님' };
+const DEMO_ROLE = { leader: '셀리더', leadership: '교역자', senior: '목사님·사모님' };
 function demoErr() { const e = new Error('미리보기 화면이라 저장·제출되지 않습니다.'); e.demo = true; return e; }
 function demoDB() {
   const W = DEMO.week, LW = addDays(W, -7), at = (d, t) => d + 'T' + (t || '10:00') + ':00+09:00';
@@ -2330,7 +2341,7 @@ function msgHelp() {
   const li = (t) => `<li style="margin:4px 0">${t}</li>`;
   return `<details class="cellbox" style="margin-top:16px"${MSG.helpOpen ? ' open' : ''}><summary class="small"><b>${tr('받는 분께는 어떻게 보이나요?', 'How do recipients see it?')}</b></summary>
     <ul class="small" style="margin:8px 0 0;padding-left:20px">
-      ${li(tr('받는 분이 앱을 열면 첫 화면의 「✉️ 메시지」 칸에 <b>「새 메시지」</b> 표시가 생깁니다. 목사님·사모님은 「전체 현황」, 교역자는 「분파셀리더」, 셀리더는 「셀리더」 첫 화면입니다.', 'A “new message” badge appears on the Messages card of their home screen.'))}
+      ${li(tr('받는 분이 앱을 열면 첫 화면의 「✉️ 메시지」 칸에 <b>「새 메시지」</b> 표시가 생깁니다. 목사님·사모님은 「전체 현황」, 교역자는 「교역자」, 셀리더는 「셀리더」 첫 화면입니다.', 'A “new message” badge appears on the Messages card of their home screen.'))}
       ${li(tr('알림을 켜 두신 분께는 휴대폰 알림(<b>✉️ 보낸 분 이름 + 내용 앞부분</b>)이 바로 갑니다.', 'If notifications are on, they get a phone notification right away.'))}
       ${li(tr('받는 분이 열면 대화 화면에서 내용을 보고 바로 <b>답장</b>할 수 있고, 답장이 오면 나에게도 같은 방식으로 알려 드립니다.', 'They can reply in the conversation, and you are notified the same way.'))}
       ${li(tr('담임 목사님께는 <b>영어 번역</b>과 원문이 함께 보이고, 목사님이 영어로 쓰신 글은 한국어로 번역되어 보입니다.', 'Pastor Scott sees an English translation with the original.'))}
@@ -2529,7 +2540,7 @@ const ROLE_EN = { leadership: 'Leadership', senior_pastor: 'Senior Pastor', samo
 function personSummary(p) {
   const bits = [];
   if (p.leads.length) bits.push(p.leads.map(c => c.name).join(', ') + tr(' 셀리더', ' · cell leader'));
-  if (p.oversees.length) bits.push(tr('분파셀리더 · 담당 셀 ' + p.oversees.length + '개', 'Leadership · ' + p.oversees.length + ' cells'));
+  if (p.oversees.length) bits.push(tr('교역자 · 담당 셀 ' + p.oversees.length + '개', 'Leadership · ' + p.oversees.length + ' cells'));
   const extra = p.roles.filter(r => r !== 'leadership').map(r => (EN() ? ROLE_EN : ROLE_KO)[r]);
   if (extra.length) bits.push(extra.join(', '));
   return bits.join(' · ') || tr('맡은 셀·역할 없음', 'No cell or role');
@@ -2607,7 +2618,7 @@ async function viewAdminHome(app) {
   // 3) 셀 명단 (담당별)
   const groups = new Map();
   for (const c of C.values()) {
-    const key = c.campus === '부산' ? tr('부산 캠퍼스 (교역자 공동)', 'Busan campus (all staff)') : c.review_mode === 'leadership' ? (c.resp ? c.resp.name : tr('담당 분파셀리더 없음', 'No Leadership assigned')) : c.review_mode === 'senior_direct' ? tr('스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인', 'Reviewed by Pastor Scott Brenner & Mrs. Sunghee Brenner') : tr('검토 없음', 'No review');
+    const key = c.campus === '부산' ? tr('부산 캠퍼스 (교역자 공동)', 'Busan campus (all staff)') : c.review_mode === 'leadership' ? (c.resp ? c.resp.name : tr('담당 교역자 없음', 'No Leadership assigned')) : c.review_mode === 'senior_direct' ? tr('스캇 브래너 담임 목사님 / 성희 브래너 사모님 직접 확인', 'Reviewed by Pastor Scott Brenner & Mrs. Sunghee Brenner') : tr('검토 없음', 'No review');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(c);
   }
@@ -2620,7 +2631,7 @@ async function viewAdminHome(app) {
   const newCell = `<div class="card stack"><h3 style="margin:0">${tr('새 셀 만들기', 'New cell')}</h3>
       <label class="field small">${tr('셀 이름', 'Cell name')}<input type="text" id="nc-name" maxlength="40" placeholder="${tr('예: 홍길동 셀, 부산 청년3 셀', 'e.g. Hong Gildong cell')}"></label>
       <label class="field small">${tr('캠퍼스', 'Campus')}<select id="nc-campus"><option value="">${tr('분당', 'Bundang')}</option><option value="부산">${tr('부산 (교역자 공동 관리)', 'Busan (all staff)')}</option></select></label>
-      <label class="field small">${tr('보고서 확인', 'Report review')}<select id="nc-review"><option value="0">${tr('담당 분파셀리더가 확인', 'Leadership reviews')}</option><option value="1">${tr('목사님·사모님 직접 확인', 'Pastor & Mrs. Brenner review')}</option></select></label>
+      <label class="field small">${tr('보고서 확인', 'Report review')}<select id="nc-review"><option value="0">${tr('담당 교역자가 확인', 'Leadership reviews')}</option><option value="1">${tr('목사님·사모님 직접 확인', 'Pastor & Mrs. Brenner review')}</option></select></label>
       <label class="row small" style="gap:8px"><input type="checkbox" id="nc-sat"> ${tr('토요일에 모이는 셀', 'Meets on Saturday')}</label>
       <p class="tiny muted" style="margin:0">${tr('만든 뒤 아래 목록에서 셀을 열고 「셀원 관리」에서 셀리더·담당·셀원을 넣어 주세요.', 'After creating it, open the cell below and use Members to add leaders, Leadership and members.')}</p>
       <button class="btn sm" data-act="nc-create" ${ADMIN.busy ? 'disabled' : ''}>${tr('셀 만들기', 'Create cell')}</button></div>`;
@@ -2633,7 +2644,7 @@ async function viewAdminHome(app) {
   } catch (_) { /* 알림 기능 설치 전 */ }
 
   h += `<div class="card stack" style="margin-top:20px">
-    <p class="small muted" style="margin:0">${tr('셀리더·담당 분파셀리더 바꾸기, 셀원 옮기기, 셀 닫기는 각 셀의 「셀원 관리」 화면에서 할 수 있습니다. 앱에서 바꾼 내용은 누가 바꿨는지 함께 기록됩니다.', 'Change cell leaders, Leadership, move members or close a cell from each cell’s Members screen. Changes are recorded with who made them.')}</p>
+    <p class="small muted" style="margin:0">${tr('셀리더·담당 교역자 바꾸기, 셀원 옮기기, 셀 닫기는 각 셀의 「셀원 관리」 화면에서 할 수 있습니다. 앱에서 바꾼 내용은 누가 바꿨는지 함께 기록됩니다.', 'Change cell leaders, Leadership, move members or close a cell from each cell’s Members screen. Changes are recorded with who made them.')}</p>
     ${isSenior() ? '' : '<p class="small muted" style="margin:0">관리자 역할만으로는 보고서와 목양 기록을 볼 수 없습니다.</p>'}</div>
     <button class="listitem" data-act="dg-open" style="margin-top:12px"><span class="top"><b>📧 ${tr('주간 요약 메일 미리 보기', 'Weekly email preview')}</b><span class="small muted">→</span></span><span class="small muted">${tr('금요일 밤 11:59 자동 발송 · 미제출 명단(누적)과 중요 내용 요약', 'Sent Friday 11:59 PM')}</span></button><div id="pushbox"></div>`;
   app.innerHTML = h;
@@ -2683,7 +2694,7 @@ function overviewBlock(o, week) {
   h += `<div class="stats">
     <div class="stat"><div class="v num">${submitted}<span class="small muted"> / ${base}</span></div><div class="k">${tr('셀보고서 제출', 'Cell reports in')}</div></div>
     <div class="stat ${thisMissing ? 'warn' : ''}"><div class="v num">${o.cells_due ? thisMissing : '-'}</div><div class="k">${tr('이번 주 미제출', 'Missing this week')}</div></div>
-    <div class="stat ${pending ? 'warn' : ''}"><div class="v num">${pending}</div><div class="k">${tr('분파셀리더 확인 대기', 'Awaiting review')}</div></div>
+    <div class="stat ${pending ? 'warn' : ''}"><div class="v num">${pending}</div><div class="k">${tr('교역자 확인 대기', 'Awaiting review')}</div></div>
     <div class="stat"><div class="v num">${o.lr_done}<span class="small muted"> / ${o.lr_total}</span></div><div class="k">${tr('교역자 보고', 'Leadership reports')}</div></div></div>`;
   if (!o.cells_due) h += `<p class="tiny muted" style="margin:6px 0 0">${tr('아직 이번 주 마감 전이라 미제출은 집계하지 않았습니다.', 'Before this week’s deadline, so missing reports are not counted yet.')}</p>`;
   for (const c of camps) {
@@ -2704,7 +2715,7 @@ function overviewBlock(o, week) {
   h += `<div class="card" style="margin-top:12px"><h3 style="margin-top:0">${tr('앱 사용 현황', 'App usage')}</h3>
     <div class="small">${tr('셀리더 로그인', 'Cell leaders signed in')}: <b>${u.leaders_signed_in} / ${u.leaders}</b> · ${tr('알림 켬', 'Notifications on')}: <b>${u.leaders_push} / ${u.leaders}</b></div>
     <div class="small">${tr('이 주 성도 동정', 'Pastoral notes this week')}: <b>${u.notes_week}</b> · ${tr('이 주 메시지', 'Messages this week')}: <b>${u.messages_week}</b>${u.pending_requests ? ' · <span style="color:var(--warn)">' + tr('가입 승인 대기 ' + u.pending_requests, u.pending_requests + ' sign-up requests') + '</span>' : ''}</div>
-    <p class="tiny muted" style="margin:6px 0 0">${tr('숫자와 이름만 보여 드립니다. 보고서 내용은 목사님·사모님과 담당 분파셀리더만 보십니다.', 'Numbers and names only — report contents stay with the pastors and Leadership.')}</p></div>`;
+    <p class="tiny muted" style="margin:6px 0 0">${tr('숫자와 이름만 보여 드립니다. 보고서 내용은 목사님·사모님과 담당 교역자만 보십니다.', 'Numbers and names only — report contents stay with the pastors and Leadership.')}</p></div>`;
   return h;
 }
 async function adminAct(fn, args, okMsg) {
