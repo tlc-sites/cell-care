@@ -1,5 +1,6 @@
 // 서버 쪽 공통 (Vercel 함수). 비밀 키는 Vercel 환경 변수에서만 읽습니다.
 const webpush = require('web-push');
+const notificationRoutes = require('../notification-route');
 const SUPABASE_URL = 'https://mcbbhsvvzqvtrxlbdcks.supabase.co';
 const PUBLISHABLE = 'sb_publishable_hs84BPU44TEcr2wM6boXIw_Saktd9p3';
 
@@ -17,6 +18,7 @@ function setupPush() {
 async function serviceRpc(fn, args) {
   const key = env('SUPABASE_SECRET_KEY');
   const headers = { apikey: key, 'Content-Type': 'application/json' };
+  if (fn.startsWith('cellcare_')) { headers['Content-Profile'] = 'report'; headers['Accept-Profile'] = 'report'; }
   if (key.split('.').length === 3) headers.Authorization = 'Bearer ' + key;   // 예전 형식(service_role JWT)
   const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, { method: 'POST', headers, body: JSON.stringify(args || {}) });
   const text = await r.text();
@@ -33,12 +35,19 @@ async function authUser(req) {
   return r.json();
 }
 async function sendAll(targets, payload) {
+  const deliveries = targets.map(t => {
+    const message = typeof payload === 'function' ? payload(t) : payload;
+    const notification_key = /^(access-request|login-alert|test)$/.test(message.tag || '') ? message.tag + ':' + new Date().toISOString().slice(0,16) : message.tag;
+    return { endpoint: t.endpoint, payload: { ...message, notification_key, url: notificationRoutes.url(message) } };
+  });
+  // 알림함 기록은 기기 발송 성공 여부와 분리한다. 중복 기기는 DB에서 한 건으로 합친다.
+  if (deliveries.length) await serviceRpc('cellcare_notification_record', { p_deliveries: deliveries });
   const wp = setupPush();
   let sent = 0, gone = 0, failed = 0;
-  for (const t of targets) {
+  for (const [i, t] of targets.entries()) {
     try {
       await wp.sendNotification({ endpoint: t.endpoint, keys: { p256dh: t.p256dh, auth: t.auth } },
-        JSON.stringify(typeof payload === 'function' ? payload(t) : payload), { TTL: 60 * 60 * 12, urgency: 'normal' });
+        JSON.stringify(deliveries[i].payload), { TTL: 60 * 60 * 12, urgency: 'normal' });
       sent++; await serviceRpc('push_mark', { p_endpoint: t.endpoint, p_gone: false });
     } catch (e) {
       if (e.statusCode === 404 || e.statusCode === 410) { gone++; await serviceRpc('push_mark', { p_endpoint: t.endpoint, p_gone: true }); }

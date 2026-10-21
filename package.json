@@ -5,8 +5,14 @@
   "engines": {
     "node": ">=18"
   },
+  "scripts": {
+    "test": "node --test tests/prayer-only-report.test.mjs tests/notifications.test.mjs tests/notification-permissions.test.mjs tests/notification-ui.test.mjs"
+  },
   "dependencies": {
     "web-push": "3.6.7",
     "nodemailer": "6.9.16"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10"
   }
 }

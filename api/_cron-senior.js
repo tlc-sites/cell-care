@@ -1,5 +1,5 @@
 // (api/cron.js?job=senior 로 불림)
-// 금요일 오후 5시: 담임 목사님·사모님께 "이번 주 교역자 보고가 준비되었습니다" 알림 (Vercel Cron, CRON_SECRET 필요)
+// 금요일 오후 5시: 담임 목사님·담임 사모님께 "이번 주 교역자 보고가 준비되었습니다" 알림 (Vercel Cron, CRON_SECRET 필요)
 const { serviceRpc, sendAll, seoulToday, env } = require('./_lib');
 module.exports = async (req, res) => {
   try {

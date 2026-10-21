@@ -1,9 +1,9 @@
 // (api/cron.js?job=digest 로 불림 — Vercel 무료 요금제 함수 12개 제한 때문에 합침)
 // 주간 요약 메일 (금요일 밤 11:59, Vercel Cron)
 //  · 셀보고서 미제출 / 교역자 보고 미제출 (누적 포함) + 이번 주 셀보고서 중요 내용 요약
-//  · 받는 분: 담임 목사님(영어) · 사모님(한국어) — 앱에 등록된 이메일. 아직 없으면 DIGEST_EN_TO / DIGEST_KO_TO 에 적은 주소
+//  · 받는 분: 담임 목사님(영어) · 담임 사모님(한국어) — 앱에 등록된 이메일. 아직 없으면 DIGEST_EN_TO / DIGEST_KO_TO 에 적은 주소
 //  · 보내는 메일: GMAIL_USER / GMAIL_APP_PASSWORD (교회 Gmail 앱 비밀번호). 없으면 보내지 않고 건너뜀
-//  · 앱 안 미리보기: POST { preview: 'ko'|'en' } (목사님·사모님·관리자만), 테스트 발송: POST { test: true } (본인에게만)
+//  · 앱 안 미리보기: POST { preview: 'ko'|'en' } (담임 목사님·담임 사모님·관리자만), 테스트 발송: POST { test: true } (본인에게만)
 const { serviceRpc, authUser, seoulToday, env } = require('./_lib');
 const SUPABASE_URL = 'https://mcbbhsvvzqvtrxlbdcks.supabase.co';
 const PUBLISHABLE = 'sb_publishable_hs84BPU44TEcr2wM6boXIw_Saktd9p3';

@@ -1,4 +1,4 @@
-// 담임 목사님·사모님 코멘트: 남기신 직후 앱이 부름
+// 담임 목사님·담임 사모님 코멘트: 남기신 직후 앱이 부름
 // 남기신 본인 로그인이 맞을 때만 → (영어면) 한국어로 번역해 저장 → 셀리더(·담당 분파셀리더) 휴대폰으로 알림
 const { serviceRpc, authUser, sendAll } = require('./_lib');
 const { translate } = require('./translate');
@@ -17,6 +17,15 @@ module.exports = async (req, res) => {
     const user = await authUser(req);
     if (!user || !user.id) return res.status(401).json({ error: 'login required' });
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    if (body.reply) {
+      if (!UUID.test(body.reply)) return res.status(400).json({ error: 'reply' });
+      const targets = await serviceRpc('cellcare_reply_push_targets', { p_reply: body.reply, p_auth_user: user.id });
+      return res.status(200).json(await sendAll(targets, x => ({
+        title: x.lang === 'en' ? 'New reply to your comment' : '코멘트에 답글이 달렸습니다',
+        body: x.lang === 'en' ? 'Open Cell Care to read the reply.' : '셀 케어에서 답글을 확인해 주세요.',
+        tag: 'reply-' + body.reply, url: x.url
+      })));
+    }
     const short = (s) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > 90 ? s.slice(0, 88) + '…' : s; };
     const toKo = async (text) => {
       if (/[가-힣]/.test(text)) return '';
@@ -33,9 +42,10 @@ module.exports = async (req, res) => {
       const ko = await toKo(c.content);
       await serviceRpc('note_comment_mark', { p_id: body.note_comment, p_ko: ko });
       const targets = await serviceRpc('note_comment_push_targets', { p_id: body.note_comment });
+      const destination = await serviceRpc('cellcare_comment_destination', { p_kind: 'note', p_id: body.note_comment });
       const result = await sendAll(targets, (x) => x.lang === 'en'
-        ? { title: '💬 ' + c.author + ' commented on your note', body: short(c.content) + '\n(' + c.person_name + ')', tag: 'ncmt-' + body.note_comment }
-        : { title: '💬 ' + c.author + '께서 성도 동정에 코멘트를 남기셨습니다', body: short(ko || c.content) + '\n(' + c.person_name + ')', tag: 'ncmt-' + body.note_comment });
+        ? { title: '💬 ' + c.author + ' commented on your note', body: short(c.content) + '\n(' + c.person_name + ')', tag: 'ncmt-' + body.note_comment, url: destination }
+        : { title: '💬 ' + c.author + '께서 성도 동정에 코멘트를 남기셨습니다', body: short(ko || c.content) + '\n(' + c.person_name + ')', tag: 'ncmt-' + body.note_comment, url: destination });
       return res.status(200).json({ translated: !!ko, ...result });
     }
     if (!UUID.test(body.comment || '')) return res.status(400).json({ error: 'comment' });
@@ -51,10 +61,11 @@ module.exports = async (req, res) => {
     }
     await serviceRpc('senior_comment_mark', { p_id: body.comment, p_ko: ko });
     const targets = await serviceRpc('senior_comment_push_targets', { p_id: body.comment });
-    const what = c.target === 'pastor_msg' ? '목사님께 드린 말씀에 답글을' : '셀보고서에 코멘트를';
+    const destination = await serviceRpc('cellcare_comment_destination', { p_kind: 'report', p_id: body.comment });
+    const what = c.target === 'pastor_msg' ? '담임 목사님께 드린 말씀에 답글을' : '셀보고서에 코멘트를';
     const result = await sendAll(targets, (x) => x.lang === 'en'
-      ? { title: '💬 ' + c.author + ' left a ' + (c.target === 'pastor_msg' ? 'reply' : 'comment'), body: short(c.content) + '\n(' + c.cell_name + ')', tag: 'cmt-' + body.comment }
-      : { title: '💬 ' + c.author + '께서 ' + what + ' 남기셨습니다', body: short(ko || c.content) + '\n(' + c.cell_name + ')', tag: 'cmt-' + body.comment });
+      ? { title: '💬 ' + c.author + ' left a ' + (c.target === 'pastor_msg' ? 'reply' : 'comment'), body: short(c.content) + '\n(' + c.cell_name + ')', tag: 'cmt-' + body.comment, url: destination }
+      : { title: '💬 ' + c.author + '께서 ' + what + ' 남기셨습니다', body: short(ko || c.content) + '\n(' + c.cell_name + ')', tag: 'cmt-' + body.comment, url: destination });
     res.status(200).json({ translated: !!ko, ...result });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });

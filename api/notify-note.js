@@ -1,4 +1,4 @@
-// 성도 동정 알림 · 공지 알림({ notice }): 골라서 보이게 한 교역자, 목사님·사모님께는 모든 새 동정을 바로
+// 성도 동정 알림 · 공지 알림({ notice }): 골라서 보이게 한 교역자, 담임 목사님·담임 사모님께는 모든 새 동정을 바로
 // 쓴 본인의 로그인 토큰이 맞을 때, 같은 동정은 한 번만
 const { serviceRpc, authUser, sendAll } = require('./_lib');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -28,7 +28,7 @@ module.exports = async (req, res) => {
       return x.lang === 'en'
         ? { title: pastor ? '🙏 Pastoral note needs your attention' : senior ? '🙏 New pastoral note' : '🙏 A pastoral note was shared with you',
             body: t.author + ' wrote about ' + t.person + '.\nPlease take a look in Cell Care.', tag: 'note-' + body.note }
-        : { title: pastor ? '🙏 목사님 확인이 필요한 성도 동정' : senior ? '🙏 새 성도 동정이 올라왔습니다' : '🙏 성도 동정이 공유되었습니다',
+        : { title: pastor ? '🙏 담임 목사님 확인이 필요한 성도 동정' : senior ? '🙏 새 성도 동정이 올라왔습니다' : '🙏 성도 동정이 공유되었습니다',
             body: t.author + '님이 ' + t.person + '님에 대한 동정을 ' + (pastor || senior ? '남겼습니다.' : '함께 보도록 공유했습니다.') + '\n셀 케어에서 확인해 주세요.', tag: 'note-' + body.note };
     });
     res.status(200).json(result);

@@ -36,8 +36,8 @@ module.exports = async (req, res) => {
     const short = (s) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > 90 ? s.slice(0, 88) + '…' : s; };
     const targets = await serviceRpc('msg_push_targets', { p_post: body.post });
     const result = await sendAll(targets, (x) => x.lang === 'en'
-      ? { title: '✉️ Message from ' + m.author, body: short(hangul && tr ? tr : m.body) + (m.report_label ? '\n(' + m.report_label + ' report attached)' : ''), tag: 'msg-' + m.thread_id, url: './' }
-      : { title: '✉️ ' + m.author + '님의 메시지', body: short(!hangul && tr ? tr : m.body) + (m.report_label ? '\n(' + m.report_label + ' 보고서 함께 보냄)' : ''), tag: 'msg-' + m.thread_id, url: './' });
+      ? { title: '✉️ Message from ' + m.author, body: short(hangul && tr ? tr : m.body) + (m.report_label ? '\n(' + m.report_label + ' report attached)' : ''), tag: 'msg-' + m.thread_id + '-' + body.post, url: './#thread=' + m.thread_id }
+      : { title: '✉️ ' + m.author + '님의 메시지', body: short(!hangul && tr ? tr : m.body) + (m.report_label ? '\n(' + m.report_label + ' 보고서 함께 보냄)' : ''), tag: 'msg-' + m.thread_id + '-' + body.post, url: './#thread=' + m.thread_id });
     res.status(200).json({ translated: !!tr, ...result });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });

@@ -1,6 +1,6 @@
 // 구글 시트 자동 정리용: 한 주의 셀보고서 현황·출석·셀 케어·기도제목을 돌려줌
 // 구글 Apps Script가 매주 금요일 저녁에 부름. EXPORT_TOKEN(Vercel 환경 변수)이 맞아야만 응답
-// ※ 받는 사람을 정해서 남긴 것(담임목사님께 드리는 말씀, 지정 공개 성도 동정, 메시지)은 내용 없이 기록만
+// ※ 받는 사람을 정해서 남긴 것(담임 목사님께 드리는 말씀, 지정 공개 성도 동정, 메시지)은 내용 없이 기록만
 const crypto = require('crypto');
 const { serviceRpc, env } = require('./_lib');
 module.exports = async (req, res) => {

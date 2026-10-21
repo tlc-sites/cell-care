@@ -1,5 +1,5 @@
-// 셀보고서 「담임목사님께 드리는 말씀」: 제출 직후 앱이 부름
-// 제출한 본인 로그인이 맞을 때만 → 영어로 번역해 저장 → 목사님·사모님 휴대폰으로 바로 알림
+// 셀보고서 「담임 목사님께 드리는 말씀」: 제출 직후 앱이 부름
+// 제출한 본인 로그인이 맞을 때만 → 영어로 번역해 저장 → 담임 목사님·담임 사모님 휴대폰으로 바로 알림
 const { serviceRpc, authUser, sendAll, env } = require('./_lib');
 const { translate } = require('./translate');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,7 +23,7 @@ module.exports = async (req, res) => {
     const short = (s) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > 90 ? s.slice(0, 88) + '…' : s; };
     const result = await sendAll(targets, (x) => x.lang === 'en'
       ? { title: '✉️ A message for you from ' + m.author, body: (en ? short(en) : short(m.content)) + '\n(' + m.cell_name + ')', tag: 'pmsg-' + body.report }
-      : { title: '✉️ ' + m.author + '님이 목사님께 드리는 말씀', body: short(m.content) + '\n(' + m.cell_name + ')', tag: 'pmsg-' + body.report });
+      : { title: '✉️ ' + m.author + '님이 담임 목사님께 드리는 말씀', body: short(m.content) + '\n(' + m.cell_name + ')', tag: 'pmsg-' + body.report });
     res.status(200).json({ translated: !!en, ...result });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
