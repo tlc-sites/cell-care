@@ -26,6 +26,16 @@ module.exports = async (req, res) => {
         tag: 'reply-' + body.reply, url: x.url
       })));
     }
+    // 보고서 대화(담당 교역자 ↔ 셀리더): 알림함에 기록된 받는 분께 푸시
+    if (body.talk) {
+      if (!UUID.test(body.talk)) return res.status(400).json({ error: 'talk' });
+      const targets = await serviceRpc('cellcare_talk_push_targets', { p_talk: body.talk, p_auth_user: user.id });
+      return res.status(200).json(await sendAll(targets, x => ({
+        title: x.lang === 'en' ? 'New message on a cell report' : '💬 ' + x.title,
+        body: String(x.body || '').replace(/\s+/g, ' ').slice(0, 90),
+        tag: 'talk-' + body.talk, url: x.url
+      })));
+    }
     const short = (s) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > 90 ? s.slice(0, 88) + '…' : s; };
     const toKo = async (text) => {
       if (/[가-힣]/.test(text)) return '';

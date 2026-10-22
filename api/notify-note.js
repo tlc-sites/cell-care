@@ -28,7 +28,7 @@ module.exports = async (req, res) => {
       return x.lang === 'en'
         ? { title: pastor ? '🙏 Pastoral note needs your attention' : senior ? '🙏 New pastoral note' : '🙏 A pastoral note was shared with you',
             body: t.author + ' wrote about ' + t.person + '.\nPlease take a look in Cell Care.', tag: 'note-' + body.note }
-        : { title: pastor ? '🙏 담임 목사님 확인이 필요한 성도 동정' : senior ? '🙏 새 성도 동정이 올라왔습니다' : '🙏 성도 동정이 공유되었습니다',
+        : { title: '🙏 [성도 동정] ' + t.person + (pastor ? ' · 담임 목사님 확인 필요' : senior ? ' · 새 동정' : ' · 공유됨'),
             body: t.author + '님이 ' + t.person + '님에 대한 동정을 ' + (pastor || senior ? '남겼습니다.' : '함께 보도록 공유했습니다.') + '\n셀 케어에서 확인해 주세요.', tag: 'note-' + body.note };
     });
     res.status(200).json(result);

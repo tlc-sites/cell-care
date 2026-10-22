@@ -13,6 +13,8 @@ test('알림 종류마다 해당 보고·메시지·동정·공지로 연결한�
   }
   assert.equal(routes.url({ tag: 'pmsg-' + id }), './#report=' + id + '&target=pastor_msg');
   assert.deepEqual(routes.parse('./#report=' + id + '&comment=' + id), { kind:'report',id,comment:id });
+  assert.deepEqual(routes.parse('./#report=' + id + '&talk=' + id), { kind:'report',id,comment:null,talk:id });
+  assert.equal(routes.url({ tag:'talk-' + id, url:'./#report=' + id + '&talk=' + id }), './#report=' + id + '&talk=' + id);
   assert.equal(routes.parse('#report=wrong'), null);
   assert.equal(routes.url({ tag:'test',url:'https://example.com/' }), './#section=notifications');
 });

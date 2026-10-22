@@ -4,7 +4,11 @@
   function parse(value) {
     const p = new URLSearchParams(String(value || '').replace(/^.*?#/, ''));
     for (const key of ['report', 'thread', 'note', 'notice']) {
-      if (uuid.test(p.get(key) || '')) return { kind: key, id: p.get(key), comment: uuid.test(p.get('comment') || '') ? p.get('comment') : null };
+      if (uuid.test(p.get(key) || '')) {
+        const route = { kind: key, id: p.get(key), comment: uuid.test(p.get('comment') || '') ? p.get('comment') : null };
+        if (key === 'report' && uuid.test(p.get('talk') || '')) route.talk = p.get('talk');   // 보고서 대화 글
+        return route;
+      }
     }
     const section = p.get('section');
     return ['leader', 'leadership', 'senior', 'admin', 'notifications'].includes(section) ? { kind: 'section', id: section } : null;

@@ -66,6 +66,25 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 금 13:00 교역자 알림, 금 17:00 목사님·사모님 알림, 금 23:59 주간 요약 메일(office@ → 목사님 영어, 사모님 한국어)
 - 토 01:00 구글 시트 정리
 
+## 6-1. 7가지 개선 작업 (2026-10-22, 미커밋 · 운영 미반영)
+
+용어: 분파셀리더 = 담당 교역자(`leadership` 역할, `leadership_assignments`). 새 테이블은 `report.cellcare_*`, 기존 public 함수는 넓히는 방향으로만 고친다(사용자 결정).
+
+| # | 내용 | 상태 |
+|---|---|---|
+| 2 | 모임 못 함 → 출석 단계 건너뜀, 확인·읽기 화면 출석 칸 대체, 저장 시 명단 전원 `unknown`으로 보내 이전 참석·결석 지움 | 화면 완료 (`tests/meeting-not-held.test.mjs`) |
+| 3 | 보고서별 「담당 교역자 · 셀리더 대화」 + 알림함·푸시(`api/senior-comment.js`의 `{ talk }`) | 마이그레이션 `20261022000000_report_talk_and_note_names.sql` + 화면 완료 (`tests/report-talk.test.mjs`) |
+| 4 | 셀 이름 옆 「금 19:30」 표시, 설정은 담당 교역자·관리자·담임만(화면 + `public.cell_set_schedule` 권한) | 마이그레이션 `20261022010000_note_categories_moves_schedule.sql` + 화면 완료 |
+| 5 | 알림함 성도 동정 제목 `[성도 동정] 이름`(기존 기록도 갱신), 푸시 제목에 이름 | `20261022000000_…` + `api/notify-note.js` |
+| 6 | 「확인할 보고서」: 주차와 무관하게 제출됐고 내가 아직 확인 안 한 보고서, 최근 제출 순 (`reviewBacklog`, 기존 `get_week_status` 재사용) | 화면 완료 |
+| 1 | 성도 동정 이슈 구분 다중 선택: `pastoral_notes.categories text[]` 추가(기존 행은 `[category]`로 채움, `category`는 첫 값 유지 → 시트·요약 등 기존 사용처 그대로). 저장은 `report.cellcare_pastoral_note_save`(기존 `pastoral_note_save` 호출), 읽기는 `report.cellcare_note_categories` | `20261022010000_…` + 화면 완료 |
+| 7 | 셀 이동 관리(교역자 홈 「셀 이동 관리」, 셀원 관리의 「셀 이동 등록」): 등록 → 기존 셀 담당이 셀리더·셀원 연락 체크 → 「셀 이동 적용」 → 이력. 적용 로직은 `public.member_move`와 동일(옛 행 `left_at`, 새 셀 새 행, 진행 중 기도제목 이동) → 과거 보고서·출석은 옛 셀 그대로. 이력 테이블 `report.cellcare_member_moves`(삭제 없음, 취소도 기록) | `20261022010000_…` + 화면 완료. 셀원 관리의 즉시 「다른 셀로 옮기기」 버튼은 이동 등록으로 바꿈(`member_move` 함수 자체는 그대로) |
+
+- 운영 DB 구조는 2026-10-22 SQL Editor에서 읽기 전용 SELECT로 확인(컬럼, `member_move`, `cell_set_schedule`, `pastoral_note_save`, `is_cell_leadership(p_cell, d default null)`, `check_member_dates`/`audit_admin_change` 트리거, `issue_board`의 동정 유형은 `array[category]`).
+- 검증: `npm test` 21개 통과(PGlite 가상 자료, 운영 접속 없음). 화면 캡처는 저장소 밖 `outputs/cellcare-improve-20261022/`.
+- 권한 요약: 이동 등록·연락 체크는 기존 셀 담당 교역자/관리자, 적용은 두 셀 담당/관리자, 취소는 기존 셀 담당/등록자/관리자, 목록은 두 셀 담당·관리자·담임·등록자.
+- 운영 반영 순서(승인 후): DB에 `20261022000000_…` → `20261022010000_…` 순서로 적용 → 앱 배포. 임시 자기 배정 파일 3개는 별도 작업이라 함께 적용·커밋하지 않음. 안내 페이지 guide.html·staff-guide.html에 2026-10-22 「업데이트 소식」과 본문(NEW) 반영. 역할 표시는 「셀리더 / 담당 교역자」 유지(분파셀리더 표기 사용 안 함).
+
 ## 7. 남은 일
 
 - 블루웹 DNS: MX·SPF(`v=spf1 include:_spf.google.com ~all`)·DKIM → 교회 메일 받기, 스팸함 방지

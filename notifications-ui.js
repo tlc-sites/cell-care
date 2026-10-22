@@ -3,7 +3,7 @@ const INBOX = { rows: [], loadedAt: 0, loading: false, error: '', pending: CellC
 function rememberNotificationRoute(route) {
   const url = new URL(location.href);
   const key = route.kind === 'section' ? 'section' : route.kind;
-  url.searchParams.set('notification', '#' + key + '=' + route.id + (route.comment ? '&comment=' + route.comment : ''));
+  url.searchParams.set('notification', '#' + key + '=' + route.id + (route.comment ? '&comment=' + route.comment : '') + (route.talk ? '&talk=' + route.talk : ''));
   history.replaceState(history.state, '', url.pathname + url.search + url.hash);
 }
 if (INBOX.pending) rememberNotificationRoute(INBOX.pending);
@@ -40,7 +40,7 @@ async function openNotificationRoute(route) {
   if (!S.ctx) { INBOX.pending = route; rememberNotificationRoute(route); return false; }
   if (E && !(await save())) { toast(tr('작성 중인 내용을 저장한 뒤 알림을 열어 주세요.', 'Please save your report before opening the notification.')); return false; }
   if (route.kind !== 'section' && !DEMO.role) {
-    const destination = './#' + route.kind + '=' + route.id + (route.comment ? '&comment=' + route.comment : '');
+    const destination = './#' + route.kind + '=' + route.id + (route.comment ? '&comment=' + route.comment : '') + (route.talk ? '&talk=' + route.talk : '');
     if ((await rpc('cellcare_notification_can_open', { p_url: destination })) !== true) {
       toast(tr('삭제되었거나 더 이상 볼 수 없는 알림입니다.', 'This notification is no longer available.')); return false;
     }
@@ -60,7 +60,7 @@ async function openNotificationRoute(route) {
   const url = new URL(location.href); url.searchParams.delete('notification');
   history.replaceState(history.state, '', url.pathname + url.search + url.hash);
   await go(view);
-  const anchor = document.getElementById(route.comment ? 'comment-' + route.comment : route.kind + '-' + route.id);
+  const anchor = document.getElementById(route.comment ? 'comment-' + route.comment : route.talk ? 'talk-' + route.talk : route.kind + '-' + route.id);
   if (anchor) { anchor.scrollIntoView({ block: 'center' }); anchor.classList.add('notification-highlight'); }
   return true;
 }
