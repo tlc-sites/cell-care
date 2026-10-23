@@ -35,7 +35,7 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 
 - 2026-10-21까지 실제 DB에는 Claude가 만든 변경 **01 ~ 51번**이 순서대로 적용되어 있음.
   이 SQL 파일들은 일부에 교인·교역자 이름이 들어 있어 **공개 저장소에 넣지 않고** 관리자에게 따로 전달함(비공개 zip).
-- 그 뒤로는 `supabase/migrations/`에 날짜 이름으로 추가(Codex 방식). 지금 있는 것: `20261021010000_notifications_replies.sql`.
+- 그 뒤로는 `supabase/migrations/`에 날짜 이름으로 추가(Codex 방식). 운영 적용된 것: `20261021010000_notifications_replies.sql`, `20261022000000_report_talk_and_note_names.sql`, `20261022010000_note_categories_moves_schedule.sql`. (교역자 보고 v4.33 `leadership_report_items.leader_id`는 다른 작업에서 SQL Editor로 적용됨)
 - 함수의 「지금 실제 모습」은 파일보다 DB가 정답: `select pg_get_functiondef('public.save_report(uuid,jsonb,integer)'::regprocedure);`
 
 ### 최근 변경 요약 (38 ~ 51)
@@ -66,7 +66,9 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 금 13:00 교역자 알림, 금 17:00 목사님·사모님 알림, 금 23:59 주간 요약 메일(office@ → 목사님 영어, 사모님 한국어)
 - 토 01:00 구글 시트 정리
 
-## 6-1. 7가지 개선 작업 (2026-10-22, 미커밋 · 운영 미반영)
+## 6-1. 7가지 개선 작업 (2026-10-22 작성, 2026-10-23 운영 반영 완료)
+
+운영 반영(2026-10-23): DB에 `20261022000000_…` → `20261022010000_…` 적용(SQL Editor, 둘 다 Success) → 읽기 전용 확인(대화 테이블·이동 테이블 RLS 켜짐, 함수 권한 anon 막힘·내부 함수 authenticated 막힘, 동정 `categories` 빈 값 0건·첫 값 불일치 0건, `cell_set_schedule` 새 권한, 동정 알림 제목 이름 표시) → 커밋 `1fb00db` push → Vercel 「Deployment has completed」, 사이트 200.
 
 용어: 분파셀리더 = 담당 교역자(`leadership` 역할, `leadership_assignments`). 새 테이블은 `report.cellcare_*`, 기존 public 함수는 넓히는 방향으로만 고친다(사용자 결정).
 
@@ -83,7 +85,7 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 운영 DB 구조는 2026-10-22 SQL Editor에서 읽기 전용 SELECT로 확인(컬럼, `member_move`, `cell_set_schedule`, `pastoral_note_save`, `is_cell_leadership(p_cell, d default null)`, `check_member_dates`/`audit_admin_change` 트리거, `issue_board`의 동정 유형은 `array[category]`).
 - 검증: `npm test` 21개 통과(PGlite 가상 자료, 운영 접속 없음). 화면 캡처는 저장소 밖 `outputs/cellcare-improve-20261022/`.
 - 권한 요약: 이동 등록·연락 체크는 기존 셀 담당 교역자/관리자, 적용은 두 셀 담당/관리자, 취소는 기존 셀 담당/등록자/관리자, 목록은 두 셀 담당·관리자·담임·등록자.
-- 운영 반영 순서(승인 후): DB에 `20261022000000_…` → `20261022010000_…` 순서로 적용 → 앱 배포. 임시 자기 배정 파일 3개는 별도 작업이라 함께 적용·커밋하지 않음. 안내 페이지 guide.html·staff-guide.html에 2026-10-22 「업데이트 소식」과 본문(NEW) 반영. 역할 표시는 「셀리더 / 담당 교역자」 유지(분파셀리더 표기 사용 안 함).
+- 운영 반영 순서(완료): DB에 `20261022000000_…` → `20261022010000_…` 순서로 적용 → 앱 배포. 임시 자기 배정 파일 3개는 별도 작업이라 함께 적용·커밋하지 않음. 안내 페이지 guide.html·staff-guide.html에 2026-10-22 「업데이트 소식」과 본문(NEW) 반영. 역할 표시는 「셀리더 / 담당 교역자」 유지(분파셀리더 표기 사용 안 함).
 
 ## 7. 남은 일
 
