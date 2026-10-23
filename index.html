@@ -117,6 +117,14 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); bor
 .chip { min-height: 40px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-size: 15px; }
 .chip[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
 .check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 6px 0; }
+/* 고칠 곳 표시: 빨간 테두리와 칸 아래 이유 */
+input.bad, textarea.bad, select.bad { border-color: var(--danger); background: var(--danger-soft); box-shadow: 0 0 0 1px var(--danger); }
+.seg.bad, .chips.bad { outline: 2px solid var(--danger); outline-offset: 4px; border-radius: 12px; }
+.card.bad { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+h2.bad { color: var(--danger); }
+.steps div[data-stepi].bad { border-color: var(--danger); color: var(--danger); font-weight: 600; }
+.errmsg { color: var(--danger); font-size: 15px; font-weight: 600; margin: 6px 0 0; line-height: 1.5; }
+.errmsg::before { content: '⚠ '; }
 .check input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--accent); flex: none; }
 .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 8px 0 18px; }
 .steps div { text-align: center; font-size: 13px; color: var(--muted); padding-top: 8px; border-top: 4px solid var(--line); }
@@ -263,6 +271,25 @@ function toast(msg, ms = 2800) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
   clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, ms);
 }
+// 입력 칸(또는 선택 묶음)에 빨간 테두리와 이유를 붙인다. 그 칸을 고치면 바로 지운다.
+function fieldError(target, msg) {
+  const el = typeof target === 'string' ? $(target) : target;
+  toast(msg, 4000);
+  if (!el) return;
+  el.classList.add('bad');
+  const nx = el.nextElementSibling;
+  if (nx && nx.dataset.fe) nx.textContent = msg;
+  else el.insertAdjacentHTML('afterend', `<p class="errmsg" data-fe="1">${esc(msg)}</p>`);
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+function clearFieldError(el) {
+  if (!el || el.dataset.err || !el.classList.contains('bad')) return;
+  el.classList.remove('bad');
+  const nx = el.nextElementSibling; if (nx && nx.dataset.fe) nx.remove();
+}
+document.addEventListener('input', (e) => clearFieldError(e.target));
+document.addEventListener('change', (e) => clearFieldError(e.target));
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('.chip, .pickrow'); if (b) clearFieldError(b.closest('.chips') || $('#msg-count')?.closest('h2')); }, true);
 function errText(e) {
   const m = (e && (e.message || e.error_description || e.msg)) || String(e || '');
   if (/VERSION_CONFLICT/.test(m)) return '다른 셀리더가 방금 저장했습니다. 최신 내용을 불러와 주세요.';
@@ -806,7 +833,8 @@ function renderEditor() {
   if (E.proxy) h += `<div class="banner" style="margin-top:8px;border:1.5px solid var(--accent)"><b>✍️ 셀리더 대신 쓰는 중입니다</b>제출하면 「셀리더(${esc(S.me.name)})」로 표시됩니다. 셀리더도 같은 보고서를 함께 보고 고칠 수 있습니다.</div>`;
   if (E.conflict) h += `<div class="banner danger" role="alert" style="margin-top:8px"><b>다른 셀리더가 방금 이 보고서를 저장했습니다.</b>최신 내용을 불러온 뒤 이어서 작성해 주세요.<div style="margin-top:10px"><button class="btn sm" data-act="ed-reload">최신 내용 불러오기</button></div></div>`;
   if (E.step === 1 && skipAttendance()) E.step = 2;
-  h += '<div class="steps" aria-label="진행 단계">' + STEPS.map((s, i) => i === 1 && skipAttendance() ? `<div style="opacity:.45;text-decoration:line-through" aria-label="출석 단계 건너뜀">${i + 1}. ${s}</div>` : `<div class="${i < E.step ? 'done' : i === E.step ? 'now' : ''}">${i + 1}. ${s}</div>`).join('') + '</div>';
+  h += '<div class="steps" aria-label="진행 단계">' + STEPS.map((s, i) => i === 1 && skipAttendance() ? `<div style="opacity:.45;text-decoration:line-through" aria-label="출석 단계 건너뜀">${i + 1}. ${s}</div>` : `<div data-stepi="${i}" class="${i < E.step ? 'done' : i === E.step ? 'now' : ''}">${i + 1}. ${s}</div>`).join('') + '</div>';
+  h += '<div id="errsum" class="banner danger" role="alert" style="margin-bottom:12px" hidden></div>';
 
   if (E.step === 0) {
     const ldr = E.cell.review_mode === 'leadership' ? reviewerName('leadership', assignedName(E.cell.id)) + ' 확인' : E.cell.review_mode === 'senior_direct' ? '스캇 브래너 담임 목사님 / 성희 브래너 담임 사모님 확인' : '검토 없음';
@@ -816,12 +844,12 @@ function renderEditor() {
         <dt>보고 주차</dt><dd>${weekLabel(r.week_start, true)} (${dayLabel(r.week_start)} ~ ${dayLabel(addDays(r.week_start, 6))})</dd>
         <dt>셀</dt><dd>${esc(E.cell.name)}</dd><dt>확인</dt><dd>${ldr}</dd></dl></div>
       <h2>${weekLabel(r.week_start)} 셀모임을 진행하셨나요?</h2>
-      <div class="seg" style="--n:2">
+      <div class="seg" style="--n:2" data-err="meeting_held">
         <button data-act="ed-set" data-k="meeting_held" data-v="true" aria-pressed="${m.meeting_held === true}">진행함</button>
         <button data-act="ed-set" data-k="meeting_held" data-v="false" aria-pressed="${m.meeting_held === false}">진행하지 못함</button>
-      </div>`;
+      </div>${errSlot('meeting_held')}`;
     if (m.meeting_held === true) h += `<div style="margin-top:16px"><label class="field">셀모임 날짜
-        <input type="date" data-bind="meeting_date" data-rerender="1" max="${S.ctx.today}" value="${esc(m.meeting_date)}"></label>
+        <input type="date" data-bind="meeting_date" data-rerender="1" data-err="meeting_date" max="${S.ctx.today}" value="${esc(m.meeting_date)}"></label>${errSlot('meeting_date')}
         ${m.meeting_date && !weekOK(m.meeting_date) ? (() => { const nw = mondayOf(m.meeting_date); return m.meeting_date > S.ctx.today
           ? `<div class="banner warn" style="margin-top:8px"><b>아직 오지 않은 날짜입니다</b>모임한 날짜를 다시 골라 주세요.</div>`
           : `<div class="banner warn" style="margin-top:8px" role="alertdialog"><b>${dayLabel(m.meeting_date)}은 ${weekLabel(nw)} (${dayLabel(nw)} ~ ${dayLabel(addDays(nw, 6))})입니다</b>이 보고서를 ${weekLabel(nw)} 보고서로 옮길까요? 적어 두신 출석·셀 케어·은혜와 나눔 내용은 그대로 함께 옮겨집니다.
@@ -831,7 +859,7 @@ function renderEditor() {
           <label class="field" style="flex:2 1 180px;margin:0">모인 장소<input type="text" data-bind="meeting_place" maxlength="80" placeholder="예: 셀리더 댁, 교회 2층 소그룹실" value="${esc(m.meeting_place)}"></label></div>
         ${E.sched && (E.sched.meet_day || E.sched.meet_time || E.sched.meet_place) ? `<p class="tiny muted" style="margin:6px 0 0">원래 모임: ${esc(schedText(E.sched))} · 다르게 모였으면 고쳐 주세요.</p>` : ''}</div>`;
     if (m.meeting_held === false) h += `<div style="margin-top:16px"><label class="field">모임을 진행하지 못한 이유
-        <textarea data-bind="meeting_cancel_reason" placeholder="예: 추석 연휴로 쉬었습니다">${esc(m.meeting_cancel_reason)}</textarea></label>
+        <textarea data-bind="meeting_cancel_reason" data-err="meeting_cancel_reason" placeholder="예: 추석 연휴로 쉬었습니다">${esc(m.meeting_cancel_reason)}</textarea></label>${errSlot('meeting_cancel_reason')}
         <p class="tiny muted">모임을 하지 못한 주에도 보고서를 제출할 수 있습니다.</p>
         <div class="banner" style="margin-top:8px"><b>출석 단계는 건너뜁니다</b>「다음」을 누르면 셀 케어로 바로 넘어갑니다.${Object.values(m.att).some(a => a.status === 'present' || a.status === 'absent') ? ' 이미 입력하신 출석은 저장하지 않습니다. 다시 「진행함」을 고르시면 입력하신 출석이 그대로 돌아옵니다.' : ''}</div></div>`;
   }
@@ -877,7 +905,7 @@ function renderEditor() {
       <label class="check"><input type="checkbox" data-bind-check="grace_none" ${m.grace_none ? 'checked' : ''}><span>이번 주 특별히 나눌 내용이 없습니다</span></label>
       <p class="tiny muted">기도제목만 있는 경우 위 항목을 선택해 주세요. 셀 케어에 적은 기도제목은 그대로 제출됩니다.</p>
       <label class="field">이번 셀모임 가운데 하나님께서 주신 은혜와 감사한 일을 나눠 주세요.
-        <textarea data-bind="grace_notes" rows="7" ${m.grace_none ? 'disabled' : ''}>${esc(m.grace_notes)}</textarea></label>`;
+        <textarea data-bind="grace_notes" data-err="grace_notes" rows="7" ${m.grace_none ? 'disabled' : ''}>${esc(m.grace_notes)}</textarea></label>${errSlot('grace_notes')}`;
   }
 
   if (E.step === 2) {
@@ -897,11 +925,11 @@ function renderEditor() {
       if (!m.notes.length) m.notes.push({ member_id: '', categories: [], prayer: '', content: '', attention: false });
       const people = E.roster;
       h += '<div class="stack" style="margin-top:14px">' + m.notes.map((n, i) => `
-        <div class="card stack"><div class="row"><b>기록 ${i + 1}</b><span class="spacer"></span><button class="link" data-act="ed-delnote" data-i="${i}">삭제</button></div>
-          <label class="field">셀원<select data-note="${i}" data-f="member_id"><option value="">골라 주세요</option>
-            ${people.map(p => `<option value="${p.member_id}" ${p.member_id === n.member_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
-          <div><div style="font-weight:500;margin-bottom:6px">유형 <span class="tiny muted" style="font-weight:400">여러 개 선택 · 기도제목만 적을 때는 선택하지 않아도 됩니다</span></div><div class="chips">${Object.keys(L.care).map(k =>
-            `<button class="chip" data-act="ed-cat" data-i="${i}" data-v="${k}" aria-pressed="${n.categories.includes(k)}">${LX('care', k)}</button>`).join('')}</div></div>
+        <div class="card stack" data-errcard="${i}"><div class="row"><b>기록 ${i + 1}</b><span class="spacer"></span><button class="link" data-act="ed-delnote" data-i="${i}">삭제</button></div>
+          <div><label class="field">셀원<select data-note="${i}" data-f="member_id" data-err="note:${i}:member_id"><option value="">골라 주세요</option>
+            ${people.map(p => `<option value="${p.member_id}" ${p.member_id === n.member_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>${errSlot('note:' + i + ':member_id')}</div>
+          <div><div style="font-weight:500;margin-bottom:6px">유형 <span class="tiny muted" style="font-weight:400">여러 개 선택</span></div><div class="chips" data-err="note:${i}:categories">${Object.keys(L.care).map(k =>
+            `<button class="chip" data-act="ed-cat" data-i="${i}" data-v="${k}" aria-pressed="${n.categories.includes(k)}">${LX('care', k)}</button>`).join('')}</div>${errSlot('note:' + i + ':categories')}</div>
           ${n.categories.includes('relationship') ? `<div class="stack" style="gap:8px;background:var(--accent-soft);border-radius:12px;padding:10px 12px">
             <label class="field" style="margin:0">누구와의 관계인가요? <span class="tiny muted" style="font-weight:400">알면 골라 주세요</span><select data-note="${i}" data-f="related"><option value="">고르지 않음</option>
               ${people.filter(p => p.member_id !== n.member_id).map(p => `<option value="${p.member_id}" ${p.member_id === n.related_member_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
@@ -909,8 +937,8 @@ function renderEditor() {
             ${n.related_mode === 'other' ? `<input type="text" data-note="${i}" data-f="related_name" maxlength="60" placeholder="상대 이름 (예: 홍길동 집사)" value="${esc(n.related_name || '')}">` : ''}
             ${n.related_member_id || n.related_mode === 'other' ? `<div class="seg" style="--n:2"><button data-act="ed-relkind" data-i="${i}" data-v="mutual" aria-pressed="${n.relation_kind !== 'one_way'}">서로 어려워함</button><button data-act="ed-relkind" data-i="${i}" data-v="one_way" aria-pressed="${n.relation_kind === 'one_way'}">이 분이 상대 때문에 어려워함</button></div>` : ''}
           </div>` : ''}
-          <label class="field">내용 <span class="tiny muted" style="font-weight:400">기도제목만 적을 때는 비워 두셔도 됩니다</span><textarea data-note="${i}" data-f="content" rows="4" placeholder="나누고 싶은 내용을 적어 주세요.">${esc(n.content)}</textarea></label>
-          <label class="field">개인 기도제목 <span class="tiny muted" style="font-weight:400">있으면 적어 주세요 · 다음 주부터 「지난 기도제목」으로 이어집니다</span><textarea data-note="${i}" data-f="prayer" rows="2" placeholder="이 분을 위해 함께 기도할 제목">${esc(n.prayer || '')}</textarea></label>
+          <label class="field">내용<textarea data-note="${i}" data-f="content" data-err="note:${i}:text" rows="4" placeholder="셀에서 나눈 내용을 나눠 주세요">${esc(n.content)}</textarea></label>
+          <label class="field">개인 기도제목 <span class="tiny muted" style="font-weight:400">있으면 적어 주세요 · 다음 주부터 「지난 기도제목」으로 이어집니다</span><textarea data-note="${i}" data-f="prayer" data-err="note:${i}:text" rows="2" placeholder="셀원이 나눈 기도제목을 적어 주세요">${esc(n.prayer || '')}</textarea></label>${errSlot('note:' + i + ':text')}
           <label class="check"><input type="checkbox" data-note-attn="${i}" ${n.attention ? 'checked' : ''}><span>${E.cell.review_mode === 'senior_direct' ? '담임 목사님·담임 사모님 확인 필요' : '교역자 확인 필요'}</span></label>
         </div>`).join('') + '</div>' +
         `<button class="btn ghost" data-act="ed-addnote" style="margin-top:12px">+ 셀원 더 추가</button>`;
@@ -947,6 +975,7 @@ function renderEditor() {
       <div class="row" style="margin-top:12px"><button class="btn sm" data-act="ed-submit">${E.rep.submission_no > 0 ? '다시 제출합니다' : '제출합니다'}</button><button class="btn quiet sm" data-act="ed-confirm-cancel">다시 볼게요</button></div></div>`;
   }
   app.innerHTML = h;
+  showReportErrs();
 
   const last = E.step === STEPS.length - 1;
   const bar = document.getElementById('footer-bar') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'footer-bar', className: 'footer-bar' }));
@@ -963,7 +992,7 @@ async function reopenReport(id) {
 }
 function hideFooter() { const b = document.getElementById('footer-bar'); if (b) b.hidden = true; }
 
-function markDirty(rerender) { E.dirty = true; E.saveMsg = '저장 전'; const s = $('#savestate'); if (s) s.textContent = E.saveMsg; clearTimeout(E.timer); E.timer = setTimeout(save, 1200); if (rerender) renderEditor(); }
+function markDirty(rerender) { E.dirty = true; E.saveMsg = '저장 전'; const s = $('#savestate'); if (s) s.textContent = E.saveMsg; clearTimeout(E.timer); E.timer = setTimeout(save, 1200); if (rerender) renderEditor(); else if (E.showErrs) showReportErrs(); }
 
 // 기도제목만 있는 기록도 기존 DB의 기도 유형으로 저장한다.
 function careCategories(n) {
@@ -1019,17 +1048,53 @@ async function save() {
 }
 
 function validateForSubmit() {
-  const m = E.m; const w = E.rep.week_start;
-  if (m.meeting_held === null || m.meeting_held === undefined) return [0, '이번 주 셀모임 진행 여부를 골라 주세요.'];
-  if (m.meeting_held && !weekOK(m.meeting_date)) return [0, '셀모임 날짜를 ' + dayLabel(w) + '부터 ' + dayLabel(addDays(w, 6)) + ' 사이로 입력해 주세요.'];
-  if (m.meeting_held === false && !m.meeting_cancel_reason.trim()) return [0, '모임을 진행하지 못한 이유를 적어 주세요.'];
-  if (m.meeting_held && !m.grace_none && !m.grace_notes.trim()) return [3, '은혜와 나눔을 적어 주세요.'];
-  if (m.hasCare && m.notes.some(invalidCareNote)) return [2, '셀원과 내용 또는 기도제목을 적어 주세요. 기도제목만 적을 때는 유형을 고르지 않아도 됩니다.'];
-  return null;
+  const p = reportProblems()[0];
+  return p ? [p.step, (p.where ? p.where + ': ' : '') + p.msg] : null;
+}
+// 제출 전에 고칠 곳을 모두 찾는다: 단계, 칸(key), 칸 아래에 보일 이유, 기록 번호
+function reportProblems() {
+  const m = E.m; const w = E.rep.week_start; const out = [];
+  const add = (step, key, msg, where = '') => out.push({ step, key, msg, where });
+  if (m.meeting_held === null || m.meeting_held === undefined) add(0, 'meeting_held', '이번 주 셀모임 진행 여부를 골라 주세요.');
+  else if (m.meeting_held && !weekOK(m.meeting_date)) add(0, 'meeting_date', '셀모임 날짜를 ' + dayLabel(w) + '부터 ' + dayLabel(addDays(w, 6)) + ' 사이로 입력해 주세요.');
+  else if (m.meeting_held === false && !m.meeting_cancel_reason.trim()) add(0, 'meeting_cancel_reason', '모임을 진행하지 못한 이유를 적어 주세요.');
+  if (m.hasCare) m.notes.forEach((n, i) => {
+    if (!invalidCareNote(n)) return;
+    const where = '기록 ' + (i + 1);
+    if (!n.member_id) add(2, 'note:' + i + ':member_id', '셀원을 골라 주세요.', where);
+    if (!(n.content.trim() || (n.prayer || '').trim())) add(2, 'note:' + i + ':text', '내용이나 개인 기도제목 중 하나는 적어 주세요.', where);
+    else if (!careCategories(n).length) add(2, 'note:' + i + ':categories', '내용을 적으셨으면 유형을 하나 이상 골라 주세요. 기도제목만 적을 때는 고르지 않아도 됩니다.', where);
+  });
+  if (m.meeting_held && !m.grace_none && !m.grace_notes.trim()) add(3, 'grace_notes', '은혜와 나눔을 적어 주세요. 나눌 내용이 없으면 위의 「특별히 나눌 내용이 없습니다」를 선택해 주세요.');
+  return out;
+}
+const errSlot = (k) => `<p class="errmsg" data-errmsg="${k}" hidden></p>`;
+// 제출 검사에 걸린 뒤로는 칸을 고치는 대로 빨간 표시를 지운다 (글자 입력 중에도 다시 그리지 않음)
+function showReportErrs() {
+  if (!E || !E.showErrs) return;
+  const probs = reportProblems(); const by = {};
+  probs.forEach(p => { by[p.key] = p.msg; });
+  document.querySelectorAll('#app [data-err]').forEach(el => el.classList.toggle('bad', !!by[el.dataset.err]));
+  document.querySelectorAll('#app [data-errmsg]').forEach(el => { const t = by[el.dataset.errmsg] || ''; el.textContent = t; el.hidden = !t; });
+  document.querySelectorAll('#app [data-errcard]').forEach(el => el.classList.toggle('bad', probs.some(p => p.key.startsWith('note:' + el.dataset.errcard + ':'))));
+  document.querySelectorAll('#app [data-stepi]').forEach(el => el.classList.toggle('bad', probs.some(p => p.step === +el.dataset.stepi)));
+  const sum = $('#errsum');
+  if (sum) {
+    const here = probs.filter(p => p.step === E.step).length, other = probs.length - here;
+    const html = here ? `<b>고칠 곳이 ${here}곳 있습니다</b>빨간색으로 표시한 칸을 확인해 주세요.${other ? ` 다른 단계에도 ${other}곳이 더 있습니다.` : ''}`
+      : other ? `<b>다른 단계에 고칠 곳이 ${other}곳 있습니다</b>위 단계 표시에서 빨간색 단계를 확인해 주세요.` : '';
+    if (sum.innerHTML !== html) sum.innerHTML = html;
+    sum.hidden = !html;
+  }
+  if (!probs.length) E.showErrs = false;
+}
+function showSubmitProblems(bad) {
+  E.confirm = false; E.showErrs = true; E.step = bad[0]; renderEditor(); toast(bad[1], 5000);
+  setTimeout(() => { const el = $('#app [data-err].bad'); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 0);
 }
 async function submitReport() {
   const bad = validateForSubmit();
-  if (bad) { E.confirm = false; E.step = bad[0]; renderEditor(); toast(bad[1], 4000); return; }
+  if (bad) return showSubmitProblems(bad);
   const ok = await save(); if (!ok && E.conflict) return;
   if (E.dirty) { const ok2 = await save(); if (!ok2) { toast('저장하지 못해 제출할 수 없습니다. 인터넷 연결을 확인해 주세요.'); return; } }
   try {
@@ -1239,7 +1304,7 @@ function commentBlock(cmts, target, rep) {
 }
 async function commentAdd(id, target) {
   const text = (CMT.draft[target] || '').trim();
-  if (!text) return toast(tr('코멘트를 적어 주세요.', 'Please write a comment.'));
+  if (!text) return fieldError(`[data-cmt="${target}"]`, tr('코멘트를 적어 주세요.', 'Please write a comment.'));
   CMT.busy = true; render();
   try {
     const cid = await rpc('senior_comment_add', { p_report: id, p_target: target, p_content: text });
@@ -1278,7 +1343,7 @@ function talkBlock(list, rep, can) {
 function row0Placeholder() { return hasRole('leadership') ? tr('예: 이번 주에 추가로 이야기를 나눠 보셨나요?', 'e.g. Did you get to talk with them again this week?') : tr('담당 교역자에게 답하거나 여쭙고 싶은 내용을 적어 주세요.', 'Reply or ask your Leadership.'); }
 async function talkAdd(id) {
   const text = (TALK.draft || '').trim();
-  if (!text) return toast(tr('내용을 적어 주세요.', 'Please write a message.'));
+  if (!text) return fieldError('[data-talk]', tr('내용을 적어 주세요.', 'Please write a message.'));
   if (TALK.busy) return; TALK.busy = true; render();
   try {
     const tid = await rpc('cellcare_talk_add', { p_report: id, p_content: text });
@@ -1327,7 +1392,7 @@ async function reviewOk() {
   } catch (e) { toast(errText(e), 5000); DETAIL.busy = false; render(); }
 }
 async function reviewRevise() {
-  if (!DETAIL.reason.trim()) { toast(tr('수정 요청 사유를 적어 주세요.', 'Please write a reason.')); return; }
+  if (!DETAIL.reason.trim()) return fieldError('#rv-reason', tr('수정 요청 사유를 적어 주세요.', 'Please write a reason.'));
   try {
     await rpc('request_revision', { p_report: DETAIL.id, p_reason: DETAIL.reason });
     toast(tr('셀리더에게 수정 요청을 보냈습니다.', 'Revision request sent to the cell leader.')); DETAIL.id = null; back();
@@ -1710,8 +1775,8 @@ async function issSendGo(id) {
   const box = document.querySelector(`[data-iss-send="${id}"]`); const r = (ISS.rows || []).find(x => x.item_id === id); if (!box || !r) return;
   const to = [...box.querySelectorAll('[data-act=iss-pick][aria-pressed=true]')].map(b => b.dataset.id);
   const text = (box.querySelector('[data-iss-text]')?.value || '').trim();
-  if (!to.length) return toast(tr('받는 분을 골라 주세요.', 'Please choose who to send to.'));
-  if (!text) return toast(tr('보낼 내용을 적어 주세요.', 'Please write a message.'));
+  if (!to.length) return fieldError(box.querySelector('.chips'), tr('받는 분을 골라 주세요.', 'Please choose who to send to.'));
+  if (!text) return fieldError(box.querySelector('[data-iss-text]'), tr('보낼 내용을 적어 주세요.', 'Please write a message.'));
   const btn = box.querySelector('[data-act=iss-send-go]'); if (btn.disabled) return; btn.disabled = true;
   // 붙는 이슈 내용은 받는 분(셀리더·교역자)이 읽기 쉽게 한국어로
   const L0 = LANG; let block;
@@ -1867,8 +1932,8 @@ document.addEventListener('input', (e) => { if (e.target.id === 'lr-sum') LR.sum
 function lrAdd() {
   lrSync();
   const p = LR.people.find(x => lrKey(x.kind, x.id) === LR.pick);
-  if (!p) return toast('셀원을 골라 주세요.');
-  if (!LR.content.trim()) return toast('내용을 적어 주세요.');
+  if (!p) return fieldError('#lr-pick', '셀원을 골라 주세요.');
+  if (!LR.content.trim()) return fieldError('#lr-content', '내용을 적어 주세요.');
   const item = { kind: p.kind, person_id: p.id, person_name: p.name, group_name: p.group_name, category: LR.cat, content: LR.content.trim() };
   const at = LR.editing ? LR.items.findIndex(i => lrKey(i.kind, i.person_id) === LR.editing) : -1;
   if (at >= 0) LR.items[at] = item; else LR.items.push(item);
@@ -1908,7 +1973,7 @@ async function lrSave(submit) {
   LR.busy = false; render();
 }
 async function lrIndAdd() {
-  const nm = (LR.ind || '').trim(); if (!nm) return toast('이름을 적어 주세요.');
+  const nm = (LR.ind || '').trim(); if (!nm) return fieldError('#lr-ind', '이름을 적어 주세요.');
   lrSync();
   try { await rpc('individual_care_add', { p_name: nm }); LR.ind = ''; LR.people = await rpc('lr_people', { p_week: LR.week }); toast(nm + '님을 개별 케어 명단에 넣었습니다.'); } catch (e) { toast(errText(e), 5000); }
   render();
@@ -1992,7 +2057,7 @@ function noteComments(n) {
 }
 async function noteCommentAdd(id) {
   const text = (NCMT.draft || '').trim();
-  if (!text) return toast(tr('코멘트를 적어 주세요.', 'Please write a comment.'));
+  if (!text) return fieldError('[data-ncmt]', tr('코멘트를 적어 주세요.', 'Please write a comment.'));
   NCMT.busy = true; render();
   try {
     const cid = await rpc('note_comment_add', { p_note: id, p_content: text });
@@ -2115,9 +2180,9 @@ function noteFormSync() {
 }
 async function noteSave() {
   noteFormSync(); const f = NOTE.form;
-  if (!f.person_name.trim()) return toast(tr('만난 분의 이름을 적어 주세요.', 'Please enter a name.'));
-  if (!f.content.trim()) return toast(tr('내용을 적어 주세요.', 'Please write what happened.'));
-  if (!f.categories.length) return toast(tr('이슈 구분을 하나 이상 골라 주세요.', 'Please choose at least one topic.'));
+  if (!f.person_name.trim()) return fieldError('#nt-person', tr('만난 분의 이름을 적어 주세요.', 'Please enter a name.'));
+  if (!f.content.trim()) return fieldError('#nt-content', tr('내용을 적어 주세요.', 'Please write what happened.'));
+  if (!f.categories.length) return fieldError($('[data-act=nt-cat]')?.closest('.chips'), tr('이슈 구분을 하나 이상 골라 주세요.', 'Please choose at least one topic.'));
   NOTE.busy = true; render();
   try {
     const id = await rpc('cellcare_pastoral_note_save', { p_id: f.id || null, p_met_on: f.met_on, p_person: f.person_name, p_categories: f.categories.length ? f.categories : ['update'], p_content: f.content, p_prayer: f.prayer || '', p_needs_pastor: f.needs_pastor, p_visibility: f.visibility, p_viewers: f.visibility === 'selected' ? f.viewers : [], p_method: f.visit_method, p_campus: f.campus });
@@ -2577,7 +2642,7 @@ async function viewNotices(app) {
 async function noticePost() {
   const title = ($('#nt-title')?.value || '').trim(), body = ($('#nt-body')?.value || '').trim();
   NOTICE.title = title; NOTICE.body = body;
-  if (!title) return toast(tr('공지 제목을 적어 주세요.', 'Please enter a title.'));
+  if (!title) return fieldError('#nt-title', tr('공지 제목을 적어 주세요.', 'Please enter a title.'));
   if (NOTICE.busy) return; NOTICE.busy = true;
   try {
     const id = await rpc('notice_create', { p_title: title, p_body: body });
@@ -2673,8 +2738,8 @@ async function viewDigest(app) {
 }
 async function msgSend(report) {
   const body = (MSG.draft || '').trim();
-  if (!MSG.sel.length) return toast(tr('받는 분을 골라 주세요.', 'Please choose who to send to.'));
-  if (!body) return toast(tr('보낼 내용을 적어 주세요.', 'Please write a message.'));
+  if (!MSG.sel.length) return fieldError($('#msg-count')?.closest('h2'), tr('받는 분을 골라 주세요.', 'Please choose who to send to.'));
+  if (!body) return fieldError('#msg-body', tr('보낼 내용을 적어 주세요.', 'Please write a message.'));
   if (MSG.busy) return; MSG.busy = true;
   try {
     const r = await rpc('msg_start', { p_to: MSG.sel, p_body: body, p_report: report || null });
@@ -2687,7 +2752,7 @@ async function msgSend(report) {
 }
 async function msgReply(id) {
   const body = (MSG.reply || '').trim();
-  if (!body) return toast(tr('보낼 내용을 적어 주세요.', 'Please write a message.'));
+  if (!body) return fieldError('#msg-reply', tr('보낼 내용을 적어 주세요.', 'Please write a message.'));
   if (MSG.busy) return; MSG.busy = true;
   try { const post = await rpc('msg_post', { p_thread: id, p_body: body }); msgNotify(post); MSG.reply = ''; }
   catch (e) { toast(errText(e), 4500); }
@@ -2844,7 +2909,7 @@ document.addEventListener('change', (e) => {
 document.addEventListener('input', (e) => { if (e.target.matches('[data-admail]') && ADMIN.mail) ADMIN.mail.value = e.target.value; });
 async function adminChangeEmail(id, email, name) {
   email = String(email || '').trim();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast(tr('이메일 주소를 다시 확인해 주세요.', 'Please check the email address.'));
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fieldError('[data-admail]', tr('이메일 주소를 다시 확인해 주세요.', 'Please check the email address.'));
   ADMIN.busy = true;
   try {
     await rpc('admin_change_email', { p_profile: id, p_email: email });
@@ -2914,7 +2979,7 @@ async function adminDecide(id, approve) {
   try {
     if (approve) {
       const pid = document.querySelector(`[data-adpick="${id}"]`)?.value;
-      if (!pid) return toast(tr('연결할 사람을 골라 주세요.', 'Please choose a person.'));
+      if (!pid) return fieldError(`[data-adpick="${id}"]`, tr('연결할 사람을 골라 주세요.', 'Please choose a person.'));
       await rpc('admin_approve_request', { p_request: id, p_profile: pid });
       toast(tr('승인했습니다. 이제 그 이메일로 로그인하실 수 있습니다.', 'Approved. They can now sign in with that email.'));
     } else {
@@ -2976,7 +3041,7 @@ document.addEventListener('click', async (e) => {
     case 'mv-tab': MV.tab = d.v; return render();
     case 'mv-form-open': MV.form = { member: '', to: '', date: S.ctx.today, memo: '' }; return render();
     case 'mv-form-close': MV.form = null; return render();
-    case 'mv-create': { mvSync(); const f = MV.form; if (!f.member) return toast(tr('셀원을 골라 주세요.', 'Please choose a member.')); if (!f.to) return toast(tr('이동할 셀을 골라 주세요.', 'Please choose a cell.'));
+    case 'mv-create': { mvSync(); const f = MV.form; if (!f.member) return fieldError('#mv-member', tr('셀원을 골라 주세요.', 'Please choose a member.')); if (!f.to) return fieldError('#mv-to', tr('이동할 셀을 골라 주세요.', 'Please choose a cell.'));
       return mvAct('cellcare_move_create', { p_member: f.member, p_to: f.to, p_decided_on: f.date || S.ctx.today, p_memo: f.memo || '' }, tr('셀 이동을 등록했습니다. 연락을 마친 뒤 적용해 주세요.', 'Registered.')); }
     case 'mv-apply-ask': MV.apply = d.id; MV.cancel = null; return render();
     case 'mv-apply-cancel': MV.apply = null; return render();
@@ -3029,14 +3094,14 @@ document.addEventListener('click', async (e) => {
     case 'nt-del-cancel': NOTE.form.confirmDel = false; return render();
     case 'nt-del': try { await rpc('pastoral_note_delete', { p_id: NOTE.form.id }); NOTE.form = null; toast(tr('지웠습니다.', 'Deleted.')); return back(); } catch (e) { return toast(errText(e)); }
     case 'open-members': Object.assign(MEM, { edit: null, confirm: null }); Object.assign(CL, { rm: null, asg: false, closeAsk: false, next: false }); return go({ name: 'members', cell: d.cell, cellName: d.name });
-    case 'mem-add': { const nm = ($('#mem-new')?.value || '').trim(); if (!nm) return toast(tr('이름을 적어 주세요.', 'Please enter a name.')); return memAct('member_add', { p_cell: S.view.cell, p_name: nm }, tr(nm + '님을 셀원으로 추가했습니다.', 'Added ' + nm + '.')); }
+    case 'mem-add': { const nm = ($('#mem-new')?.value || '').trim(); if (!nm) return fieldError('#mem-new', tr('이름을 적어 주세요.', 'Please enter a name.')); return memAct('member_add', { p_cell: S.view.cell, p_name: nm }, tr(nm + '님을 셀원으로 추가했습니다.', 'Added ' + nm + '.')); }
     case 'mem-confirm': MEM.confirm = d.id; MEM.del = null; return render();
     case 'mem-sep': return memAct('member_set_separate', { p_member: d.id, p_on: d.v === '1' }, d.v === '1' ? tr('따로 만나는 셀원으로 바꿨습니다.', 'Now meets separately.') : tr('모임 셀원으로 바꿨습니다.', 'Now meets with the group.'));
     case 'mem-del-ask': MEM.del = d.id; MEM.confirm = null; return render();
     case 'mem-del': return memAct('member_delete', { p_member: d.id }, tr('셀원 명단에서 삭제했습니다.', 'Deleted.'));
     case 'mem-cancel': MEM.confirm = null; MEM.del = null; MEM.move = null; return render();
     case 'mem-move-ask': MEM.move = d.id; MEM.confirm = null; MEM.del = null; return render();
-    case 'mem-move': { const to = $('#mem-move-to')?.value; if (!to) return toast(tr('옮길 셀을 골라 주세요.', 'Please choose a cell.'));
+    case 'mem-move': { const to = $('#mem-move-to')?.value; if (!to) return fieldError('#mem-move-to', tr('옮길 셀을 골라 주세요.', 'Please choose a cell.'));
       const cn = (MEM.targets.find(c => c.id === to) || {}).name || '';
       MEM.move = null; return memAct('member_move', { p_member: d.id, p_target: to }, tr(cn + '로 옮겼습니다.', 'Moved to ' + cn + '.')); }
     case 'mem-leave': return memAct('member_leave', { p_member: d.id }, tr('명단에서 내렸습니다.', 'Removed.'));
@@ -3058,7 +3123,7 @@ document.addEventListener('click', async (e) => {
     case 'cell-reopen': return adminAct('cell_set_active', { p_cell: d.id, p_active: true }, tr('셀을 다시 열었습니다.', 'Cell reopened.'));
     case 'nc-create': {
       const name = $('#nc-name')?.value.trim() || '';
-      if (name.length < 2) return toast(tr('셀 이름을 적어 주세요.', 'Please enter a cell name.'));
+      if (name.length < 2) return fieldError('#nc-name', tr('셀 이름을 두 글자 이상 적어 주세요.', 'Please enter a cell name.'));
       return adminAct('cell_create', { p_name: name, p_campus: $('#nc-campus').value, p_senior: $('#nc-review').value === '1', p_saturday: $('#nc-sat').checked }, tr(name + '을 만들었습니다.', 'Created ' + name + '.'));
     }
     case 'cl-when': CL.next = d.v === '1'; return render();
@@ -3068,12 +3133,12 @@ document.addEventListener('click', async (e) => {
     case 'cl-primary': return clAct('cell_leader_primary', { p_row: d.id }, tr('대표 셀리더를 바꿨습니다.', 'Lead changed.'));
     case 'cl-add': {
       const name = $('#cl-new')?.value.trim() || '';
-      if (name.length < 2) return toast(tr('셀리더 이름을 적어 주세요.', 'Please enter a name.'));
+      if (name.length < 2) return fieldError('#cl-new', tr('셀리더 이름을 두 글자 이상 적어 주세요.', 'Please enter a name.'));
       return clAct('cell_leader_add', { p_cell: d.cell, p_name: name, p_next: CL.next, p_primary: $('#cl-primary').checked }, tr(name + '님을 셀리더로 넣었습니다.', 'Added ' + name + '.'));
     }
     case 'cl-asg-open': Object.assign(CL, { asg: true, next: false, asgVal: '' }); return render();
     case 'cl-asg-save': {
-      const v = $('#cl-asg')?.value; if (!v) return toast(tr('새 담당을 골라 주세요.', 'Please choose.'));
+      const v = $('#cl-asg')?.value; if (!v) return fieldError('#cl-asg', tr('새 담당을 골라 주세요.', 'Please choose.'));
       return clAct('cell_set_leadership', { p_cell: d.cell, p_user: v === 'senior' ? null : v, p_next: CL.next, p_senior: v === 'senior' }, tr('담당을 바꿨습니다.', 'Updated.'));
     }
     case 'cl-close-ask': CL.closeAsk = true; return render();
@@ -3139,7 +3204,7 @@ document.addEventListener('click', async (e) => {
     case 'ed-addopen': E.showAdd = true; renderEditor(); setTimeout(() => $('#new-name')?.focus(), 0); return;
     case 'ed-addcancel': E.showAdd = false; E.newName = ''; return renderEditor();
     case 'ed-addnew': {
-      const nm = (E.newName || '').trim(); if (!nm) { toast('이름을 적어 주세요.'); return; }
+      const nm = (E.newName || '').trim(); if (!nm) return fieldError('#new-name', '이름을 적어 주세요.');
       try {
         await save();
         const id = await rpc('add_attendee', { p_report: E.id, p_name: nm, p_register: !!E.newReg });
@@ -3159,7 +3224,7 @@ document.addEventListener('click', async (e) => {
     case 'ed-prev': if (E.step > 0) { E.step--; if (E.step === 1 && skipAttendance()) E.step = 0; E.confirm = false; save(); renderEditor(); window.scrollTo(0, 0); } return;
     case 'ed-next': if (E.step < STEPS.length - 1) { E.step++; if (E.step === 1 && skipAttendance()) E.step = 2; save(); renderEditor(); window.scrollTo(0, 0); } return;
     case 'ed-step': E.step = +d.v === 1 && skipAttendance() ? 0 : +d.v; E.confirm = false; renderEditor(); window.scrollTo(0, 0); return;
-    case 'ed-confirm': { const bad = validateForSubmit(); if (bad) { E.step = bad[0]; renderEditor(); toast(bad[1], 4000); return; } E.confirm = true; renderEditor(); setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 0); return; }
+    case 'ed-confirm': { const bad = validateForSubmit(); if (bad) return showSubmitProblems(bad); E.confirm = true; renderEditor(); setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 0); return; }
     case 'ed-confirm-cancel': E.confirm = false; return renderEditor();
     case 'ed-submit': return submitReport();
     case 'ed-move-cancel': E.m.meeting_date = ''; return markDirty(true);
