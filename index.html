@@ -2186,6 +2186,8 @@ async function noteSave() {
   NOTE.busy = true; render();
   try {
     const id = await rpc('cellcare_pastoral_note_save', { p_id: f.id || null, p_met_on: f.met_on, p_person: f.person_name, p_categories: f.categories.length ? f.categories : ['update'], p_content: f.content, p_prayer: f.prayer || '', p_needs_pastor: f.needs_pastor, p_visibility: f.visibility, p_viewers: f.visibility === 'selected' ? f.viewers : [], p_method: f.visit_method, p_campus: f.campus });
+    // 담임 목사님·담임 사모님이 직접 쓴 동정은 쓴 분 본인 확인으로 함께 남긴다(「사모님 확인 전」으로 남지 않게)
+    if (isSenior() && f.needs_pastor && !(NOTE.list.find(x => x.id === id) || {}).i_acked) await rpc('pastoral_note_ack', { p_id: id }).catch(() => {});
     { const { data } = await sb.auth.getSession(); fetch('api/notify-note', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ note: id }) }).catch(() => {}); }
     toast(tr('저장했습니다.', 'Saved.')); NOTE.form = null; NOTE.tx = null; NOTE.busy = false; back();
   } catch (e) { NOTE.busy = false; render(); toast(errText(e), 4500); }
