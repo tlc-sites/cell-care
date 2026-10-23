@@ -6,7 +6,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test tests/prayer-only-report.test.mjs tests/meeting-not-held.test.mjs tests/notifications.test.mjs tests/notification-permissions.test.mjs tests/notification-ui.test.mjs tests/report-talk.test.mjs tests/note-moves.test.mjs tests/report-field-errors.test.mjs"
+    "test": "node --test tests/prayer-only-report.test.mjs tests/meeting-not-held.test.mjs tests/notifications.test.mjs tests/notification-permissions.test.mjs tests/notification-ui.test.mjs tests/report-talk.test.mjs tests/note-moves.test.mjs tests/report-field-errors.test.mjs tests/senior-acks.test.mjs"
   },
   "dependencies": {
     "web-push": "3.6.7",

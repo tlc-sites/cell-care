@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { PGlite } = require('@electric-sql/pglite');
 const migration = await readFile(new URL('../supabase/migrations/20261022010000_note_categories_moves_schedule.sql', import.meta.url), 'utf8');
+const allStaff = await readFile(new URL('../supabase/migrations/20261023000000_moves_all_staff.sql', import.meta.url), 'utf8');
 const u = n => `10000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 // 1 A셀 담당 교역자, 2 B셀 담당 교역자, 3 셀리더(교역자 아님), 4 관계없는 교역자, 5 관리자
 // 셀 A=21, B=22 / 셀원 31(A, 정식), 32(A, 정식) / 지난 출석은 옛 셀원 행(31)을 가리킨다
@@ -156,6 +157,49 @@ test('셀 이동: 등록만으로는 소속이 바뀌지 않고, 연락 두 가�
     await db.exec('set role authenticated');
     await assert.rejects(db.query('select * from report.cellcare_member_moves'), /permission denied/);
     await assert.rejects(db.query(`select report.cellcare_move_notify('${mv}','x')`), /permission denied/);
+    await db.exec('reset role');
+  } finally { await db.close(); }
+});
+
+test('셀 이동(20261023): 교역자는 담당과 관계없이 모든 셀원을 보고 등록·연락·적용·취소한다', async () => {
+  const db = await setup();
+  try {
+    await db.exec(migration); await db.exec(allStaff); await db.exec(allStaff);   // 다시 실행해도 안전
+    await db.exec(`insert into public.cell_members(id,cell_id,name,member_type,joined_at) values('${u(33)}','${u(22)}','박소망','member','2026-01-04')`);
+    const create = (member, to) => db.query(`select report.cellcare_move_create($1,$2,'2026-10-21','') as id`, [member, to]);
+    const list = (h = false) => db.query('select * from report.cellcare_move_list($1)', [h]);
+    const opts = async () => (await db.query('select report.cellcare_move_options() as o')).rows[0].o;
+
+    await as(db, 4);                                                              // 어느 셀도 맡지 않은 교역자
+    const o = await opts();
+    assert.equal(o.cells.length, 2); assert.equal(o.members.length, 3);           // 모든 셀의 셀원
+    assert.ok(o.cells.every(c => c.mine === false));
+    const mv = (await create(u(31), u(22))).rows[0].id;                          // 남의 셀 셀원 등록
+    assert.equal((await opts()).members.length, 2);                               // 진행 중인 분은 고르기 목록에서 빠짐
+    const row = (await list()).rows[0];
+    assert.equal(row.can_contact, true); assert.equal(row.can_cancel, true); assert.equal(row.can_apply, false);
+    await db.query('select report.cellcare_move_contact($1,$2,true)', [mv, 'leader']);
+    await db.query('select report.cellcare_move_contact($1,$2,true)', [mv, 'member']);
+    assert.equal((await list()).rows[0].can_apply, true);
+    await db.query('select report.cellcare_move_apply($1)', [mv]);
+    assert.equal((await list(true)).rows[0].status, 'done');
+    // 알림은 지금처럼 두 셀 담당 교역자에게(등록·적용 각 1건)
+    assert.equal((await db.query(`select count(*)::int c from report.cellcare_notification_items where profile_id='${u(1)}'`)).rows[0].c, 2);
+    assert.equal((await db.query(`select count(*)::int c from report.cellcare_notification_items where profile_id='${u(4)}'`)).rows[0].c, 0);
+
+    await as(db, 2);                                                              // B셀 담당이 A셀 셀원 등록 → A셀 담당이 취소
+    const mv2 = (await create(u(32), u(22))).rows[0].id;
+    await as(db, 1); await db.query(`select report.cellcare_move_cancel($1,'')`, [mv2]);
+    assert.equal((await list(true)).rows.find(r => r.id === mv2).status, 'canceled');
+
+    await as(db, 3);                                                              // 셀리더(교역자 아님)는 여전히 불가
+    assert.equal(await opts(), null);
+    assert.equal((await list(true)).rows.length, 0);
+    await assert.rejects(create(u(33), u(21)), /교역자와 관리자만/);
+    await as(db, 5); await create(u(33), u(21));                                  // 관리자 가능
+
+    await db.exec('set role authenticated');
+    await assert.rejects(db.query('select report.cellcare_move_staff()'), /permission denied/);
     await db.exec('reset role');
   } finally { await db.close(); }
 });

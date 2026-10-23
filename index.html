@@ -82,6 +82,8 @@ h3 { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
 .btn.quiet { background: transparent; border-color: var(--line); color: var(--ink); font-weight: 500; }
 .btn.warn { background: var(--warn); border-color: var(--warn); }
 .btn.sm { min-height: 44px; font-size: 15px; width: auto; padding: 8px 14px; }
+.btn.ack { background: var(--ok); border-color: var(--ok); min-height: 60px; font-size: 18px; }
+.ackbox.todo, .todo-card { border: 2px solid var(--warn); background: var(--warn-soft); }
 .btn.proxy-action { min-height: 28px; padding: 3px 8px; font-size: 12px; color: var(--muted); }
 .notification-bell { display: inline-flex; align-items: center; gap: 3px; }
 .notification-highlight { outline: 2px solid var(--accent); outline-offset: 4px; }
@@ -1174,6 +1176,10 @@ async function viewReportDetail(app, v) {
   } else {
     h += `<div class="banner warn" style="margin-top:8px"><b>${LX('status', rep.status)}</b>${tr('아직 제출되지 않은 보고서입니다.', 'This report has not been submitted yet.')}</div>`;
   }
+  // 담임 목사님·담임 사모님 확인: 직접 확인하는 셀, 교역자가 「목양/긴급 확인 필요」로 올린 보고서(상위 보고 상태는 셀리더에게 보이지 않음)
+  const needSenior = rep.status === 'submitted' && (rep.review_mode === 'senior_direct' || (isConcern(row) && !row.i_am_leader));
+  const [rAcks, mAcks] = await Promise.all([needSenior ? seniorAcks('report', [rep.id]) : null, pmsg && pmsg.sent_at ? seniorAcks('pastor_msg', [rep.id]) : null]);
+  if (needSenior && rAcks) h += seniorAckBox('report', rep.id, rAcks.get(rep.id) || [], rep.submitted_at, tr('보고서를 확인했습니다', 'Mark this report as seen'), isSenior() && row.i_can_review);
   const openRev = revisions.find(x => !x.resolved_at);
   if (openRev) h += `<div class="banner warn" style="margin-top:8px"><b>${tr('수정 요청 사유', 'Revision request')}</b>${TX('rev:' + openRev.id, openRev.reason)}<div class="tiny muted">${esc(nameOf(openRev.requested_by))} · ${dateTime(openRev.created_at)}</div></div>`;
   if (canEdit) h += `<div style="margin-top:12px"><button class="btn" data-act="open-editor" data-id="${rep.id}">${rep.status === 'revision_requested' ? '수정해서 다시 제출하기' : rep.submission_no > 0 ? '고친 보고서 다시 제출하기' : '작성 계속하기'}</button></div>`;
@@ -1220,6 +1226,7 @@ async function viewReportDetail(app, v) {
     ${talk ? talkBlock(talk, rep, canTalk(rep, row)) : ''}
     ${pmsg ? `<div class="card" style="border-color:#C9D3E4;background:#F7F9FC"><h3>${tr('담임 목사님께 드리는 말씀', 'A message for Pastor Scott Brenner')}</h3>${EN() && (pmsg.content_en || (TRANS.map && TRANS.map.pmsg)) ? nl2br(pmsg.content_en || TRANS.map.pmsg) + '<div class="tiny muted" style="margin-top:4px">' + nl2br(pmsg.content) + '</div>' : nl2br(pmsg.content)}
       <div class="tiny muted" style="margin-top:4px">${tr('담임 목사님·담임 사모님만 보십니다', 'Only visible to Pastor Scott Brenner & Mrs. Sunghee Brenner')}${pmsg.sent_at ? ' · ' + tr(dateTime(pmsg.sent_at) + ' 전달됨', 'Sent ' + dateTime(pmsg.sent_at)) : ''}</div>
+      ${mAcks ? seniorAckBox('pastor_msg', rep.id, mAcks.get(rep.id) || [], pmsg.sent_at, tr('말씀을 확인했습니다', 'Mark this message as seen')) : ''}
       ${commentBlock(cmts, 'pastor_msg', rep)}</div>` : ''}
     ${rep.submitted_at && (isSenior() || cmts.some(c => c.target === 'report')) ? `<div class="card" style="border-color:#C9D3E4"><h3>${tr('담임 목사님·담임 사모님 코멘트', 'Comments from Pastor & Mrs. Brenner')}</h3>${commentBlock(cmts, 'report', rep)}</div>` : ''}
   </div>`;
@@ -1388,6 +1395,7 @@ async function reviewOk() {
   DETAIL.busy = true;
   try {
     await rpc('review_report', { p_report: DETAIL.id, p_note: DETAIL.note, p_level: DETAIL.level });
+    if (isSenior()) await rpc('cellcare_senior_ack', { p_kind: 'report', p_id: DETAIL.id }).catch(() => {}); // 직접 확인하는 셀: 누른 분의 확인도 함께
     toast(tr('확인 완료로 표시했습니다.', 'Marked as reviewed.')); DETAIL.id = null; back();
   } catch (e) { toast(errText(e), 5000); DETAIL.busy = false; render(); }
 }
@@ -1599,15 +1607,56 @@ async function signals(week) {
   } catch (e) { console.warn('결석 신호 계산 생략', e); }
   return out;
 }
+/* 담임 목사님·담임 사모님이 확인하실 것 (두 분 각자, 내가 아직 확인하지 않은 것만)
+   최근 4주 + 늦게 제출돼 아직 확인 전인 직접 확인 셀 보고서 */
+async function seniorTodo() {
+  const weeks = [0, -7, -14, -21].map(n => addDays(S.ctx.this_week, n));
+  const late = await q(sb.from('weekly_reports').select('week_start').eq('status', 'submitted').eq('review_mode', 'senior_direct').eq('review_status', 'pending').limit(50)).catch(() => []);
+  const repWeeks = [...new Set([...weeks, ...(late || []).map(r => r.week_start)])].slice(0, 12);
+  const [stat, msgs, lrs, notes] = await Promise.all([
+    Promise.all(repWeeks.map(w => rpc('get_week_status', { p_week_start: w }).then(x => (x || []).map(r => ({ ...r, week_start: w }))).catch(() => []))),
+    Promise.all(weeks.map(w => rpc('pastor_msgs_week', { p_week: w }).catch(() => []))),
+    Promise.all(weeks.map(w => rpc('lr_overview', { p_week: w }).then(x => (x || []).map(r => ({ ...r, week_start: w }))).catch(() => []))),
+    rpc('pastoral_note_list', { p_limit: 200, p_only_needs: true }).catch(() => [])
+  ]);
+  const reps = [...new Map(stat.flat().filter(r => r.report_id && r.status === 'submitted' && (r.review_mode === 'senior_direct' || isConcern(r))).map(r => [r.report_id, r])).values()];
+  const pms = [...new Map(msgs.flat().filter(x => x.report_id && x.sent_at).map(x => [x.report_id, x])).values()];
+  const lr = lrs.flat().filter(x => x.report_id && x.status === 'submitted');
+  const [ra, ma, la] = await Promise.all([seniorAcks('report', reps.map(r => r.report_id)), seniorAcks('pastor_msg', pms.map(x => x.report_id)), seniorAcks('lr', lr.map(x => x.report_id))]);
+  const short = (t) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > 60 ? t.slice(0, 58) + '…' : t; };
+  const items = [];
+  // 확인 기록을 못 불러오면(DB 적용 전) 직접 확인 셀의 확인 전 보고서만 보여 준다
+  reps.filter(r => ra ? !iAckedSenior(ra.get(r.report_id), r.submitted_at) : r.i_can_review).forEach(r => items.push({ at: r.submitted_at, kind: 'report', id: r.report_id, review: !!r.i_can_review, open: 'open-detail',
+    tag: r.review_mode === 'senior_direct' ? tr('셀 보고서', 'Cell report') : LX('escalation', r.escalation_level), title: r.cell_name, sub: weekLabel(r.week_start) + (r.leader_names ? ' · ' + r.leader_names : '') }));
+  if (ma) pms.filter(x => !iAckedSenior(ma.get(x.report_id), x.sent_at)).forEach(x => items.push({ at: x.sent_at, kind: 'pastor_msg', id: x.report_id, open: 'open-detail',
+    tag: tr('담임 목사님께 드리는 말씀', 'Message for you'), title: (x.author || '') + ' · ' + (x.cell_name || ''), sub: short(EN() && x.content_en ? x.content_en : x.content) }));
+  if (la) lr.filter(x => !iAckedSenior(la.get(x.report_id), x.submitted_at)).forEach(x => items.push({ at: x.submitted_at, kind: 'lr', id: x.report_id, open: 'lr-open',
+    tag: tr('교역자 보고', 'Pastoral report'), title: x.author_name, sub: weekLabel(x.week_start) }));
+  (notes || []).filter(n => n.needs_pastor && !n.i_acked).forEach(n => items.push({ at: n.created_at || n.met_on, kind: 'note', id: n.id, open: 'todo-notes',
+    tag: tr('성도 동정', 'Pastoral note'), title: n.person_name + ' · ' + (n.author_name || ''), sub: short(n.content) }));
+  return items.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+}
+function seniorTodoCard(items) {
+  if (!items) return '';
+  if (!items.length) return `<div class="banner" style="margin-top:12px;background:var(--ok-soft)"><b style="color:var(--ok)">✓ ${tr('지금 확인하실 것이 없습니다', 'Nothing waiting for you')}</b></div>`;
+  return `<div class="card stack todo-card" style="margin-top:12px;gap:10px"><h2 style="margin:0">${tr('확인하실 것', 'Waiting for you')} <span class="pill warn">${items.length}</span></h2>
+    <p class="tiny muted" style="margin:0">${tr('담임 목사님·담임 사모님이 각자 확인하십니다. 아직 확인하지 않으신 것만 보입니다.', 'Pastor and Mrs. Brenner each mark items as seen. Only items you have not marked are listed.')}</p>` +
+    items.map(x => `<div class="card stack" style="gap:6px;padding:14px">
+      <div class="row" style="flex-wrap:wrap;gap:6px"><span class="pill warn">${esc(x.tag)}</span><b>${esc(x.title)}</b></div>
+      ${x.sub ? `<span class="small muted">${esc(x.sub)}</span>` : ''}
+      <div class="row" style="gap:8px"><button class="btn sm ghost" data-act="${x.open}" data-id="${x.id}">${tr('열어 보기', 'Open')}</button>
+        <button class="btn sm ack" style="flex:1" data-act="${x.kind === 'note' ? 'note-ack' : 'sack'}" data-kind="${x.kind}" data-id="${x.id}" data-review="${x.review ? 1 : ''}">✓ ${tr('확인했습니다', 'Mark as seen')}</button></div></div>`).join('') + '</div>';
+}
 async function viewDashboard(app, v) {
   await loadSched();
   setTop(tr('전체 현황', 'Overview'), false); renderTabs(true);
   const week = v.week || S.ctx.this_week;
-  const [allRows, lrs, wkNotes, pmsgsAll] = await Promise.all([
+  const [allRows, lrs, wkNotes, pmsgsAll, todo] = await Promise.all([
     rpc('get_week_status', { p_week_start: week }),
     rpc('lr_overview', { p_week: week }).catch(() => []),
     rpc('pastoral_note_list', { p_limit: 200, p_only_needs: false }).then(x => x.filter(n => n.met_on >= week && n.met_on <= addDays(week, 6))).catch(() => []),
-    rpc('pastor_msgs_week', { p_week: week }).catch(() => [])
+    rpc('pastor_msgs_week', { p_week: week }).catch(() => []),
+    isSenior() ? seniorTodo().catch(e => { console.warn('확인하실 것 불러오기 실패', e); return null; }) : null
   ]);
   const hasBusan = allRows.some(r => campusOf(r) === '부산');
   const rows = hasBusan ? allRows.filter(r => campusOf(r) === CAMP.v) : allRows;
@@ -1616,7 +1665,8 @@ async function viewDashboard(app, v) {
   const unread = await rpc('msg_unread').catch(() => 0);
   const N = rows.length;
   const sub = rows.filter(r => r.status === 'submitted');
-  const needsReview = sub.filter(r => r.review_mode !== 'none');
+  // 직접 확인하는 셀은 「확인하실 것」에서 따로 보여 주므로 교역자 확인 숫자에서 뺀다
+  const needsReview = sub.filter(r => r.review_mode !== 'none' && r.review_mode !== 'senior_direct');
   const reviewed = needsReview.filter(r => r.review_status === 'reviewed');
   const pending = needsReview.filter(r => r.review_status === 'pending');
   const concern = rows.filter(isConcern);
@@ -1635,7 +1685,7 @@ async function viewDashboard(app, v) {
   groups.sort(sorters[DASH.sort]);
   const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
 
-  let h = `<h1>${tr('전체 현황', 'Overview')}</h1>` + weekNav(week, 'db-week');
+  let h = `<h1>${tr('전체 현황', 'Overview')}</h1>` + seniorTodoCard(todo) + weekNav(week, 'db-week');
   if (hasBusan) h += campusSeg();
   h += noticeCard(await rpc('notice_list', { p_limit: 3 }).catch(() => []), true);
   h += msgEntry(unread, tr('셀리더에게 보고서와 상관없이 직접 말씀을 전하고, 셀리더가 보낸 메시지와 답장을 봅니다.', 'Send a note to cell leaders anytime and read their messages and replies.'));
@@ -1797,6 +1847,8 @@ async function viewIssues(app, v) {
   const allRows = (await rpc('issue_board', { p_weeks: ISS.weeks, p_scope: scope })) || [];
   { const notes = allRows.filter(r => r.source === 'note').map(r => ({ id: r.item_id })); await attachNoteCats(notes); const m = new Map(notes.map(n => [n.id, n.categories])); allRows.forEach(r => { if (r.source === 'note' && m.get(r.item_id)) r.categories = m.get(r.item_id); }); }
   ISS.rows = allRows;
+  // 목사님·사모님: 성도 동정의 확인 상태와 「확인했습니다」를 여기서도
+  const issNotes = new Map(senior && allRows.some(r => r.source === 'note') ? ((await rpc('pastoral_note_list', { p_limit: 200, p_only_needs: false }).catch(() => [])) || []).map(n => [n.id, n]) : []);
   // 분당 / 부산 탭 (교역자 화면과 같은 선택을 함께 씀)
   const rows = allRows.filter(r => (r.campus === '부산' ? '부산' : '분당') === CAMP.v);
   // 한 기록에 유형을 여러 개 고른 경우 모든 유형에서 보이게. 관계 상대를 적은 기록은 「관계」에도 들어감
@@ -1823,7 +1875,8 @@ async function viewIssues(app, v) {
       ${r.relation_kind && relOther(r) ? `<div class="small" style="margin-top:4px"><b>${esc(relText(r.person_name, relOther(r), r.relation_kind))}</b></div>` : ''}
       <div class="small" style="margin-top:4px">${(() => { const en = EN() && ISS.tx && ISS.tx['iss:' + r.source + ':' + r.item_id]; return en ? nl2br(en) + '<div class="tiny muted" style="margin-top:2px">' + nl2br(r.content) + '</div>' : nl2br(r.content); })()}</div>
       <div class="tiny muted" style="margin-top:2px">${r.source === 'report' ? esc(r.cell_name || '') + (r.resp_name ? ' · ' + esc(r.resp_name) : '') + ' · ' + tr('셀리더 ', 'by ') + esc(r.author_name || '') : tr('쓴 분: ', 'By ') + esc(r.author_name || '')}</div>
-      ${senior && r.source === 'report' && r.cell_id ? `<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn sm ghost" data-act="iss-send" data-id="${r.item_id}" data-v="leader">${tr('셀리더에게 코멘트', 'Comment to cell leader')}</button><button class="btn sm ghost" data-act="iss-send" data-id="${r.item_id}" data-v="staff">${tr('담당 교역자에게 전달', 'Forward to staff')}</button></div><div data-iss-send="${r.item_id}"></div>` : ''}</div>`;
+      ${senior && r.source === 'report' && r.cell_id ? `<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn sm ghost" data-act="iss-send" data-id="${r.item_id}" data-v="leader">${tr('셀리더에게 코멘트', 'Comment to cell leader')}</button><button class="btn sm ghost" data-act="iss-send" data-id="${r.item_id}" data-v="staff">${tr('담당 교역자에게 전달', 'Forward to staff')}</button></div><div data-iss-send="${r.item_id}"></div>` : ''}
+      ${(() => { const n = r.source === 'note' && issNotes.get(r.item_id); return n && n.needs_pastor ? `<div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${ackPills(n)}</div>${!n.i_acked ? `<button class="btn ack" style="margin-top:8px" data-act="note-ack" data-id="${n.id}">✓ ${tr('확인했습니다', 'Mark as seen')}</button>` : ''}` : ''; })()}</div>`;
 
   // 관계 한눈에: 누가 누구와
   const rels = list.filter(r => r.relation_kind && relOther(r));
@@ -1996,6 +2049,7 @@ async function viewLrRead(app, v) {
   if (LRT.id !== r.id) { LRT.id = r.id; LRT.map = TX_CACHE['lr:' + r.id] || null; LRT.err = ''; }
   autoTx(LRT.map, LRT.busy, LRT.err, () => { if (S.view.name === 'lrRead') lrTranslate(r.id); });
   let h = `<h1>${esc(r.author_name)}</h1><p class="sub">${weekLabel(r.week_start, true)} · ${tr(dateTime(r.submitted_at) + ' 제출', 'Submitted ' + dateTime(r.submitted_at))} · ${tr(r.items.length + '명', r.items.length + ' people')}</p>`;
+  if (r.submitted_at) { const acks = await seniorAcks('lr', [r.id]); if (acks) h += seniorAckBox('lr', r.id, acks.get(r.id) || [], r.submitted_at, tr('교역자 보고를 확인했습니다', 'Mark this report as seen')); }
   if (EN() && isSenior()) {
     h += txStatus(LRT.map, LRT.busy, LRT.err, 'lr-tx', r.id);
   }
@@ -2027,10 +2081,42 @@ const CAMPUSES = ['분당', '부산'];
 /* 성도 동정 확인: 담임 목사님·담임 사모님 각각 */
 const ackOf = (n, role) => (n.acks || []).find(a => a.role === role);
 const noteOpen = (n) => n.needs_pastor && (isSenior() ? !n.i_acked : !(n.acks || []).length);
+const SENIOR_ROLES = [['senior_pastor', '담임 목사님', 'Pastor'], ['samonim', '담임 사모님', 'Mrs. Brenner']];
+const ackPill = (done, ko, en) => done ? `<span class="pill ok">${tr(ko + ' 확인 ✓', en + ' ✓')}</span>` : `<span class="pill warn">${tr(ko + ' 확인 전', en + ' not yet')}</span>`;
 function ackPills(n) {
   if (!n.needs_pastor) return '';
-  const one = (role, ko, en) => ackOf(n, role) ? `<span class="pill ok">${tr(ko + ' 확인 ✓', en + ' ✓')}</span>` : `<span class="pill warn">${tr(ko + ' 확인 전', en + ' not yet')}</span>`;
-  return one('senior_pastor', '담임 목사님', 'Pastor') + one('samonim', '담임 사모님', 'Mrs. Brenner');
+  return SENIOR_ROLES.map(([r, ko, en]) => ackPill(ackOf(n, r), ko, en)).join('');
+}
+/* 보고서·담임 목사님께 드리는 말씀·교역자 보고 확인 (두 분 각자, cellcare_senior_ack) */
+const myAckRole = () => hasRole('senior_pastor') ? 'senior_pastor' : hasRole('samonim') ? 'samonim' : null;
+// 불러오지 못하면(아직 DB 적용 전 등) null → 확인 칸을 숨긴다
+async function seniorAcks(kind, ids) {
+  ids = [...new Set((ids || []).filter(Boolean))];
+  if (!ids.length) return new Map();
+  try {
+    const m = new Map();
+    ((await rpc('cellcare_senior_acks', { p_kind: kind, p_ids: ids })) || []).forEach(a => { if (!m.has(a.target_id)) m.set(a.target_id, []); m.get(a.target_id).push(a); });
+    return m;
+  } catch (e) { return null; }
+}
+// 다시 제출·다시 보낸 뒤에 한 확인만 센다
+const ackFor = (list, role, since) => (list || []).find(a => a.role === role && (!since || new Date(a.acked_at) >= new Date(since)));
+const iAckedSenior = (list, since) => !!ackFor(list, myAckRole(), since);
+function seniorAckBox(kind, id, list, since, label, review) {
+  if (!list) return '';
+  const mine = isSenior() && ackFor(list, myAckRole(), since);
+  return `<div class="card stack ackbox${isSenior() && !mine ? ' todo' : ''}" style="gap:10px;margin-top:12px">
+    <div class="row" style="flex-wrap:wrap;gap:6px"><b>${tr('담임 목사님·담임 사모님 확인', 'Pastor & Mrs. Brenner')}</b><span class="spacer"></span>${SENIOR_ROLES.map(([r, ko, en]) => ackPill(ackFor(list, r, since), ko, en)).join('')}</div>
+    ${!isSenior() ? '' : mine ? `<div class="small" style="color:var(--ok)">✓ ${tr(dateTime(mine.acked_at) + '에 확인하셨습니다', 'You marked this as seen · ' + dateTime(mine.acked_at))}</div>`
+      : `<button class="btn ack" data-act="sack" data-kind="${kind}" data-id="${id}" data-review="${review ? 1 : ''}">✓ ${label}</button>`}</div>`;
+}
+async function seniorAck(kind, id, review) {
+  try {
+    if (review) await rpc('review_report', { p_report: id, p_note: DETAIL.id === id ? DETAIL.note : '', p_level: DETAIL.id === id ? DETAIL.level : 'normal' });
+    await rpc('cellcare_senior_ack', { p_kind: kind, p_id: id });
+    toast(tr('확인 표시를 했습니다.', 'Marked as seen.'));
+  } catch (e) { toast(errText(e), 5000); }
+  return render();
 }
 /* 성도 동정 코멘트 (담임 목사님·담임 사모님) */
 const NCMT = { open: null, draft: '', busy: false, del: null };
@@ -2122,7 +2208,8 @@ async function viewNotesHome(app, v) {
       ${noteComments(n)}
       <div class="row" style="gap:12px;flex-wrap:wrap"><span class="tiny muted">${tr('쓴 분: ', 'By ')}${esc(n.author_name)} · ${tr('보는 분: ', 'Shared with: ')}${n.visibility === 'all' ? tr('교역자 모두', 'all pastoral staff') : (n.viewer_names ? esc(n.viewer_names) + ' + ' : '') + tr('담임 목사님·담임 사모님', 'Pastor Scott Brenner & Mrs. Sunghee Brenner')}</span><span class="spacer"></span>
         ${n.mine ? `<button class="link" data-act="note-edit" data-id="${n.id}">${tr('고치기', 'Edit')}</button>` : ''}
-        ${isSenior() && n.needs_pastor && !n.i_acked ? `<button class="btn sm" data-act="note-ack" data-id="${n.id}">${tr('확인했습니다', 'Mark as seen')}</button>` : ''}</div>
+</div>
+      ${isSenior() && n.needs_pastor && !n.i_acked ? `<button class="btn ack" data-act="note-ack" data-id="${n.id}">✓ ${tr('확인했습니다', 'Mark as seen')}</button>` : ''}
     </div>`;
   if (weekly) {
     const isNow = NOTE.week >= S.ctx.this_week;
@@ -2204,7 +2291,7 @@ async function noteTranslate() {
 }
 
 /* =====================================================================
-   셀 이동 관리 (교역자·관리자) — 교역자 회의에서 결정된 이동을 등록 → 기존 셀 담당이 연락 → 적용 → 이력
+   셀 이동 관리 (교역자·관리자) — 교역자 회의에서 결정된 이동을 등록 → 연락 → 적용 → 이력. 교역자는 담당과 관계없이 모든 셀·셀원 (20261023)
    등록만으로는 소속이 바뀌지 않음. 적용할 때 이번 주부터 새 셀(지난 보고서·출석은 옛 셀 기록 그대로)
    ===================================================================== */
 const MV = { tab: 'open', form: null, busy: false, apply: null, cancel: null, reason: '' };
@@ -2218,18 +2305,25 @@ async function viewMoves(app, v) {
   const pill = (st) => { const s = MV_STATUS[st] || MV_STATUS.contact; return `<span class="pill ${s[2]}">${tr(s[0], s[1])}</span>`; };
   const staffLine = (m) => `<div class="small muted">${tr('기존 담당', 'From')}: ${esc(m.from_staff || tr('없음', 'none'))} · ${tr('이동 담당', 'To')}: ${esc(m.to_staff || tr('없음', 'none'))}</div>`;
   let h = `<h1>${tr('셀 이동 관리', 'Cell moves')}</h1>
-    <p class="sub">${tr('교역자 회의에서 결정된 셀 이동을 등록합니다. 기존 셀 담당 교역자가 셀리더와 셀원에게 연락을 마친 뒤 「셀 이동 적용」을 누르면 그때 소속이 바뀝니다.', 'Register moves decided at the staff meeting. Membership changes only when you press “Apply move” after both contacts.')}</p>
+    <p class="sub">${tr('교역자 회의에서 결정된 셀 이동을 등록합니다. 교역자는 모든 셀의 셀원을 고를 수 있고, 셀리더와 셀원에게 연락을 마친 뒤 「셀 이동 적용」을 누르면 그때 소속이 바뀝니다.', 'Register moves decided at the staff meeting. Any staff member can choose any cell member. Membership changes only when you press “Apply move” after both contacts.')}</p>
     <div class="seg" style="--n:2;margin-top:12px"><button data-act="mv-tab" data-v="open" aria-pressed="${MV.tab === 'open'}">${tr('진행 중', 'In progress')} ${open.length}</button><button data-act="mv-tab" data-v="history" aria-pressed="${MV.tab === 'history'}">${tr('이동 이력', 'History')} ${hist.length}</button></div>`;
   if (MV.tab === 'open') {
     if (MV.form) {
-      const f = MV.form; const mine = MV.opts.cells.filter(c => c.mine);
+      const f = MV.form;
       const mem = MV.opts.members.find(m => m.id === f.member);
+      if (mem && !f.from) f.from = mem.cell_id;
+      // 모든 셀에서 고르되, 내가 맡은 셀을 위에 둔다
+      const cellOpt = (c) => `<option value="${c.id}" ${c.id === f.from ? 'selected' : ''}>${esc(c.name)}${c.campus && c.campus !== '분당' ? ' · ' + esc(c.campus) : ''}</option>`;
+      const mineCells = MV.opts.cells.filter(c => c.mine), otherCells = MV.opts.cells.filter(c => !c.mine);
+      const fromMembers = MV.opts.members.filter(m => m.cell_id === f.from);
       const from = mem ? cellOf(mem.cell_id) : null, to = cellOf(f.to);
       h += `<div class="card stack" style="margin-top:12px"><h3 style="margin:0">${tr('셀 이동 등록', 'New move')}</h3>
-        <label class="field">${tr('셀원', 'Member')}<select id="mv-member"><option value="">${tr('— 골라 주세요 —', '— Choose —')}</option>
-          ${mine.map(c => { const ms = MV.opts.members.filter(m => m.cell_id === c.id); return ms.length ? `<optgroup label="${esc(c.name)}">${ms.map(m => `<option value="${m.id}" ${m.id === f.member ? 'selected' : ''}>${esc(m.name)}${m.on_hold ? tr(' (보류)', ' (on hold)') : ''}</option>`).join('')}</optgroup>` : ''; }).join('')}</select></label>
+        <label class="field">${tr('지금 셀', 'Current cell')}<select id="mv-from"><option value="">${tr('— 골라 주세요 —', '— Choose —')}</option>
+          ${mineCells.length ? `<optgroup label="${tr('내가 맡은 셀', 'My cells')}">${mineCells.map(cellOpt).join('')}</optgroup><optgroup label="${tr('모든 셀', 'All cells')}">${otherCells.map(cellOpt).join('')}</optgroup>` : otherCells.map(cellOpt).join('')}</select></label>
+        <label class="field">${tr('셀원', 'Member')}<select id="mv-member" ${f.from ? '' : 'disabled'}><option value="">${f.from ? (fromMembers.length ? tr('— 골라 주세요 —', '— Choose —') : tr('옮길 수 있는 셀원이 없습니다', 'No members to move')) : tr('지금 셀을 먼저 골라 주세요', 'Choose the current cell first')}</option>
+          ${fromMembers.map(m => `<option value="${m.id}" ${m.id === f.member ? 'selected' : ''}>${esc(m.name)}${m.on_hold ? tr(' (보류)', ' (on hold)') : ''}</option>`).join('')}</select></label>
         <label class="field">${tr('이동할 셀', 'Move to')}<select id="mv-to"><option value="">${tr('— 골라 주세요 —', '— Choose —')}</option>
-          ${MV.opts.cells.filter(c => !mem || c.id !== mem.cell_id).map(c => `<option value="${c.id}" ${c.id === f.to ? 'selected' : ''}>${esc(c.name)}${c.campus && c.campus !== '분당' ? ' · ' + esc(c.campus) : ''}</option>`).join('')}</select></label>
+          ${MV.opts.cells.filter(c => c.id !== (mem ? mem.cell_id : f.from)).map(c => `<option value="${c.id}" ${c.id === f.to ? 'selected' : ''}>${esc(c.name)}${c.campus && c.campus !== '분당' ? ' · ' + esc(c.campus) : ''}</option>`).join('')}</select></label>
         ${mem ? `<div class="banner small" style="margin:0"><b>${esc(mem.name)} · ${esc(from.name || '')} → ${esc(to.name || tr('(이동할 셀)', '(target)'))}</b>${tr('기존 담당', 'From')}: ${esc(from.staff || tr('없음', 'none'))}${f.to ? ' · ' + tr('이동 담당', 'To') + ': ' + esc(to.staff || tr('없음', 'none')) : ''}<div class="tiny muted">${tr('담당 교역자는 지금 셀 정보에서 자동으로 연결됩니다.', 'Staff are linked from current cell assignments.')}</div></div>` : ''}
         <label class="field">${tr('이동 결정일', 'Decided on')}<input type="date" id="mv-date" max="${S.ctx.today}" value="${esc(f.date)}"></label>
         <label class="field">${tr('메모', 'Memo')} <span class="tiny muted" style="font-weight:400">${tr('필요할 때만', 'optional')}</span><textarea id="mv-memo" rows="2" maxlength="1000">${esc(f.memo)}</textarea></label>
@@ -2243,7 +2337,7 @@ async function viewMoves(app, v) {
       <div class="stack" style="gap:4px;background:var(--accent-soft);border-radius:12px;padding:8px 12px">
         ${[['leader', tr('기존 셀리더 연락 완료', 'Cell leader contacted'), m.leader_contacted_at, m.leader_contacted_name], ['member', tr('셀원 연락 완료', 'Member contacted'), m.member_contacted_at, m.member_contacted_name]].map(([k, t, at, who]) =>
           `<label class="check"><input type="checkbox" data-mv-contact="${k}" data-id="${m.id}" ${at ? 'checked' : ''} ${m.can_contact && !MV.busy ? '' : 'disabled'}><span>${t}${at ? ` <span class="tiny muted">${esc(who || '')} · ${dateTime(at)}</span>` : ''}</span></label>`).join('')}
-        ${!m.can_contact && m.status === 'contact' ? `<p class="tiny muted" style="margin:0">${tr('연락은 기존 셀 담당 교역자가 표시합니다.', 'The original cell’s staff marks contacts.')}</p>` : ''}</div>
+        ${!m.can_contact && m.status === 'contact' ? `<p class="tiny muted" style="margin:0">${tr('연락 완료는 교역자가 표시합니다.', 'Staff mark contacts.')}</p>` : ''}</div>
       ${MV.apply === m.id ? `<div class="banner warn small" role="alertdialog"><b>${tr(esc(m.member_name) + '님을 ' + esc(m.to_cell_name) + '로 옮길까요?', 'Move ' + esc(m.member_name) + ' to ' + esc(m.to_cell_name) + '?')}</b>${tr('이번 주부터 새 셀의 출석 명단에 나오고 기존 셀에서는 내려갑니다. 지난 보고서와 출석 기록은 기존 셀 그대로 남고, 진행 중인 기도제목은 함께 옮겨집니다.', 'From this week they appear in the new cell. Past reports stay with the original cell.')}
           <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm" data-act="mv-apply" data-id="${m.id}" ${MV.busy ? 'disabled' : ''}>${tr('셀 이동 적용', 'Apply move')}</button><button class="btn quiet sm" data-act="mv-apply-cancel">${tr('취소', 'Cancel')}</button></div></div>`
         : MV.cancel === m.id ? `<div class="banner small"><b>${tr('이 이동 건을 취소할까요?', 'Cancel this move?')}</b>${tr('취소한 건도 이동 이력에 남습니다.', 'It stays in the history.')}
@@ -2263,9 +2357,10 @@ async function viewMoves(app, v) {
 }
 function mvSync() {
   const f = MV.form; if (!f) return;
-  f.member = $('#mv-member')?.value ?? f.member; f.to = $('#mv-to')?.value ?? f.to; f.date = $('#mv-date')?.value || f.date; f.memo = $('#mv-memo')?.value ?? f.memo;
+  f.from = $('#mv-from')?.value ?? f.from; f.member = $('#mv-member')?.value ?? f.member; f.to = $('#mv-to')?.value ?? f.to; f.date = $('#mv-date')?.value || f.date; f.memo = $('#mv-memo')?.value ?? f.memo;
 }
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'mv-from') { mvSync(); const mm = MV.opts && MV.opts.members.find(x => x.id === MV.form.member); if (!mm || mm.cell_id !== MV.form.from) MV.form.member = ''; if (MV.form.to === MV.form.from) MV.form.to = ''; return render(); }
   if (e.target.id === 'mv-member' || e.target.id === 'mv-to') { mvSync(); if (e.target.id === 'mv-member' && MV.opts && MV.form.to) { const mm = MV.opts.members.find(x => x.id === MV.form.member); if (mm && mm.cell_id === MV.form.to) MV.form.to = ''; } render(); }
   const k = e.target.dataset && e.target.dataset.mvContact;
   if (k) mvAct('cellcare_move_contact', { p_id: e.target.dataset.id, p_kind: k, p_done: e.target.checked }, e.target.checked ? tr('연락 완료로 표시했습니다.', 'Marked as contacted.') : tr('연락 완료 표시를 지웠습니다.', 'Unmarked.'));
@@ -2508,6 +2603,7 @@ function demoRpc(name, a) {
     pastoral_note_list: [{ id: 'demo-pn1', person_name: '배자비', visit_method: 'phone', category: 'care_needed', campus: '분당', content: '(예시) 최근 가정 일로 마음이 많이 힘드시다고 하셨습니다.', prayer: '(예시) 마음의 평안을 위해', met_on: addDays(W, 1), author_name: '김교역 전도사', needs_pastor: true, acks: [], i_acked: false, mine: DEMO.role === 'leadership', visibility: 'staff', viewer_names: null },
                          { id: 'demo-pn2', person_name: '서은혜', visit_method: 'in_person', category: 'faith', campus: '분당', content: '(예시) 세례 준비에 대해 이야기 나눴습니다.', prayer: null, met_on: addDays(W, 2), author_name: '정교역 목사', needs_pastor: false, acks: [], i_acked: false, mine: false, visibility: 'staff', viewer_names: null }],
     note_comments_for: [], pastoral_staff: [],
+    cellcare_senior_acks: (a.p_ids || []).slice(0, 1).map(id => ({ target_id: id, role: 'samonim', name: '담임 사모님', acked_at: at(addDays(W, 5), '09:00') })),
     cellcare_talk_list: a.p_report === 'demo-r2' ? [{ id: 'demo-tk1', author_name: '김교역 전도사', author_role: 'leadership', content: '(예시) 정다운 성도님과 관련해서 이번 주에 추가로 이야기를 나눠 보셨나요?', created_at: at(addDays(W, 4), '14:00'), mine: DEMO.role === 'leadership' },
       { id: 'demo-tk2', author_name: '이성도', author_role: 'leader', content: '(예시) 네, 화요일에 통화했고 지금은 상황이 조금 나아졌습니다.', created_at: at(addDays(W, 4), '19:20'), mine: false }] : [],
     issue_board: [{ source: 'report', item_id: 'demo-n1', on_date: addDays(W, 3), week_start: W, cell_id: 'demo-c2', cell_name: '샘플 2셀', resp_name: '김교역 전도사', person_id: 'demo-c2-m0', person_name: '정다운', category: 'health', content: '(예시) 다음 주 수술 예정\n기도제목: 수술이 잘 되도록', attention: true, related_member_id: null, related_name: null, relation_kind: null, author_name: '이성도', my_area: true },
@@ -3041,9 +3137,9 @@ document.addEventListener('click', async (e) => {
     case 'open-moves': Object.assign(MV, { tab: 'open', form: null, apply: null, cancel: null }); return go({ name: 'moves' });
     case 'mv-new': Object.assign(MV, { tab: 'open', form: { member: d.id, to: '', date: S.ctx.today, memo: '' }, apply: null, cancel: null }); return go({ name: 'moves' });
     case 'mv-tab': MV.tab = d.v; return render();
-    case 'mv-form-open': MV.form = { member: '', to: '', date: S.ctx.today, memo: '' }; return render();
+    case 'mv-form-open': MV.form = { from: '', member: '', to: '', date: S.ctx.today, memo: '' }; return render();
     case 'mv-form-close': MV.form = null; return render();
-    case 'mv-create': { mvSync(); const f = MV.form; if (!f.member) return fieldError('#mv-member', tr('셀원을 골라 주세요.', 'Please choose a member.')); if (!f.to) return fieldError('#mv-to', tr('이동할 셀을 골라 주세요.', 'Please choose a cell.'));
+    case 'mv-create': { mvSync(); const f = MV.form; if (!f.from) return fieldError('#mv-from', tr('지금 셀을 골라 주세요.', 'Please choose the current cell.')); if (!f.member) return fieldError('#mv-member', tr('셀원을 골라 주세요.', 'Please choose a member.')); if (!f.to) return fieldError('#mv-to', tr('이동할 셀을 골라 주세요.', 'Please choose a cell.'));
       return mvAct('cellcare_move_create', { p_member: f.member, p_to: f.to, p_decided_on: f.date || S.ctx.today, p_memo: f.memo || '' }, tr('셀 이동을 등록했습니다. 연락을 마친 뒤 적용해 주세요.', 'Registered.')); }
     case 'mv-apply-ask': MV.apply = d.id; MV.cancel = null; return render();
     case 'mv-apply-cancel': MV.apply = null; return render();
@@ -3086,6 +3182,8 @@ document.addEventListener('click', async (e) => {
     case 'note-week': { const w = addDays(NOTE.week || S.ctx.this_week, +d.v); NOTE.week = w > S.ctx.this_week ? S.ctx.this_week : w; return render(); }
     case 'note-campus': NOTE.campus = d.v || ''; return render();
     case 'note-tx': return noteTranslate();
+    case 'sack': return seniorAck(d.kind, d.id, d.review === '1');
+    case 'todo-notes': NOTE.filter = 'needs'; return switchTab('notes');
     case 'note-ack': try { await rpc('pastoral_note_ack', { p_id: d.id }); toast(tr('확인 표시를 했습니다.', 'Marked as seen.')); } catch (e) { toast(errText(e)); } return render();
     case 'nt-cat': { noteFormSync(); const cs = NOTE.form.categories; const k = cs.indexOf(d.v); if (k >= 0) cs.splice(k, 1); else cs.push(d.v); return render(); }
     case 'nt-vis': noteFormSync(); NOTE.form.visibility = d.v; return render();
