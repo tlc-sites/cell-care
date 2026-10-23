@@ -98,6 +98,7 @@ module.exports = async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({ translations });
   } catch (e) {
+    console.error('translate failed:', String(e.message || e)); // Vercel Logs에서 원인 확인
     res.status(e.status || 500).json({ error: String(e.message || e) });
   }
 };

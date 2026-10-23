@@ -1366,6 +1366,8 @@ async function talkAdd(id) {
 document.addEventListener('input', (e) => { if (e.target.dataset && e.target.dataset.talk) TALK.draft = e.target.value; });
 /* 보고서 내용 번역 (담임 목사님·담임 사모님, 영어 화면) — 화면을 열면 자동으로 번역 */
 const TX_CACHE = {};
+// 번역 실패 이유를 함께 보여 준다(원인 확인용)
+const txErrText = (e) => 'Could not translate right now. Please try again in a moment.' + (e && e.message ? ' (' + String(e.message).slice(0, 200) + ')' : '');
 function txStatus(map, busy, err, act, id) {
   if (map) return '<p class="tiny muted" style="margin:8px 0 0">Translated by AI · the Korean original is shown in small text.</p>';
   if (err) return `<div class="banner warn small" style="margin-top:8px">${esc(err)}<div style="margin-top:8px"><button class="btn sm ghost" data-act="${act}" data-id="${id || ''}">Try again</button></div></div>`;
@@ -1386,7 +1388,7 @@ async function translateReport(id) {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     TRANS.id = id; TRANS.map = j.translations || {}; TX_CACHE['rep:' + id] = TRANS.map;
-  } catch (e) { TRANS.err = 'Could not translate right now. Please try again in a moment.'; }
+  } catch (e) { TRANS.err = txErrText(e); }
   finally { TRANS.busy = false; render(); }
 }
 document.addEventListener('input', (e) => { if (e.target.id === 'rv-note') DETAIL.note = e.target.value; if (e.target.id === 'rv-reason') DETAIL.reason = e.target.value; });
@@ -1790,7 +1792,7 @@ async function issuesTranslate() {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     ISS.tx = j.translations || {}; ISS.txWeeks = weeks;
-  } catch (e) { ISS.txErr = 'Could not translate right now. Please try again in a moment.'; }
+  } catch (e) { ISS.txErr = txErrText(e); }
   finally { ISS.txBusy = false; render(); }
 }
 // 셀원 이슈 → 셀리더에게 코멘트 / 담당 교역자에게 전달 (메시지로 보냄, 받는 분만 봄)
@@ -2067,7 +2069,7 @@ async function lrTranslate(id) {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     LRT.id = id; LRT.map = j.translations || {}; TX_CACHE['lr:' + id] = LRT.map;
-  } catch (e) { LRT.err = 'Could not translate right now. Please try again in a moment.'; }
+  } catch (e) { LRT.err = txErrText(e); }
   finally { LRT.busy = false; render(); }
 }
 
@@ -2286,7 +2288,7 @@ async function noteTranslate() {
     const r = await fetch('api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify({ notes: true }) });
     const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
     NOTE.tx = j.translations || {};
-  } catch (e) { NOTE.txErr = 'Could not translate right now. Please try again in a moment.'; }
+  } catch (e) { NOTE.txErr = txErrText(e); }
   finally { NOTE.txBusy = false; render(); }
 }
 
