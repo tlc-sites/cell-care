@@ -10,10 +10,28 @@ if (INBOX.pending) rememberNotificationRoute(INBOX.pending);
 function bellButton() {
   return '<button class="iconbtn notification-bell" data-notification-action="open" aria-label="' + tr('알림함', 'Notifications') + '"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span id="notification-count" class="pill warn" hidden></span></button>';
 }
+/* 앱 업데이트 공지: DB를 거치지 않고 알림함 맨 위에 보여 주는 고정 공지.
+   교역자·관리자는 바로 보고, 셀리더는 publishAt부터 본다. 읽음은 이 기기에만 저장한다. */
+const APP_UPDATES = [
+  { id: '20261025-1', publishAt: '2026-10-26T00:00:00+09:00',
+    title: ['[공지] 업데이트되었습니다 (20261025-1)', '[Notice] App updated (20261025-1)'],
+    body: ['셀 케어와 교회 보고서가 함께 업데이트되었습니다. 눌러서 사용 안내의 「업데이트 소식」을 확인해 주세요.', 'Cell Care and the church report app have been updated. Tap to see what changed.'] }
+];
+const isStaffUser = () => (S.roles || []).some(r => ['leadership', 'senior_pastor', 'samonim', 'admin'].includes(r));
+const updateReadKey = () => 'cellcare-read-updates:' + (S.me?.id || '');
+function readUpdateIds() { try { return JSON.parse(localStorage.getItem(updateReadKey()) || '[]'); } catch (_) { return []; } }
+function markUpdatesRead(ids) {
+  try { localStorage.setItem(updateReadKey(), JSON.stringify([...new Set([...readUpdateIds(), ...ids])])); } catch (_) { /* 저장이 막힌 브라우저에서는 다음에 다시 보여도 괜찮다 */ }
+}
+function visibleUpdates() {
+  if (!S.ctx || DEMO.role) return [];
+  const now = Date.now(), read = new Set(readUpdateIds());
+  return APP_UPDATES.filter(u => isStaffUser() || now >= Date.parse(u.publishAt)).map(u => ({ ...u, read: read.has(u.id) }));
+}
 function updateInboxBadge() {
   const badge = document.getElementById('notification-count');
   if (!badge) return;
-  const count = INBOX.rows.filter(n => !n.read_at).length;
+  const count = INBOX.rows.filter(n => !n.read_at).length + visibleUpdates().filter(u => !u.read).length;
   badge.hidden = !count; badge.textContent = count > 99 ? '99+' : String(count);
 }
 async function refreshInboxBadge(force = false) {
@@ -33,7 +51,13 @@ async function viewNotifications(app) {
   setTop(tr('알림함', 'Notifications'), true); renderTabs(true);
   await refreshInboxBadge(true);
   app.innerHTML = '<h1>' + tr('알림함', 'Notifications') + '</h1><div class="row" style="gap:12px;margin-bottom:12px"><button class="btn quiet sm" data-notification-action="refresh">' + tr('새로고침', 'Refresh') + '</button><button class="link" data-notification-action="read-all">' + tr('모두 읽음', 'Mark all read') + '</button></div>' +
-    (INBOX.error ? '<div class="banner warn" role="alert">' + esc(INBOX.error) + '</div>' : INBOX.rows.length ? '<div class="stack">' + INBOX.rows.map(n => '<button class="listitem" data-notification-action="item" data-id="' + esc(n.id) + '"><div class="row"><b>' + esc(n.title) + '</b>' + (!n.read_at ? '<span class="pill warn">' + tr('새 알림', 'New') + '</span>' : '') + '</div><div class="small" style="white-space:pre-wrap;margin-top:6px">' + esc(n.body) + '</div><div class="tiny muted">' + dateTime(n.created_at) + '</div></button>').join('') + '</div>' : '<p class="empty">' + tr('받은 알림이 없습니다.', 'No notifications yet.') + '</p>');
+    updateItems() +
+    (INBOX.error ? '<div class="banner warn" role="alert">' + esc(INBOX.error) + '</div>' : INBOX.rows.length ? '<div class="stack">' + INBOX.rows.map(n => '<button class="listitem" data-notification-action="item" data-id="' + esc(n.id) + '"><div class="row"><b>' + esc(n.title) + '</b>' + (!n.read_at ? '<span class="pill warn">' + tr('새 알림', 'New') + '</span>' : '') + '</div><div class="small" style="white-space:pre-wrap;margin-top:6px">' + esc(n.body) + '</div><div class="tiny muted">' + dateTime(n.created_at) + '</div></button>').join('') + '</div>' : (visibleUpdates().length ? '' : '<p class="empty">' + tr('받은 알림이 없습니다.', 'No notifications yet.') + '</p>'));
+}
+function updateItems() {
+  const items = visibleUpdates();
+  if (!items.length) return '';
+  return '<div class="stack" style="margin-bottom:12px">' + items.map(u => '<button class="listitem" data-notification-action="update" data-id="' + esc(u.id) + '"><div class="row"><b>' + esc(tr(u.title[0], u.title[1])) + '</b>' + (!u.read ? '<span class="pill warn">' + tr('새 알림', 'New') + '</span>' : '') + '</div><div class="small" style="white-space:pre-wrap;margin-top:6px">' + esc(tr(u.body[0], u.body[1])) + '</div><div class="tiny muted">' + dateTime(u.publishAt) + '</div></button>').join('') + '</div>';
 }
 async function openNotificationRoute(route) {
   if (!route) return false;
@@ -97,7 +121,13 @@ document.addEventListener('click', async e => {
       const action = n.dataset.notificationAction;
       if (action === 'open') return go({ name: 'notifications' });
       if (action === 'refresh') return render();
-      if (action === 'read-all') { await rpc('cellcare_notification_read', { p_id: null }); INBOX.loadedAt = 0; return render(); }
+      if (action === 'read-all') { markUpdatesRead(visibleUpdates().map(u => u.id)); await rpc('cellcare_notification_read', { p_id: null }); INBOX.loadedAt = 0; return render(); }
+      if (action === 'update') {
+        // 업데이트 공지는 안내 페이지의 「업데이트 소식」으로 연다 (교역자는 교역자 안내)
+        markUpdatesRead([n.dataset.id]); updateInboxBadge();
+        location.href = (isStaffUser() ? 'staff-guide.html' : 'guide.html') + '#updates';
+        return;
+      }
       if (action === 'item') {
         const row = INBOX.rows.find(x => x.id === n.dataset.id);
         if (!row) return;

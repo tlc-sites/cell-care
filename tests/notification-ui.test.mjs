@@ -47,3 +47,24 @@ test('답글 내용은 HTML로 실행되지 않게 표시한다',()=>{
  const html=s.run(`replyBlock('report','${id}')`);
  assert.ok(html.includes('&lt;script>'));assert.ok(!html.includes('<script>'));
 });
+test('업데이트 공지는 교역자에게 바로, 셀리더에게는 공개일부터 보이고 읽음은 사용자별로 저장한다',()=>{
+ const s=setup({ctx:{}});const store={};
+ s.sandbox.localStorage={getItem:k=>store[k]??null,setItem:(k,v)=>{store[k]=v;}};
+ s.run(`APP_UPDATES.splice(0,APP_UPDATES.length,{id:'v1',publishAt:'2999-01-01T00:00:00+09:00',title:['[공지] 업데이트','x'],body:['<b>본문</b>','x']})`);
+ s.sandbox.S.roles=[];
+ assert.equal(s.run('visibleUpdates().length'),0);
+ s.sandbox.S.roles=['leadership'];
+ assert.equal(s.run('visibleUpdates().length'),1);
+ s.run('updateInboxBadge()');assert.equal(s.dom.textContent,'1');
+ const html=s.run('updateItems()');
+ assert.ok(html.includes('&lt;b>본문'));assert.ok(html.includes('새 알림'));
+ s.run(`markUpdatesRead(['v1'])`);
+ assert.equal(s.run('visibleUpdates()[0].read'),true);
+ s.run('updateInboxBadge()');assert.equal(s.dom.hidden,true);
+ s.sandbox.S.me={id:'two'};
+ assert.equal(s.run('visibleUpdates()[0].read'),false);
+ s.sandbox.S.roles=[];s.run(`APP_UPDATES[0].publishAt='2000-01-01T00:00:00+09:00'`);
+ assert.equal(s.run('visibleUpdates().length'),1);
+ s.sandbox.DEMO.role='leader';
+ assert.equal(s.run('visibleUpdates().length'),0);
+});
