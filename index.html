@@ -84,6 +84,19 @@ h3 { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
 .btn.sm { min-height: 44px; font-size: 15px; width: auto; padding: 8px 14px; }
 .btn.ack { background: var(--ok); border-color: var(--ok); min-height: 60px; font-size: 18px; }
 .ackbox.todo, .todo-card { border: 2px solid var(--warn); background: var(--warn-soft); }
+.care-card { margin-top: 12px; border: 2px solid var(--line); }
+.care-card.attn { border-color: var(--warn); background: var(--warn-soft); }
+.care-card.urgent { border-color: var(--danger); background: var(--danger-soft); }
+.care-card > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; }
+.care-card > summary::-webkit-details-marker { display: none; }
+.care-card > summary::after { content: '▾'; margin-left: auto; color: var(--muted); }
+.care-card[open] > summary::after { content: '▴'; }
+.care-title { font-size: 19px; font-weight: 700; }
+.care-alert { gap: 6px; padding: 14px; background: var(--card); border-left: 6px solid var(--line); }
+.care-alert.attn { border-left-color: var(--warn); }
+.care-alert.urgent { border-left-color: var(--danger); }
+.care-alert.done { opacity: .75; }
+.care-num { color: var(--danger); font-size: 1.15em; }
 .btn.proxy-action { min-height: 28px; padding: 3px 8px; font-size: 12px; color: var(--muted); }
 .notification-bell { display: inline-flex; align-items: center; gap: 3px; }
 .notification-highlight { outline: 2px solid var(--accent); outline-offset: 4px; }
@@ -1142,6 +1155,7 @@ async function viewReportDetail(app, v) {
   hideFooter();
   const [rep] = await q(sb.from('weekly_reports').select('*').eq('id', v.id));
   if (!rep) throw new Error(tr('보고서를 찾을 수 없거나 볼 권한이 없습니다.', 'Report not found, or you do not have access.'));
+  markReportOpened(rep.id);   // 기다리지 않음: 실패해도 보고서는 그대로 보임
   const [cell] = await q(sb.from('cells').select('id, name, review_mode').eq('id', rep.cell_id));
   const [roster, prayers, notes, revisions, reviews, people, newPrayers, wk] = await Promise.all([
     rpc('get_report_roster', { p_report: v.id }),
@@ -1179,7 +1193,6 @@ async function viewReportDetail(app, v) {
   // 담임 목사님·담임 사모님 확인: 직접 확인하는 셀, 교역자가 「목양/긴급 확인 필요」로 올린 보고서(상위 보고 상태는 셀리더에게 보이지 않음)
   const needSenior = rep.status === 'submitted' && (rep.review_mode === 'senior_direct' || (isConcern(row) && !row.i_am_leader));
   const [rAcks, mAcks] = await Promise.all([needSenior ? seniorAcks('report', [rep.id]) : null, pmsg && pmsg.sent_at ? seniorAcks('pastor_msg', [rep.id]) : null]);
-  if (needSenior && rAcks) h += seniorAckBox('report', rep.id, rAcks.get(rep.id) || [], rep.submitted_at, tr('보고서를 확인했습니다', 'Mark this report as seen'), isSenior() && row.i_can_review);
   const openRev = revisions.find(x => !x.resolved_at);
   if (openRev) h += `<div class="banner warn" style="margin-top:8px"><b>${tr('수정 요청 사유', 'Revision request')}</b>${TX('rev:' + openRev.id, openRev.reason)}<div class="tiny muted">${esc(nameOf(openRev.requested_by))} · ${dateTime(openRev.created_at)}</div></div>`;
   if (canEdit) h += `<div style="margin-top:12px"><button class="btn" data-act="open-editor" data-id="${rep.id}">${rep.status === 'revision_requested' ? '수정해서 다시 제출하기' : rep.submission_no > 0 ? '고친 보고서 다시 제출하기' : '작성 계속하기'}</button></div>`;
@@ -1230,6 +1243,8 @@ async function viewReportDetail(app, v) {
       ${commentBlock(cmts, 'pastor_msg', rep)}</div>` : ''}
     ${rep.submitted_at && (isSenior() || cmts.some(c => c.target === 'report')) ? `<div class="card" style="border-color:#C9D3E4"><h3>${tr('담임 목사님·담임 사모님 코멘트', 'Comments from Pastor & Mrs. Brenner')}</h3>${commentBlock(cmts, 'report', rep)}</div>` : ''}
   </div>`;
+  // 확인 버튼은 보고서를 끝까지 읽으신 뒤 누르시도록 맨 아래에
+  if (needSenior && rAcks) h += seniorAckBox('report', rep.id, rAcks.get(rep.id) || [], rep.submitted_at, tr('보고서를 확인했습니다', 'Mark this report as seen'), isSenior() && row.i_can_review);
   if (rep.status === 'submitted' && row.i_am_leader) h += `<button class="btn ghost" style="margin-top:12px" data-act="msg-new" data-report="${rep.id}" data-label="${esc((cell?.name || '') + ' · ' + weekLabel(rep.week_start))}">${tr('✉️ 이 보고서 함께 보내기', '✉️ Share this report')}</button>
     <p class="tiny muted" style="margin:4px 0 0">${tr('교역자·담임 목사님·담임 사모님 중에서 골라 이 보고서를 함께 보내고 메시지를 남길 수 있습니다.', 'Share with staff and add a message.')}</p>`;
   if (rep.status === 'submitted' || rep.submitted_at) autoTx(TRANS.map, TRANS.busy, TRANS.err, () => { if (S.view.name === 'detail' && S.view.id === rep.id) translateReport(rep.id); });
@@ -1649,16 +1664,54 @@ function seniorTodoCard(items) {
       <div class="row" style="gap:8px"><button class="btn sm ghost" data-act="${x.open}" data-id="${x.id}">${tr('열어 보기', 'Open')}</button>
         <button class="btn sm ack" style="flex:1" data-act="${x.kind === 'note' ? 'note-ack' : 'sack'}" data-kind="${x.kind}" data-id="${x.id}" data-review="${x.review ? 1 : ''}">✓ ${tr('확인했습니다', 'Mark as seen')}</button></div></div>`).join('') + '</div>';
 }
+/* 목회적 케어 보고: 셀모임을 2주 이상 연속 진행하지 못한 셀 (보고서의 「셀모임 진행 여부」로 자동 판정)
+   두 분이 각자 「확인했습니다」를 눌러야 확인됨. 보고서를 읽거나 알림을 읽어도 자동으로 확인되지 않음
+   보고 미제출은 미모임으로 세지 않고 아래에 따로 보여 줌 */
+const CARE = { open: false };
+document.addEventListener('toggle', e => { if (e.target.id === 'care-card') CARE.open = e.target.open; }, true);
+function pastoralCareCard(b) {
+  if (!b) return '';
+  const all = b.alerts || [], open = all.filter(a => a.status !== 'RESOLVED'), done = all.filter(a => a.status === 'RESOLVED'), miss = b.missing || [];
+  if (!all.length && !miss.length) return '';
+  const URG = 'URGENT_PASTORAL_ATTENTION';
+  const unread = open.filter(a => !a.me_read), urgentN = unread.filter(a => a.alert_type === URG).length;
+  const roleName = { senior_pastor: tr('담임 목사님', 'Pastor'), samonim: tr('담임 사모님', 'Mrs. Brenner') };
+  const day = (d) => d ? String(d).slice(0, 10) : tr('기록 없음', 'No record');
+  const item = (a) => {
+    const urgent = a.alert_type === URG, resolved = a.status === 'RESOLVED';
+    const reads = Object.keys(roleName).map(r => { const x = (a.reads || []).find(y => y.role === r); return x ? `<span style="color:var(--ok)">✓ ${roleName[r]} ${dateTime(x.read_at)}</span>` : `<span class="muted">${roleName[r]} ${tr('확인 전', 'not yet')}</span>`; }).join(' · ');
+    const mails = a.emails && a.emails.length ? `<div class="tiny muted">${tr('메일', 'Email')}: ${a.emails.map(m => esc((m.level === URG ? tr('긴급', 'Urgent') : tr('2주째', '2-week')) + ' ' + m.recipient + ' ' + (m.status === 'SENT' ? tr('보냄', 'sent') : m.status === 'FAILED' ? tr('실패', 'failed') + (m.error ? ' (' + m.error + ')' : '') : tr('보내는 중', 'sending')))).join(' · ')}</div>` : '';
+    return `<div class="card stack care-alert ${resolved ? 'done' : urgent ? 'urgent' : 'attn'}">
+      <div class="row" style="flex-wrap:wrap;gap:6px"><span class="pill ${resolved ? 'ok' : urgent ? 'danger' : 'warn'}">${resolved ? tr('해결됨', 'Resolved') : urgent ? tr('긴급 확인', 'Urgent') : tr('목회적 확인 필요', 'Needs pastoral attention')}</span><b style="font-size:1.15em">${esc(a.cell_name)}</b>${!resolved && !a.me_read && isSenior() ? `<span class="pill warn">${tr('미확인', 'Not seen')}</span>` : ''}</div>
+      <div class="small">${tr('셀리더', 'Cell leader')}: <b>${esc(a.cell_leader_name)}</b><br>${tr('담당 교역자', 'Leadership')}: <b>${esc(a.leadership_name)}</b></div>
+      <div class="small">${tr('연속 미모임', 'Weeks not meeting')}: <b class="${urgent && !resolved ? 'care-num' : ''}">${tr(a.consecutive_weeks + '주', a.consecutive_weeks + ' weeks')}</b>${a.gap_weeks ? ' <span class="tiny muted">' + tr('(중간 보고 미제출 ' + a.gap_weeks + '주는 세지 않음)', '(' + a.gap_weeks + ' week(s) without a report not counted)') + '</span>' : ''}<br>${tr('마지막 확인된 모임', 'Last meeting on record')}: ${esc(day(a.last_meeting_date))}</div>
+      ${resolved ? `<div class="tiny muted">${a.resolved_reason === 'MEETING_HELD' ? tr('셀모임을 다시 진행했습니다', 'The cell met again') : tr('경고 기준에서 벗어났습니다', 'No longer meets the alert rule')} · ${dateTime(a.resolved_at)}</div>` : `<div class="tiny">${reads}</div>`}${mails}
+      <div class="row" style="gap:8px;flex-wrap:wrap">${a.latest_report_id ? `<button class="btn sm ghost" data-act="open-detail" data-id="${esc(a.latest_report_id)}">${tr('최근 보고서 보기', 'Open latest report')}</button>` : ''}
+        ${!resolved && !a.me_read && isSenior() ? `<button class="btn sm ack" style="flex:1" data-act="pcare-ack" data-id="${esc(a.id)}">✓ ${tr('확인했습니다', 'Mark as seen')}</button>` : ''}</div></div>`;
+  };
+  const head = isSenior() && unread.length ? tr('미확인 케어 보고 ' + unread.length + '건', unread.length + ' not yet seen') : tr('케어 보고 ' + open.length + '건', open.length + ' alert(s)');
+  return `<details id="care-card" class="card care-card ${urgentN ? 'urgent' : unread.length ? 'attn' : ''}" ${CARE.open ? 'open' : ''}>
+    <summary><span class="care-title">${tr('목회적 케어 보고', 'Pastoral care alerts')}</span> <span class="pill ${urgentN ? 'danger' : unread.length ? 'warn' : ''}">${esc(head)}</span>${urgentN ? ` <span class="pill danger">${tr('긴급 ' + urgentN + '건', urgentN + ' urgent')}</span>` : ''}${miss.length ? ` <span class="pill">${tr('보고 미제출 ' + miss.length + '셀', miss.length + ' cell(s) without reports')}</span>` : ''}</summary>
+    <div class="stack" style="gap:10px;margin-top:10px">
+      <p class="tiny muted" style="margin:0">${tr('보고서의 「셀모임 진행 여부」로 자동 판정합니다. 2주 연속은 「목회적 확인 필요」, 3주 이상은 「긴급 확인」입니다. 담임 목사님·담임 사모님이 각자 확인하시며, 보고서를 읽는 것만으로는 확인되지 않습니다.', 'Based on each report\u2019s “meeting held” answer: 2 weeks in a row = needs pastoral attention, 3+ weeks = urgent. Pastor and Mrs. Brenner each mark alerts as seen; reading a report does not mark it.')}</p>
+      ${open.length ? open.map(item).join('') : `<p class="small muted" style="margin:0">${tr('지금 열린 케어 보고는 없습니다.', 'No open care alerts.')}</p>`}
+      ${miss.length ? `<h3 style="margin:8px 0 0">${tr('보고서 미제출 (2주 이상)', 'Reports missing (2+ weeks)')}</h3><p class="tiny muted" style="margin:0">${tr('보고서가 없어 셀모임 여부를 알 수 없는 셀입니다. 미모임으로 세지 않습니다.', 'No report, so we cannot tell whether these cells met. Not counted as missed meetings.')}</p>` +
+        miss.map(m => `<div class="card stack care-alert missing"><div class="row" style="flex-wrap:wrap;gap:6px"><span class="pill">${tr('보고 미제출', 'No report')}</span><b>${esc(m.cell_name)}</b></div><div class="small">${tr('최근 ' + m.missing_weeks + '주 보고서 미제출', 'No report for the last ' + m.missing_weeks + ' weeks')}<br>${tr('셀리더', 'Cell leader')}: ${esc(m.leader_names)} · ${tr('담당 교역자', 'Leadership')}: ${esc(m.leadership_names)}</div></div>`).join('') : ''}
+      ${done.length ? `<h3 style="margin:8px 0 0">${tr('최근 해결됨 (14일)', 'Recently resolved (14 days)')}</h3>` + done.map(item).join('') : ''}
+    </div></details>`;
+}
 async function viewDashboard(app, v) {
   await loadSched();
   setTop(tr('전체 현황', 'Overview'), false); renderTabs(true);
   const week = v.week || S.ctx.this_week;
-  const [allRows, lrs, wkNotes, pmsgsAll, todo] = await Promise.all([
+  const [allRows, lrs, wkNotes, pmsgsAll, todo, care] = await Promise.all([
     rpc('get_week_status', { p_week_start: week }),
     rpc('lr_overview', { p_week: week }).catch(() => []),
     rpc('pastoral_note_list', { p_limit: 200, p_only_needs: false }).then(x => x.filter(n => n.met_on >= week && n.met_on <= addDays(week, 6))).catch(() => []),
     rpc('pastor_msgs_week', { p_week: week }).catch(() => []),
-    isSenior() ? seniorTodo().catch(e => { console.warn('확인하실 것 불러오기 실패', e); return null; }) : null
+    isSenior() ? seniorTodo().catch(e => { console.warn('확인하실 것 불러오기 실패', e); return null; }) : null,
+    // 목회적 케어 보고: 불러오지 못하면(DB 적용 전 등) 칸을 숨긴다
+    isSenior() ? rpc('cellcare_pastoral_board').catch(e => { console.warn('목회적 케어 보고 불러오기 실패', e); return null; }) : null
   ]);
   const hasBusan = allRows.some(r => campusOf(r) === '부산');
   const rows = hasBusan ? allRows.filter(r => campusOf(r) === CAMP.v) : allRows;
@@ -1687,7 +1740,7 @@ async function viewDashboard(app, v) {
   groups.sort(sorters[DASH.sort]);
   const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
 
-  let h = `<h1>${tr('전체 현황', 'Overview')}</h1>` + seniorTodoCard(todo) + weekNav(week, 'db-week');
+  let h = `<h1>${tr('전체 현황', 'Overview')}</h1>` + pastoralCareCard(care) + seniorTodoCard(todo) + weekNav(week, 'db-week');
   if (hasBusan) h += campusSeg();
   h += noticeCard(await rpc('notice_list', { p_limit: 3 }).catch(() => []), true);
   h += msgEntry(unread, tr('셀리더에게 보고서와 상관없이 직접 말씀을 전하고, 셀리더가 보낸 메시지와 답장을 봅니다.', 'Send a note to cell leaders anytime and read their messages and replies.'));
@@ -2051,7 +2104,6 @@ async function viewLrRead(app, v) {
   if (LRT.id !== r.id) { LRT.id = r.id; LRT.map = TX_CACHE['lr:' + r.id] || null; LRT.err = ''; }
   autoTx(LRT.map, LRT.busy, LRT.err, () => { if (S.view.name === 'lrRead') lrTranslate(r.id); });
   let h = `<h1>${esc(r.author_name)}</h1><p class="sub">${weekLabel(r.week_start, true)} · ${tr(dateTime(r.submitted_at) + ' 제출', 'Submitted ' + dateTime(r.submitted_at))} · ${tr(r.items.length + '명', r.items.length + ' people')}</p>`;
-  if (r.submitted_at) { const acks = await seniorAcks('lr', [r.id]); if (acks) h += seniorAckBox('lr', r.id, acks.get(r.id) || [], r.submitted_at, tr('교역자 보고를 확인했습니다', 'Mark this report as seen')); }
   if (EN() && isSenior()) {
     h += txStatus(LRT.map, LRT.busy, LRT.err, 'lr-tx', r.id);
   }
@@ -2059,6 +2111,8 @@ async function viewLrRead(app, v) {
   h += '<div class="stack" style="margin-top:12px">' + (r.items.length ? r.items.map(it => `<div class="card stack" style="gap:6px">
       <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.05em">${esc(it.person_name)}</b><span class="tiny muted">${esc(it.group_name === '개별 케어' ? tr('개별 케어', 'Individual care') : it.group_name === '셀리더' ? tr('셀리더', 'Cell leader') : it.group_name || '')}</span><span class="spacer"></span><span class="pill">${noteCat(it.category)}</span></div>
       <div>${TXL('lri:' + it.id, it.content)}</div></div>`).join('') : '<p class="empty">' + tr('적은 분이 없습니다.', 'No one listed.') + '</p>') + '</div>';
+  // 확인 버튼은 끝까지 읽으신 뒤 누르시도록 맨 아래에
+  if (r.submitted_at) { const acks = await seniorAcks('lr', [r.id]); if (acks) h += seniorAckBox('lr', r.id, acks.get(r.id) || [], r.submitted_at, tr('교역자 보고를 확인했습니다', 'Mark this report as seen')); }
   app.innerHTML = h;
 }
 async function lrTranslate(id) {
@@ -2615,11 +2669,15 @@ function demoRpc(name, a) {
     msg_contacts: DEMO.role === 'senior' ? [{ id: 'demo-u1', name: '홍길동', info: '샘플 1셀', kind: 'leader' }, { id: 'demo-u2', name: '이성도', info: '샘플 2셀', kind: 'leader' }, { id: 'demo-l1', name: '김교역 전도사', info: '교역자', kind: 'staff' }]
       : [{ id: 'demo-s1', name: '담임 목사님', info: '담임 목사님', kind: 'staff' }, { id: 'demo-s2', name: '담임 사모님', info: '담임 사모님', kind: 'staff' }, { id: 'demo-l1', name: '김교역 전도사', info: '교역자', kind: 'staff' }],
     member_list: (D.members[a.p_cell] || []).map((n, i) => ({ id: a.p_cell + '-m' + i, name: n, state: 'member', left_at: null, meets_separately: false, can_delete: false })),
-    member_move_targets: [], cell_admin_info: null, individual_care_list: []
+    member_move_targets: [], cell_admin_info: null, individual_care_list: [],
+    cellcare_pastoral_board: { alerts: [
+      { id: 'demo-pa1', cell_name: '샘플 3셀', cell_leader_name: '박성도', leadership_name: '김교역 전도사', alert_type: 'URGENT_PASTORAL_ATTENTION', status: 'OPEN', consecutive_weeks: 3, gap_weeks: 0, last_meeting_date: addDays(W, -24), latest_report_id: 'demo-r3', me_read: false, reads: [] },
+      { id: 'demo-pa2', cell_name: '샘플 4셀', cell_leader_name: '최성도', leadership_name: '정교역 목사', alert_type: 'PASTORAL_ATTENTION', status: 'ACKNOWLEDGED', consecutive_weeks: 2, gap_weeks: 0, last_meeting_date: addDays(W, -17), latest_report_id: 'demo-r4', me_read: false, reads: [{ role: 'samonim', name: '담임 사모님', read_at: at(addDays(W, 5), '09:10') }] }],
+      missing: [{ cell_id: 'demo-c5', cell_name: '샘플 5셀', missing_weeks: 2, leader_names: '한성도', leadership_names: '담당 교역자 정보 없음' }] }
   };
   if (Object.prototype.hasOwnProperty.call(R, name)) return Promise.resolve(JSON.parse(JSON.stringify(R[name])));
   if (/^(save_push_subscription|delete_push_subscription)$/.test(name)) return Promise.resolve(null);
-  if (/^(save|submit|request|review|reopen|move|add|member_|cell_|notice_(create|delete)|lr_save|pastor_msg|pastoral_note_(save|delete|ack)|note_comment_(add|delete)|senior_comment_(add|delete)|msg_(start|post)|individual_care_(add|remove)|admin_|cellcare_(talk_(add|delete)|pastoral_note_save|move_(create|contact|apply|cancel)))/.test(name)) return Promise.reject(demoErr());
+  if (/^(save|submit|request|review|reopen|move|add|member_|cell_|notice_(create|delete)|lr_save|pastor_msg|pastoral_note_(save|delete|ack)|note_comment_(add|delete)|senior_comment_(add|delete)|msg_(start|post)|individual_care_(add|remove)|admin_|cellcare_(talk_(add|delete)|pastoral_note_save|pastoral_alert_ack|move_(create|contact|apply|cancel)))/.test(name)) return Promise.reject(demoErr());
   return Promise.resolve([]);
 }
 function demoTable(p) {
@@ -2897,10 +2955,18 @@ function personSummary(p) {
   return bits.join(' · ') || tr('맡은 셀·역할 없음', 'No cell or role');
 }
 function isRegistered(p) { return !!p.email; }
+// 목회적 케어 보고 메일이 실패한 경우만 관리자에게 보여 준다(경고 자체는 DB에 그대로 있음)
+function pastoralMailBanner(b) {
+  const failed = ((b && b.alerts) || []).flatMap(a => (a.emails || []).filter(m => m.status === 'FAILED').map(m => ({ ...m, cell: a.cell_name })));
+  if (!failed.length) return '';
+  return `<div class="banner danger" role="alert" style="margin-top:8px"><b>${tr('목회적 케어 보고 메일을 보내지 못했습니다', 'Pastoral care alert email failed')}</b>
+    ${failed.map(m => `<div class="small">${esc(m.cell)} · ${esc(m.recipient)} · ${tr(m.attempts + '번 시도', m.attempts + ' attempt(s)')}${m.error ? ' · ' + esc(m.error) : ''}</div>`).join('')}
+    <div class="tiny muted">${tr('앱 안의 케어 보고는 정상입니다. 3번까지 다음 실행 때 다시 보냅니다. Vercel 환경 변수(PASTORAL_ALERT_EMAILS, GMAIL_USER, GMAIL_APP_PASSWORD)를 확인해 주세요.', 'In-app alerts are fine. It retries up to 3 times. Check the Vercel email settings.')}</div></div>`;
+}
 async function viewAdminHome(app) {
   setTop(tr('관리', 'Admin'), false); renderTabs(true);
   const week = ADMIN.week || S.ctx.this_week;
-  const [{ reqs, P, C, closed }, ov, al] = await Promise.all([loadAdminData(), rpc('admin_overview', { p_week: week }).catch(() => null), rpc('admin_alerts').catch(() => null)]);
+  const [{ reqs, P, C, closed }, ov, al, care] = await Promise.all([loadAdminData(), rpc('admin_overview', { p_week: week }).catch(() => null), rpc('admin_alerts').catch(() => null), rpc('cellcare_pastoral_board').catch(() => null)]);
   const people = [...P.values()].filter(p => p.active);
   const stopped = [...P.values()].filter(p => !p.active).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   const waiting = people.filter(p => !isRegistered(p));
@@ -2911,7 +2977,7 @@ async function viewAdminHome(app) {
       <span class="top"><b>${title}</b><span class="pill ${id === 'requests' && count ? 'warn' : ''}">${count}</span></span></button>
     ${ADMIN.open === id ? '<div class="stack" style="margin-top:8px">' + body + '</div>' : ''}`;
 
-  let h = `<h1>${tr('관리', 'Admin')}</h1>` + loginAlertBanner(al) + `
+  let h = `<h1>${tr('관리', 'Admin')}</h1>` + loginAlertBanner(al) + pastoralMailBanner(care) + `
     <div class="card stack" style="margin-top:8px"><div><b>📱 ${tr('화면 미리보기', 'Screen preview')}</b><div class="small muted">${tr('셀리더, 교역자, 담임 목사님·담임 사모님 화면이 어떻게 보이는지 예시 데이터로 둘러봅니다. 실제 명단과 내용은 보이지 않고, 아무것도 저장되지 않습니다.', 'Browse each role’s screens with sample data. Nothing is saved.')}</div></div>
       <div class="row" style="gap:8px;flex-wrap:wrap">${Object.entries(DEMO_ROLE).map(([k, t]) => `<button class="btn sm ghost" data-act="demo" data-v="${k}">${t}</button>`).join('')}</div></div>` + (ov ? overviewBlock(ov, week) : '') + `
     <h2>${tr('등록·명단', 'Registration & cells')}</h2>
@@ -3185,6 +3251,7 @@ document.addEventListener('click', async (e) => {
     case 'note-campus': NOTE.campus = d.v || ''; return render();
     case 'note-tx': return noteTranslate();
     case 'sack': return seniorAck(d.kind, d.id, d.review === '1');
+    case 'pcare-ack': try { await rpc('cellcare_pastoral_alert_ack', { p_alert: d.id }); CARE.open = true; toast(tr('케어 보고를 확인했습니다. 셀모임을 다시 진행할 때까지 목록에 남습니다.', 'Marked as seen. It stays listed until the cell meets again.')); } catch (e) { toast(errText(e)); } return render();
     case 'todo-notes': NOTE.filter = 'needs'; return switchTab('notes');
     case 'note-ack': try { await rpc('pastoral_note_ack', { p_id: d.id }); toast(tr('확인 표시를 했습니다.', 'Marked as seen.')); } catch (e) { toast(errText(e)); } return render();
     case 'nt-cat': { noteFormSync(); const cs = NOTE.form.categories; const k = cs.indexOf(d.v); if (k >= 0) cs.splice(k, 1); else cs.push(d.v); return render(); }

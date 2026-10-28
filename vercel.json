@@ -23,6 +23,10 @@
     {
       "path": "/api/cron?job=digest",
       "schedule": "59 14 * * 5"
+    },
+    {
+      "path": "/api/cron?job=pastoral",
+      "schedule": "30 4 * * *"
     }
   ],
   "headers": [

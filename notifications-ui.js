@@ -44,6 +44,29 @@ async function refreshInboxBadge(force = false) {
   } catch (_) { INBOX.error = tr('알림을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', 'Notifications could not be loaded. Please try again.'); }
   finally { INBOX.loading = false; updateInboxBadge(); }
 }
+// 셀보고서 제출 알림은 작성자·셀 이름을 DB에서 다시 가져와 만든다(이름이 비면 「… 정보 없음」). DB 적용 전에는 저장된 제목·내용 그대로
+function submitHonor(name) { return /\s/.test(name) ? name + '님' : name + ' 셀리더님'; }
+function notificationText(n) {
+  if (!/^REPORT_(SUBMITTED|UPDATED)$/.test(n.kind || '')) return { title: n.title, body: n.body, meta: '' };
+  const again = n.kind === 'REPORT_UPDATED';
+  const who = String(n.author_name || '').trim(), cell = String(n.cell_name || '').trim();
+  const noWho = !who || who === '작성자 정보 없음', noCell = !cell || cell === '셀 정보 없음';
+  const week = n.week_start && typeof weekLabel === 'function' ? weekLabel(String(n.week_start).slice(0, 10)) : '';
+  return {
+    title: again ? tr('셀보고서가 다시 제출되었습니다', 'Cell report resubmitted') : tr('새로운 셀보고서가 작성되었습니다', 'New cell report submitted'),
+    body: noWho ? tr('작성자 정보 없음 · 셀 보고서가 ' + (again ? '다시 제출되었습니다.' : '작성되었습니다.'), 'Unknown author · a cell report was ' + (again ? 'resubmitted.' : 'submitted.'))
+      : tr(submitHonor(who) + '이 셀 보고서를 ' + (again ? '다시 제출했습니다.' : '작성했습니다.'), who + (again ? ' resubmitted' : ' submitted') + ' a cell report.'),
+    meta: [noCell ? tr('셀 정보 없음', 'Unknown cell') : cell, week].filter(Boolean).join(' · ')
+  };
+}
+// 보고서를 상세 화면으로 열면(알림·목록·검색 등 어느 경로든) 열람 기록 + 내 같은 보고서 제출 알림만 읽음. 목회적 케어 보고와는 상관없음
+async function markReportOpened(reportId) {
+  if (DEMO.role || !reportId || !S.ctx) return;
+  try { await rpc('cellcare_report_open', { p_report: reportId }); } catch (_) { return; }   // DB 적용 전이면 조용히 넘어감
+  const now = new Date().toISOString();
+  INBOX.rows.forEach(n => { if (n.report_id === reportId && /^REPORT_/.test(n.kind || '') && !n.read_at) n.read_at = now; });
+  updateInboxBadge();
+}
 function resetInbox() {
   Object.assign(INBOX, { rows: [], loadedAt: 0, error: '', replyRows: {}, replyOpen: '', replyDrafts: {}, replyBusy: false });
 }
@@ -52,7 +75,7 @@ async function viewNotifications(app) {
   await refreshInboxBadge(true);
   app.innerHTML = '<h1>' + tr('알림함', 'Notifications') + '</h1><div class="row" style="gap:12px;margin-bottom:12px"><button class="btn quiet sm" data-notification-action="refresh">' + tr('새로고침', 'Refresh') + '</button><button class="link" data-notification-action="read-all">' + tr('모두 읽음', 'Mark all read') + '</button></div>' +
     updateItems() +
-    (INBOX.error ? '<div class="banner warn" role="alert">' + esc(INBOX.error) + '</div>' : INBOX.rows.length ? '<div class="stack">' + INBOX.rows.map(n => '<button class="listitem" data-notification-action="item" data-id="' + esc(n.id) + '"><div class="row"><b>' + esc(n.title) + '</b>' + (!n.read_at ? '<span class="pill warn">' + tr('새 알림', 'New') + '</span>' : '') + '</div><div class="small" style="white-space:pre-wrap;margin-top:6px">' + esc(n.body) + '</div><div class="tiny muted">' + dateTime(n.created_at) + '</div></button>').join('') + '</div>' : (visibleUpdates().length ? '' : '<p class="empty">' + tr('받은 알림이 없습니다.', 'No notifications yet.') + '</p>'));
+    (INBOX.error ? '<div class="banner warn" role="alert">' + esc(INBOX.error) + '</div>' : INBOX.rows.length ? '<div class="stack">' + INBOX.rows.map(n => { const t = notificationText(n); return '<button class="listitem" data-notification-action="item" data-id="' + esc(n.id) + '"><div class="row"><b>' + esc(t.title) + '</b>' + (!n.read_at ? '<span class="pill warn">' + tr('새 알림', 'New') + '</span>' : '') + '</div><div class="small" style="white-space:pre-wrap;margin-top:6px">' + esc(t.body) + '</div>' + (t.meta ? '<div class="small muted" style="margin-top:2px">' + esc(t.meta) + '</div>' : '') + '<div class="tiny muted">' + dateTime(n.created_at) + '</div></button>'; }).join('') + '</div>' : (visibleUpdates().length ? '' : '<p class="empty">' + tr('받은 알림이 없습니다.', 'No notifications yet.') + '</p>'));
 }
 function updateItems() {
   const items = visibleUpdates();

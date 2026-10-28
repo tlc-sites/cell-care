@@ -28,7 +28,8 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 ## 3. 환경 변수 (Vercel, 이름만)
 
 `SUPABASE_SECRET_KEY`, `CRON_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `ANTHROPIC_API_KEY`(주간 요약·번역),
-`EXPORT_TOKEN`(구글 시트와 같은 값), `GMAIL_USER`, `GMAIL_APP_PASSWORD`(교회 office@ 계정 앱 비밀번호), `DIGEST_EN_TO`(담임 목사님 메일).
+`EXPORT_TOKEN`(구글 시트와 같은 값), `GMAIL_USER`, `GMAIL_APP_PASSWORD`(교회 office@ 계정 앱 비밀번호), `DIGEST_EN_TO`(담임 목사님 메일),
+`PASTORAL_ALERT_EMAILS`(목회적 케어 보고 메일 받는 분, 쉼표로 여러 주소 — 6-6, 아직 미등록).
 값을 바꾼 뒤에는 **다시 배포**해야 적용됨. 로그인 메일은 Supabase → Authentication → SMTP(같은 office@ 계정). SMTP 화면을 저장할 때 비밀번호 칸이 비면 로그인 메일이 모두 멈추니 꼭 다시 넣고 저장.
 
 ## 4. DB 변경 기록
@@ -122,7 +123,32 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 검증: `npm test` 30개 통과(새 `tests/senior-acks.test.mjs`). 화면 미리보기(예시 데이터) 캡처는 scratchpad에서 확인. 셀원 이슈 화면의 동정 확인 버튼은 예시 데이터에 동정이 없어 캡처로 못 봄. 실제 계정 확인 안 함.
 - 안내: staff-guide 2026-10-23 「업데이트 소식」, 성도 동정 본문 NEW.
 
+## 6-6. 연속 미모임 목회적 케어 보고 · 보고서 열람 시 알림 읽음 · 알림 이름 표시 (2026-10-26 작성, **미적용·미배포·미커밋**)
+
+사용자 요청 3가지 + 메일. 세 상태는 테이블을 나눔: 보고서 열람 `report.cellcare_report_reads` / 일반 알림 읽음 `cellcare_notification_items.read_at` / 목회적 케어 확인 `cellcare_pastoral_alert_reads` (+ 해결 `cellcare_pastoral_alerts.status`, 메일 `cellcare_pastoral_alert_email_logs`).
+
+- DB ① `supabase/migrations/20261026000000_notification_refs_report_reads.sql`: 알림 항목에 nullable `kind`(REPORT_SUBMITTED/REPORT_UPDATED)·`report_id`·`cell_id`·`author_id`·`cell_name`·`author_name`·`week_start` 추가, 넣을 때 트리거 `cellcare_notification_fill`이 `submit-<id>-<n>` 알림을 채움(기존 행도 채움). `cellcare_notification_list`는 칸이 늘어 drop 후 재생성(이름: 지금 정보 → 저장한 이름 → 「… 정보 없음」). `cellcare_report_open(p_report)`: 열람 기록 + 내 같은 보고서 제출 알림만 읽음. 먼저 읽고 나중에 생긴 알림은 처음부터 읽음(다시 제출된 것은 제외).
+- DB ② `supabase/migrations/20261026010000_pastoral_alerts.sql`(senior_acks 먼저 필요): `cellcare_consecutive_missed_meetings`(제출된 보고서끼리 연속 `meeting_held=false` 주 수, 미제출 주는 세지 않고 `gap_weeks`로; 미제출 주 수는 마감(금 12:00, 토·일 모임 셀 다음 주 금) 지난 주 기준), `cellcare_pastoral_evaluate(p_dry)`(생성/긴급 상향 시 다시 OPEN/갱신/해결 MEETING_HELD·STREAK_BROKEN·CELL_CLOSED, 셀당 열린 경고 하나는 unique index), 메일 `email_due`(단계마다 한 번, 단계 정해진 지 14일 지나면 안 보냄)·`email_claim`(받는 분마다 자리 잡기, 실패 3번까지 재시도)·`email_result`, 화면 `cellcare_pastoral_board`(담임·관리자, 메일 기록은 관리자만), `cellcare_pastoral_alert_ack`(두 분 각자·단계마다).
+- 서버: `api/_pastoral.js`(DB 판정 → 그 뒤 메일, 실패는 기록만, `?dryRun=1`), `api/cron.js`에 `job=pastoral`, `vercel.json` 크론 `30 4 * * *`(매일 13:30 KST). 함수 개수 그대로 10개. `api/_digest.js`의 `sendMail`에 text 인자·export 추가. `api/notify-submit.js` 이름·셀 이름이 비면 빈칸 대신 「셀리더님」「셀 정보 없음」.
+- 화면: `notifications-ui.js` 제출 알림 문구를 이름·셀·주차로 다시 만듦(`notificationText`), `markReportOpened`. `index.html` 보고서 상세에서 `markReportOpened`, 담임 「전체 현황」 맨 위 `pastoralCareCard`(접힌 카드 → 긴급/목회적 확인 필요/보고 미제출/최근 해결), 관리자 홈 메일 실패 배너, 미리보기 예시 자료. staff-guide 2026-10-26 소식·본문 NEW. 용어는 「담당 교역자」 유지(메일 본문만 「담당 교역자(분파셀리더)」).
+- 검증: `npm test` 40개 통과(새 `tests/pastoral-alerts.test.mjs`·`report-reads.test.mjs`·`pastoral-email.test.mjs`, 공용 `tests/_pastoral-db.mjs`, `notification-ui.test.mjs` 2개 추가). 캡처(예시 자료·Chrome headless): `outputs/cellcare-pastoral-alerts-20261026/`. 실제 DB·실제 메일·실기기는 확인 안 함.
+- 운영 반영 순서(승인 후): SQL Editor에서 ① → ② 실행 → Vercel에 `PASTORAL_ALERT_EMAILS` 등록 → 앱 push → `GET /api/cron?job=pastoral&dryRun=1`(CRON_SECRET)로 첫 판정 미리 보기 → 다음 크론 또는 수동 1회 실행. 첫 실행 때 이미 2주 이상인 셀은 한꺼번에 경고·메일이 생김.
+
+### 6-6 운영 사전 확인 (2026-10-28, 읽기 전용)
+- SQL Editor 읽기 전용 확인: 필요한 칸 28개 모두 있음(`weekly_reports.meeting_held/meeting_date/submitted_at`, `cells.meet_day/created_at/active`, `cell_leaders.is_primary`, `leadership_assignments.leadership_user_id` 등), 함수 6개 있음, `cellcare_report_reads`·`cellcare_pastoral_alerts`는 아직 없음(=미적용 확인). 활성 셀 60개, 최근 6주 `meeting_held=false` 제출 보고서 14건 → 첫 실행 때 경고가 몇 건 생길 수 있음.
+- **수정**: ①의 `cellcare_notification_list` 재생성 본문이 10/21 버전 기준이라 10/22에 넣은 「지운 보고서 대화(`talk-%`) 알림 숨김」이 빠져 있었음. 운영 본문 md5가 `20261022000000` 본문과 같음을 확인한 뒤 ①에 `talk-%` 조건을 다시 넣음. 테스트 DB에 `report.cellcare_report_talk` 추가, `tests/report-reads.test.mjs`에 회귀 테스트 추가 → `npm test` 41개 통과.
+- 운영 DB 적용(①·②)·`PASTORAL_ALERT_EMAILS` 등록·push는 **아직 안 함**. 받는 메일 주소도 미정(비우면 화면 경고만).
+
+## 6-7. 담임 목사님·사모님 확인 버튼을 글 아래로 (2026-10-28, 미배포, DB 변경 없음)
+- 사용자 요청: 글을 다 읽으신 뒤 확인하시도록. `viewReportDetail`의 `seniorAckBox('report', …)`를 상단 상태 배너 밑 → 본문 카드(코멘트 포함) 뒤·교역자 「보고서 확인하기」 앞으로. `viewLrRead`의 `seniorAckBox('lr', …)`도 명단 뒤로. 말씀 카드·성도 동정은 원래 본문 아래라 그대로.
+- 「전체 현황 → 확인하실 것」의 바로 확인 버튼은 그대로 둠(열지 않고 확인 가능 — 뺄지 사용자 결정 대기).
+- staff-guide 「업데이트 소식」을 2026-10-28로 묶음(6-6 소식 포함, NEW 날짜도 10-28). 실제 화면 캡처는 안 함.
+
 ## 7. 남은 일
+
+- 6-6 운영 반영(위 순서). 실제 `public.weekly_reports`에 `meeting_held`·`meeting_date`·`submitted_at`, `public.cells.meet_day`·`created_at`, `cell_leaders.is_primary` 칸 이름이 가정과 같은지 SQL Editor 읽기 전용으로 먼저 확인.
+
+- 번역 안 됨 신고(2026-10-23): 서버·키 설정은 살아 있음(가짜 토큰 시험). API 키를 다시 넣은 뒤 재배포 전이었을 가능성. 커밋 `6753dbe`로 재배포 + 실패 이유를 화면 괄호와 Vercel Logs(`translate failed:`)에 표시. 목사님 화면에서 다시 확인 필요.
 
 - 블루웹 DNS: MX·SPF(`v=spf1 include:_spf.google.com ~all`)·DKIM → 교회 메일 받기, 스팸함 방지
 - 개인 Gmail 앱 비밀번호 삭제, office@ 계정 복구 수단 추가

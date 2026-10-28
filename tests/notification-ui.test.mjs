@@ -68,3 +68,32 @@ test('업데이트 공지는 교역자에게 바로, 셀리더에게는 공개�
  s.sandbox.DEMO.role='leader';
  assert.equal(s.run('visibleUpdates().length'),0);
 });
+test('셀보고서 제출 알림은 작성자·셀 이름을 보여 주고, 비면 「정보 없음」으로 대신한다',()=>{
+ const s=setup();
+ s.sandbox.weekLabel=iso=>'주차 '+iso;
+ const show=n=>s.run('notificationText('+JSON.stringify(n)+')');
+ let t=show({kind:'REPORT_SUBMITTED',author_name:'김사랑',cell_name:'사랑셀',week_start:'2026-10-19',title:'옛 제목',body:' 셀리더님이…'});
+ assert.equal(t.body,'김사랑 셀리더님이 셀 보고서를 작성했습니다.');assert.equal(t.meta,'사랑셀 · 주차 2026-10-19');
+ t=show({kind:'REPORT_UPDATED',author_name:'김교역 전도사',cell_name:'사랑셀'});
+ assert.equal(t.title,'셀보고서가 다시 제출되었습니다');assert.equal(t.body,'김교역 전도사님이 셀 보고서를 다시 제출했습니다.');
+ t=show({kind:'REPORT_SUBMITTED',author_name:'작성자 정보 없음',cell_name:' '});
+ assert.ok(t.body.startsWith('작성자 정보 없음'));assert.equal(t.meta,'셀 정보 없음');
+ assert.ok(!/^\s|님이 셀 보고서/.test(t.body));
+ // 다른 알림과 DB 적용 전 알림은 저장된 제목·내용 그대로
+ t=show({kind:null,title:'공지',body:'내용'});
+ assert.equal(JSON.stringify([t.title,t.body,t.meta]),JSON.stringify(['공지','내용','']));
+});
+test('보고서를 열면 내 같은 보고서의 제출 알림만 읽음으로 바뀐다',async()=>{
+ const s=setup({ctx:{}});const calls=[];
+ s.sandbox.rpc=async(name,args)=>{calls.push([name,args]);return 1;};
+ s.run('APP_UPDATES.splice(0)');   // 업데이트 공지는 이 테스트의 배지 숫자에서 뺀다
+ s.run(`INBOX.rows=[{id:'a',kind:'REPORT_SUBMITTED',report_id:'r1',read_at:null},{id:'b',kind:'REPORT_SUBMITTED',report_id:'r2',read_at:null},{id:'c',kind:null,report_id:null,url:'./#report=r1&comment=x',read_at:null}]`);
+ await s.run(`markReportOpened('r1')`);
+ assert.equal(JSON.stringify(calls),JSON.stringify([['cellcare_report_open',{p_report:'r1'}]]));
+ assert.equal(s.run('INBOX.rows.filter(n=>!n.read_at).map(n=>n.id).join()'),'b,c');
+ assert.equal(s.dom.textContent,'2');
+ // DB 적용 전(함수 없음)이면 조용히 넘어가고 알림은 그대로
+ s.sandbox.rpc=async()=>{throw new Error('function not found');};
+ await s.run(`markReportOpened('r2')`);
+ assert.equal(s.run('INBOX.rows.filter(n=>!n.read_at).map(n=>n.id).join()'),'b,c');
+});

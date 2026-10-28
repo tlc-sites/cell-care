@@ -121,12 +121,12 @@ function buildHtml(D, S, lang) {
   return { subject: title, html: h };
 }
 
-async function sendMail(to, subject, html) {
+async function sendMail(to, subject, html, text) {
   const user = (process.env.GMAIL_USER || '').trim(), pass = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
   if (!user || !pass) return { skipped: 'mail not configured (GMAIL_USER / GMAIL_APP_PASSWORD)' };
   const nodemailer = require('nodemailer');
   const tx = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } });
-  await tx.sendMail({ from: { name: 'TLC 셀 케어', address: user }, to, subject, html });
+  await tx.sendMail({ from: { name: 'TLC 셀 케어', address: user }, to, subject, html, ...(text ? { text } : {}) });
   return { sent: to };
 }
 
@@ -174,3 +174,5 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: String(e.message || e) });
   }
 };
+// 목회적 케어 보고 메일(_pastoral.js)도 같은 보내는 메일을 쓴다
+module.exports.sendMail = sendMail;
