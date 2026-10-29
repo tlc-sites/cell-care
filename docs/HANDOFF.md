@@ -123,7 +123,7 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 검증: `npm test` 30개 통과(새 `tests/senior-acks.test.mjs`). 화면 미리보기(예시 데이터) 캡처는 scratchpad에서 확인. 셀원 이슈 화면의 동정 확인 버튼은 예시 데이터에 동정이 없어 캡처로 못 봄. 실제 계정 확인 안 함.
 - 안내: staff-guide 2026-10-23 「업데이트 소식」, 성도 동정 본문 NEW.
 
-## 6-6. 연속 미모임 목회적 케어 보고 · 보고서 열람 시 알림 읽음 · 알림 이름 표시 (2026-10-26 작성, **미적용·미배포·미커밋**)
+## 6-6. 연속 미모임 목회적 케어 보고 · 보고서 열람 시 알림 읽음 · 알림 이름 표시 (2026-10-26 작성, 2026-10-29 운영 반영)
 
 사용자 요청 3가지 + 메일. 세 상태는 테이블을 나눔: 보고서 열람 `report.cellcare_report_reads` / 일반 알림 읽음 `cellcare_notification_items.read_at` / 목회적 케어 확인 `cellcare_pastoral_alert_reads` (+ 해결 `cellcare_pastoral_alerts.status`, 메일 `cellcare_pastoral_alert_email_logs`).
 
@@ -139,14 +139,20 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - **수정**: ①의 `cellcare_notification_list` 재생성 본문이 10/21 버전 기준이라 10/22에 넣은 「지운 보고서 대화(`talk-%`) 알림 숨김」이 빠져 있었음. 운영 본문 md5가 `20261022000000` 본문과 같음을 확인한 뒤 ①에 `talk-%` 조건을 다시 넣음. 테스트 DB에 `report.cellcare_report_talk` 추가, `tests/report-reads.test.mjs`에 회귀 테스트 추가 → `npm test` 41개 통과.
 - 운영 DB 적용(①·②)·`PASTORAL_ALERT_EMAILS` 등록·push는 **아직 안 함**. 받는 메일 주소도 미정(비우면 화면 경고만).
 
-## 6-7. 담임 목사님·사모님 확인 버튼을 글 아래로 (2026-10-28, 미배포, DB 변경 없음)
+### 6-6·6-7 운영 반영 (2026-10-29)
+- SQL Editor에서 ① `20261026000000_…` → ② `20261026010000_…` 실행(사용자가 Run, 둘 다 Success). 읽기 전용 확인: 알림 새 칸 7개, `cellcare_report_reads` RLS, 채우기 트리거 1, 알림 목록에 talk/reply 숨김 유지, 기존 제출 알림 108/108 채움, 새 테이블 3개 RLS, `cellcare_pastoral_evaluate`는 service_role만, `cellcare_pastoral_board`는 authenticated만(anon 막힘). `cellcare_pastoral_evaluate(true)` 미리 판정: 지금 2주 이상 연속 미모임 셀 0곳.
+- push 전에 원격에 다른 세션의 `9b12fa6`(알림함 업데이트 공지 20261025-1, node_modules 포함)이 있어 rebase. 충돌(`notifications-ui.js` 알림 목록, `staff-guide.html` 소식, 알림 테스트)은 둘 다 살림. 테스트 42개 통과 후 `a713a6e` push → 운영 사이트에 새 코드 확인(index 200, cron 인증 없이 401).
+- `PASTORAL_ALERT_EMAILS`는 등록 안 함(메일 없이 화면 경고만). 업데이트 공지(APP_UPDATES)는 이번 변경이 교역자 화면뿐이라 새로 추가하지 않음. 실제 로그인 화면 확인은 아직 안 함.
+
+## 6-7. 담임 목사님·사모님 확인 버튼을 글 아래로 (2026-10-28, 2026-10-29 배포, DB 변경 없음)
 - 사용자 요청: 글을 다 읽으신 뒤 확인하시도록. `viewReportDetail`의 `seniorAckBox('report', …)`를 상단 상태 배너 밑 → 본문 카드(코멘트 포함) 뒤·교역자 「보고서 확인하기」 앞으로. `viewLrRead`의 `seniorAckBox('lr', …)`도 명단 뒤로. 말씀 카드·성도 동정은 원래 본문 아래라 그대로.
 - 「전체 현황 → 확인하실 것」의 바로 확인 버튼은 그대로 둠(열지 않고 확인 가능 — 뺄지 사용자 결정 대기).
 - staff-guide 「업데이트 소식」을 2026-10-28로 묶음(6-6 소식 포함, NEW 날짜도 10-28). 실제 화면 캡처는 안 함.
 
 ## 7. 남은 일
 
-- 6-6 운영 반영(위 순서). 실제 `public.weekly_reports`에 `meeting_held`·`meeting_date`·`submitted_at`, `public.cells.meet_day`·`created_at`, `cell_leaders.is_primary` 칸 이름이 가정과 같은지 SQL Editor 읽기 전용으로 먼저 확인.
+- 목회적 케어 메일 받는 분 정해서 Vercel `PASTORAL_ALERT_EMAILS` 등록 → 재배포. 첫 크론(매일 13:30) 뒤 Vercel Logs 확인.
+- 「전체 현황 → 확인하실 것」의 바로 확인 버튼을 뺄지 결정.
 
 - 번역 안 됨 신고(2026-10-23): 서버·키 설정은 살아 있음(가짜 토큰 시험). API 키를 다시 넣은 뒤 재배포 전이었을 가능성. 커밋 `6753dbe`로 재배포 + 실패 이유를 화면 괄호와 Vercel Logs(`translate failed:`)에 표시. 목사님 화면에서 다시 확인 필요.
 
