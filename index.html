@@ -553,9 +553,9 @@ function leaderCardState(r) {
   if (r.status === 'draft' && r.submission_no > 0) return { pill: '<span class="pill warn">고치는 중</span>', text: '제출했던 보고서를 고치는 중입니다. 다시 제출해야 반영됩니다.', btn: '고친 보고서 다시 제출하기', cls: 'warn' };
   if (r.status === 'draft') return { pill: '<span class="pill accent">작성 중</span>', text: '작성 중인 보고서가 있습니다. 자동으로 저장되어 있어요.', btn: '작성 계속하기', cls: '' };
   if (r.status === 'revision_requested') return { pill: '<span class="pill warn">수정 요청</span>', text: reviewerName(r.review_mode, r.responsible_leadership_name || r.leadership || assignedName(r.cell_id)) + '께서 수정을 요청하셨습니다.', btn: '수정해서 다시 제출하기', cls: 'warn' };
-  if (r.review_status === 'reviewed') return { pill: '<span class="pill ok">확인 완료</span>', text: '제출한 보고서를 ' + reviewerName(r.review_mode, r.responsible_leadership_name || r.leadership || assignedName(r.cell_id)) + '께서 확인하셨습니다.', btn: '제출한 보고서 보기', cls: 'quiet' };
+  if (r.review_status === 'reviewed') return { pill: '<span class="pill ok">확인 완료</span>', text: '제출한 보고서를 ' + reviewerName(r.review_mode, r.responsible_leadership_name || r.leadership || assignedName(r.cell_id)) + '께서 확인하셨습니다. 고칠 내용이 있으면 보고서를 열어 고칠 수 있어요(다시 확인받습니다).', btn: '제출한 보고서 보기', cls: 'quiet' };
   if (r.review_status === 'not_required') return { pill: '<span class="pill ok">제출 완료</span>', text: '보고서를 제출했습니다. 고칠 내용이 있으면 보고서를 열어 고칠 수 있어요.', btn: '제출한 보고서 보기', cls: 'quiet' };
-  return { pill: '<span class="pill ok">제출 완료</span>', text: '제출했습니다. 확인을 기다리고 있어요. 확인 전까지는 직접 고칠 수 있습니다.', btn: '제출한 보고서 보기', cls: 'quiet' };
+  return { pill: '<span class="pill ok">제출 완료</span>', text: '제출했습니다. 확인을 기다리고 있어요. 고칠 내용이 있으면 보고서를 열어 고칠 수 있어요.', btn: '제출한 보고서 보기', cls: 'quiet' };
 }
 
 async function viewLeaderHome(app) {
@@ -1001,7 +1001,7 @@ function renderEditor() {
 }
 async function reopenReport(id) {
   if (DETAIL.busy) return; DETAIL.busy = true;
-  try { await rpc('reopen_report', { p_report: id }); DETAIL.reopen = null; toast('보고서를 고칠 수 있게 열었습니다.'); go({ name: 'report', id }, { replace: true }); }
+  try { await rpc('cellcare_reopen_report', { p_report: id }); DETAIL.reopen = null; toast('보고서를 고칠 수 있게 열었습니다.'); go({ name: 'report', id }, { replace: true }); }
   catch (e) { toast(errText(e), 5000); render(); }
   finally { DETAIL.busy = false; }
 }
@@ -1196,12 +1196,12 @@ async function viewReportDetail(app, v) {
   const openRev = revisions.find(x => !x.resolved_at);
   if (openRev) h += `<div class="banner warn" style="margin-top:8px"><b>${tr('수정 요청 사유', 'Revision request')}</b>${TX('rev:' + openRev.id, openRev.reason)}<div class="tiny muted">${esc(nameOf(openRev.requested_by))} · ${dateTime(openRev.created_at)}</div></div>`;
   if (canEdit) h += `<div style="margin-top:12px"><button class="btn" data-act="open-editor" data-id="${rep.id}">${rep.status === 'revision_requested' ? '수정해서 다시 제출하기' : rep.submission_no > 0 ? '고친 보고서 다시 제출하기' : '작성 계속하기'}</button></div>`;
-  if (rep.status === 'submitted' && row.i_am_leader && rep.review_status !== 'reviewed') {
+  if (rep.status === 'submitted' && row.i_am_leader) {
     h += DETAIL.reopen === rep.id
-      ? `<div class="banner warn" style="margin-top:12px" role="alertdialog"><b>보고서를 고치시겠어요?</b>고치는 동안에는 '고치는 중'으로 보이고, 확인할 분은 다시 제출하신 뒤에 확인할 수 있습니다. 다 고치신 뒤 꼭 <b style="display:inline">다시 제출하기</b>를 눌러 주세요.
+      ? `<div class="banner warn" style="margin-top:12px" role="alertdialog"><b>보고서를 고치시겠어요?</b>고치는 동안에는 '고치는 중'으로 보이고, 확인할 분은 다시 제출하신 뒤에 확인할 수 있습니다.${rep.review_status === 'reviewed' ? ' 이미 확인받은 보고서라서, 다시 제출하면 <b style="display:inline">확인 대기</b>로 돌아가 한 번 더 확인받습니다.' : ''} 다 고치신 뒤 꼭 <b style="display:inline">다시 제출하기</b>를 눌러 주세요.
           <div class="row" style="margin-top:12px"><button class="btn sm" data-act="rep-reopen" data-id="${rep.id}" ${DETAIL.busy ? 'disabled' : ''}>고치기 시작</button><button class="btn quiet sm" data-act="rep-reopen-cancel">취소</button></div></div>`
       : `<div style="margin-top:12px"><button class="btn ghost" data-act="rep-reopen-ask" data-id="${rep.id}">보고서 고치기</button>
-          <p class="tiny muted" style="margin:6px 0 0">${rep.review_status === 'pending' ? '확인 전까지는 직접 고칠 수 있습니다.' : '제출한 보고서를 고칠 수 있습니다.'}</p></div>`;
+          <p class="tiny muted" style="margin:6px 0 0">${rep.review_status === 'reviewed' ? '확인받은 보고서도 고칠 수 있습니다. 다시 제출하면 한 번 더 확인받습니다.' : rep.review_status === 'pending' ? '확인 전까지는 직접 고칠 수 있습니다.' : '제출한 보고서를 고칠 수 있습니다.'}</p></div>`;
   }
 
   h += `<h1>${esc(cell?.name || '')}</h1><p class="sub">${weekLabel(rep.week_start, true)}${people.find(p => (p.roles_in_report || []).includes('submitted')) ? tr(' · 제출: ', ' · Submitted by ') + esc(writerLabel(row.leader_names, people.filter(p => (p.roles_in_report || []).includes('submitted')).map(p => p.name).join(', '))) : ''}</p>`;
@@ -2677,7 +2677,7 @@ function demoRpc(name, a) {
   };
   if (Object.prototype.hasOwnProperty.call(R, name)) return Promise.resolve(JSON.parse(JSON.stringify(R[name])));
   if (/^(save_push_subscription|delete_push_subscription)$/.test(name)) return Promise.resolve(null);
-  if (/^(save|submit|request|review|reopen|move|add|member_|cell_|notice_(create|delete)|lr_save|pastor_msg|pastoral_note_(save|delete|ack)|note_comment_(add|delete)|senior_comment_(add|delete)|msg_(start|post)|individual_care_(add|remove)|admin_|cellcare_(talk_(add|delete)|pastoral_note_save|pastoral_alert_ack|move_(create|contact|apply|cancel)))/.test(name)) return Promise.reject(demoErr());
+  if (/^(save|submit|request|review|reopen|move|add|member_|cell_|notice_(create|delete)|lr_save|pastor_msg|pastoral_note_(save|delete|ack)|note_comment_(add|delete)|senior_comment_(add|delete)|msg_(start|post)|individual_care_(add|remove)|admin_|cellcare_(reopen_report|talk_(add|delete)|pastoral_note_save|pastoral_alert_ack|move_(create|contact|apply|cancel)))/.test(name)) return Promise.reject(demoErr());
   return Promise.resolve([]);
 }
 function demoTable(p) {

@@ -160,3 +160,8 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 개인 Gmail 앱 비밀번호 삭제, office@ 계정 복구 수단 추가
 - 모임 시간·장소, 대신 쓴 표시, 공지는 아직 구글 시트에 없음
 - 처음 금요일 실행(10/23) 뒤 Vercel Logs와 `weekly_digests` 확인
+
+## 2026-11-03 확인받은 셀보고서도 셀리더가 다시 고치기
+- 새 함수 `report.cellcare_reopen_report(uuid)`(마이그레이션 20261103000000). 운영 `public.reopen_report` 본문과 같되 확인(reviewed)된 보고서도 열고, 그때는 `review_status='pending'`·확인 표시를 지운다. 이전 확인자는 `report_events`의 'reopened' detail에 남긴다. public은 그대로.
+- 다시 제출은 기존 `public.submit_report`가 「확인 대기」로 돌린다(운영 본문 확인).
+- 화면: 보고서 상세의 「보고서 고치기」를 확인 여부와 상관없이 셀리더에게 보이고 새 함수를 부른다. 테스트 `tests/reopen-reviewed.test.mjs`.
