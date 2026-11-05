@@ -253,10 +253,10 @@ details.cellbox summary { cursor: pointer; min-height: 32px; }
     position: fixed; inset: 0 auto 0 0; z-index: 30; width: var(--side-w);
     display: flex; flex-direction: column; background: var(--nav); color: var(--nav-ink); font-size: 14px;
   }
-  /* 제목 줄: 화면 위에 붙고 아래 선으로 본문과 나뉨. 로고·종·로그아웃·언어는 사이드바로 */
+  /* 제목 줄: 화면 위에 붙고 아래 선으로 본문과 나뉨. 알림 종은 제목 줄 오른쪽 끝, 로고·로그아웃·언어는 사이드바로 */
   body.has-side header.top { background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(6px); top: 0; }
-  body.has-side header.top .in { max-width: 880px; margin: 0; padding: 10px 32px; min-height: 60px; }
-  body.has-side header.top :is(.brand, .notification-bell, [data-act="logout"], [data-act="lang"]) { display: none; }
+  body.has-side header.top .in { max-width: none; margin: 0; padding: 10px 24px 10px 32px; min-height: 60px; }
+  body.has-side header.top :is(.brand, [data-act="logout"], [data-act="lang"]) { display: none; }
   body.has-side header.top .title { font-size: 19px; }
   body.has-side .wrap { max-width: 880px; margin: 0; padding: 8px 32px 40px; font-size: 16px; }
   body.has-side h1 { font-size: 24px; margin-top: 16px; }
@@ -482,9 +482,8 @@ function themeSwitch() {
   return '<div class="theme-switch" role="group" aria-label="' + tr('화면 밝기', 'Appearance') + '">' + [['system', tr('기기 설정', 'Auto')], ['light', tr('라이트', 'Light')], ['dark', tr('다크', 'Dark')]]
     .map(([v, l]) => '<button type="button" data-act="theme" data-v="' + v + '" aria-pressed="' + (t === v) + '">' + l + '</button>').join('') + '</div>';
 }
-/* PC 사이드바(900px 이상에서만 보임): 탭·알림함·안내·내 정보·밝기·로그아웃. 휴대폰은 위 머리글과 아래 탭 그대로 */
+/* PC 사이드바(900px 이상에서만 보임): 탭·안내·내 정보·밝기·로그아웃. 휴대폰은 위 머리글과 아래 탭 그대로 */
 const SIDE_ICON = {
-  bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>',
   guide: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M9 7h6"/></svg>'
 };
 function myRoleLabel() {
@@ -503,7 +502,6 @@ function renderSidebar() {
     '<div class="side-scroll"><div class="side-title">' + tr('메뉴', 'Menu') + '</div>' +
     availableTabs().map(t => '<button class="side-item" data-act="tab" data-id="' + t.id + '"' + (S.tab === t.id && !onInbox ? ' aria-current="page"' : '') + '>' + (TAB_ICON[t.id] || '') + '<span>' + esc(t.label) + '</span></button>').join('') +
     '<div class="side-title">' + tr('바로 가기', 'Shortcuts') + '</div>' +
-    '<button class="side-item" data-notification-action="open"' + (onInbox ? ' aria-current="page"' : '') + '>' + SIDE_ICON.bell + '<span>' + tr('알림함', 'Notifications') + '</span><span class="pill warn" data-inbox-count hidden></span></button>' +
     '<a class="side-item" href="' + (isSenior() || hasRole('leadership') || hasRole('admin') ? 'staff-guide.html' : 'guide.html') + '">' + SIDE_ICON.guide + '<span>' + tr('사용 안내', 'Guide') + '</span></a></div>' +
     '<div class="side-foot"><div class="side-me"><span class="side-avatar" aria-hidden="true">' + esc(name.trim().charAt(0) || '·') + '</span><div><b>' + esc(name) + '</b><small>' + myRoleLabel() + '</small></div></div>' +
     themeSwitch() +
