@@ -2366,7 +2366,7 @@ async function seniorAck(kind, id, review) {
   } catch (e) { toast(errText(e), 5000); }
   return render();
 }
-/* 성도 동정 코멘트 (담임 목사님·담임 사모님) */
+/* 성도 동정 코멘트 (담임 목사님·담임 사모님, 교역자 — 그 동정을 볼 수 있는 분. DB note_comment_add가 다시 확인) */
 const NCMT = { open: null, draft: '', busy: false, del: null };
 function noteComments(n) {
   const list = (NOTE.cmts || {})[n.id] || [];
@@ -2380,10 +2380,10 @@ function noteComments(n) {
         ? `<button class="btn warn sm" data-act="ncmt-del" data-id="${c.id}">${tr('이 코멘트 지우기', 'Delete this comment')}</button><button class="btn quiet sm" data-act="ncmt-del-cancel">${tr('취소', 'Cancel')}</button>`
         : `<button class="link tiny" data-act="ncmt-del-ask" data-id="${c.id}">${tr('지우기', 'Delete')}</button>`) + '</div>' : ''}${replyBlock('note', c.id)}</div>`;
   }).join('');
-  if (isSenior()) {
+  if (isSenior() || hasRole('leadership')) {
     h += NCMT.open === n.id
       ? `<div><textarea data-ncmt="1" rows="3" maxlength="3000" style="width:100%" placeholder="${tr('이 동정에 코멘트를 남겨 주세요', 'Leave a comment on this note')}">${esc(NCMT.draft)}</textarea>
-          <p class="tiny muted" style="margin:4px 0 8px">${tr('이 동정을 볼 수 있는 분이 함께 보고, 쓴 분께 알림이 갑니다. 영어로 쓰시면 한국어 번역이 함께 전달됩니다.', 'Everyone who can see this note will see it, and the writer gets a notification. Written in English, it will be sent with a Korean translation.')}</p>
+          <p class="tiny muted" style="margin:4px 0 8px">${isSenior() ? tr('이 동정을 볼 수 있는 분이 함께 보고, 쓴 분께 알림이 갑니다. 영어로 쓰시면 한국어 번역이 함께 전달됩니다.', 'Everyone who can see this note will see it, and the writer gets a notification. Written in English, it will be sent with a Korean translation.') : '이 동정을 볼 수 있는 분이 함께 보고, 쓴 분께 알림이 갑니다.'}</p>
           <div class="row" style="gap:8px"><button class="btn sm" data-act="ncmt-add" data-id="${n.id}" ${NCMT.busy ? 'disabled' : ''}>${NCMT.busy ? tr('보내는 중…', 'Sending…') : tr('코멘트 남기기', 'Post comment')}</button><button class="btn quiet sm" data-act="ncmt-cancel">${tr('취소', 'Cancel')}</button></div></div>`
       : `<div><button class="link" data-act="ncmt-open" data-id="${n.id}">💬 ${tr('코멘트 남기기', 'Comment')}</button></div>`;
   }

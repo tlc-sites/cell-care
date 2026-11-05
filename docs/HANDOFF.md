@@ -203,3 +203,9 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 작성 중 보고서 삭제: DB `supabase/migrations/20261107000000_delete_draft_report.sql` — `report.cellcare_delete_draft_report(p_report)`(`private.can_write_report` + `status='draft'` + `submission_no=0`), 지운 보고서 줄은 `report.cellcare_deleted_reports`(RLS, 권한 없음 — 관리용)에 남김. 딸린 기록은 운영 외래 키 규칙대로 지워지고, 외래 키가 막으면 아무것도 지우지 않고 막은 테이블 이름을 알려 줌. 화면은 쓰는 화면 맨 아래 「이 작성 중 보고서 삭제」 → 확인 → 홈. **DB 먼저 적용, 그 뒤 앱 배포.**
 - 운영 첫 삭제에서 `public.report_events` 외래 키가 막음 → `20261107010000_delete_draft_report_events.sql`: 그 보고서 이력을 `cellcare_deleted_reports.events`(jsonb)에 옮겨 담고 지운 뒤 보고서 삭제.
 - 확인 못 한 것: 운영 `save_report`가 지난 기도제목 상태(계속/응답/종료)를 저장할 때 바로 바꾸는지(그렇다면 보고서를 지워도 그 변경은 남음).
+
+## 2026-11-05 성도 동정 코멘트를 교역자도
+
+- 운영 `public.note_comment_add`가 첫 줄에서 `is_senior()`만 허용하던 것을 `is_senior() or has_role('leadership')`로 넓힘(`supabase/migrations/20261107020000_note_comment_leadership.sql`, 나머지 본문은 운영과 같음 — 2026-11-05 운영에서 읽음). `can_read_pastoral_note` 조건은 그대로.
+- 지우기·목록·푸시 함수는 쓴 분 기준이라 그대로. 푸시(`api/senior-comment.js`의 `note_comment`)는 동정 쓴 분께, 쓴 분이 목사님·사모님이면 푸시 없음(운영 `note_comment_push_targets` 그대로). 알림함은 그 동정을 볼 수 있는 분 모두.
+- 화면: `noteComments()`의 코멘트 칸을 `isSenior() || hasRole('leadership')`에게. 번역 안내 문구는 목사님·사모님에게만.
