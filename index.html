@@ -160,7 +160,9 @@ h2.bad { color: var(--danger); }
   padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
 }
 .footer-bar .in { max-width: 640px; margin: 0 auto; display: grid; gap: 6px; }
-.footer-bar .btns { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
+.footer-bar .btns { display: grid; grid-template-columns: 1fr 1.2fr 1.8fr; gap: 10px; }
+.footer-bar .btns .btn { padding-left: 6px; padding-right: 6px; white-space: nowrap; }
+@media (max-width: 360px) { .footer-bar .btns { gap: 8px; } .footer-bar .btns .btn { font-size: 14px; } }
 .savestate { font-size: 13px; color: var(--muted); text-align: center; min-height: 18px; }
 nav.tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: var(--nav);
@@ -1144,7 +1146,16 @@ function renderEditor() {
   bar.hidden = false;
   bar.innerHTML = `<div class="in"><div class="savestate" id="savestate">${esc(E.saveMsg)}</div><div class="btns">
     <button class="btn quiet" data-act="ed-prev" ${E.step === 0 ? 'disabled' : ''}>이전</button>
+    <button class="btn quiet" data-act="ed-draft" ${E.conflict ? 'disabled' : ''}>임시저장</button>
     ${last ? `<button class="btn" data-act="ed-confirm" ${E.conflict ? 'disabled' : ''}>${E.rep.submission_no > 0 ? '다시 제출하기' : '보고서 제출'}</button>` : '<button class="btn" data-act="ed-next">다음</button>'}</div></div>`;
+}
+// 임시저장: 자동 저장과 같은 저장을 바로 하고, 앞 화면으로 돌아간다. 나중에 같은 보고서를 열면 이어서 쓴다.
+async function saveDraftAndLeave() {
+  if (!E || E.conflict) return;
+  E.dirty = true; // 바뀐 것이 없어도 한 번 저장해 '저장됨'을 확인
+  const ok = await save();
+  if (!ok) { toast(E && E.conflict ? '다른 분이 먼저 저장했습니다. 최신 내용을 불러와 주세요.' : '임시저장하지 못했습니다. 인터넷 연결을 확인해 주세요.', 5000); return; }
+  E = null; hideFooter(); toast('임시저장했습니다. 다시 열면 이어서 쓰실 수 있습니다.'); back();
 }
 async function reopenReport(id) {
   if (DETAIL.busy) return; DETAIL.busy = true;
@@ -3562,6 +3573,7 @@ document.addEventListener('click', async (e) => {
     case 'ed-confirm': { const bad = validateForSubmit(); if (bad) return showSubmitProblems(bad); E.confirm = true; renderEditor(); setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 0); return; }
     case 'ed-confirm-cancel': E.confirm = false; return renderEditor();
     case 'ed-submit': return submitReport();
+    case 'ed-draft': return saveDraftAndLeave();
     case 'ed-move-cancel': E.m.meeting_date = ''; return markDirty(true);
     case 'ed-move': {
       if (E.moving) return; E.moving = true; renderEditor();
