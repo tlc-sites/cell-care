@@ -122,3 +122,11 @@ test('알림함 카테고리: 알림이 가리키는 곳으로 나누고, 고른
  await s.run('viewNotifications')(app);
  assert.equal(s.run('INBOX.cat'),'all');
 });
+test('성도 동정 알림은 쓴 분 이름을 따로 보여 주고, 이름이 없으면 예전처럼',()=>{
+ const s=setup();
+ const show=n=>s.run('notificationText('+JSON.stringify(n)+')');
+ assert.equal(show({url:'./#note=n1',title:'[성도 동정] 가',body:'b',author_name:'정교역 목사'}).by,'쓴 분: 정교역 목사');
+ assert.equal(show({url:'./#note=n1&comment=c1',title:'t',body:'b',author_name:'김교역'}).by,'코멘트 쓴 분: 김교역');
+ assert.equal(show({url:'./#note=n1',title:'t',body:'b',author_name:null}).by,'');
+ assert.equal(show({url:'./#thread=t',title:'t',body:'b',author_name:'x'}).by,undefined);
+});

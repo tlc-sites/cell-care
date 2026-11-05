@@ -55,7 +55,7 @@ function demoInboxRows() {
     r(1, 'REPORT_SUBMITTED', './#report=demo-r2', '', '', 2, false, { author_name: '이성도', cell_name: '샘플 2셀' }),
     r(2, null, './#report=demo-r1l&talk=demo-t1', '보고서 대화에 새 글이 있습니다', '이번 주 모임 장소가 바뀌었어요.', 5, false),
     r(3, null, './#thread=demo-th1', '새 메시지가 도착했습니다', '목사님, 다음 주 심방 일정 여쭙니다.', 20, false),
-    r(4, null, './#note=demo-n1', '[성도 동정] 김샘플', '김샘플님의 성도 동정이 공유되었습니다. 열어서 내용을 확인해 주세요.', 30, true),
+    r(4, null, './#note=demo-n1', '[성도 동정] 김샘플', '김샘플님의 성도 동정이 공유되었습니다. 열어서 내용을 확인해 주세요.', 30, false, { author_name: '정교역 목사' }),
     r(5, null, './#notice=demo-x1', '11월 셀리더 모임 안내', '11월 셀리더 모임은 셋째 주 토요일입니다.', 50, true),
     r(6, null, './#report=demo-r1l&comment=demo-c1', '보고서에 코멘트가 달렸습니다', '수고 많으셨습니다.', 70, true),
     r(7, null, './#section=leadership', '셀 이동이 등록되었습니다', '샘플 1셀 → 샘플 3셀', 90, true)
@@ -76,6 +76,11 @@ async function refreshInboxBadge(force = false) {
 // 셀보고서 제출 알림은 작성자·셀 이름을 DB에서 다시 가져와 만든다(이름이 비면 「… 정보 없음」). DB 적용 전에는 저장된 제목·내용 그대로
 function submitHonor(name) { return /\s/.test(name) ? name + '님' : name + ' 셀리더님'; }
 function notificationText(n) {
+  // 성도 동정 공유·코멘트 알림: 쓴 분 이름을 따로 보여 준다(DB 20261106010000 적용 전에는 이름 없이 예전처럼)
+  if (!n.kind && String(n.url || '').includes('#note=')) {
+    const who = String(n.author_name || '').trim();
+    return { title: n.title, body: n.body, meta: '', by: who ? (String(n.url).includes('comment=') ? tr('코멘트 쓴 분: ', 'Comment by ') : tr('쓴 분: ', 'By ')) + who : '' };
+  }
   if (!/^REPORT_(SUBMITTED|UPDATED)$/.test(n.kind || '')) return { title: n.title, body: n.body, meta: '' };
   const again = n.kind === 'REPORT_UPDATED';
   const who = String(n.author_name || '').trim(), cell = String(n.cell_name || '').trim();
@@ -115,7 +120,7 @@ async function viewNotifications(app) {
   }).join('') + '</div>' : '';
   app.innerHTML = '<h1>' + tr('알림함', 'Notifications') + '</h1>' + chips + '<div class="row" style="gap:12px;margin-bottom:12px"><button class="btn quiet sm" data-notification-action="refresh">' + tr('새로고침', 'Refresh') + '</button><button class="link" data-notification-action="read-all">' + (cat === 'all' ? tr('모두 읽음', 'Mark all read') : tr('이 종류 모두 읽음', 'Mark these read')) + '</button></div>' +
     (showUps ? updateItems() : '') +
-    (INBOX.error ? '<div class="banner warn" role="alert">' + esc(INBOX.error) + '</div>' : rows.length ? '<div class="stack">' + rows.map(n => { const t = notificationText(n); return '<button class="listitem" data-notification-action="item" data-id="' + esc(n.id) + '"><div class="row"><b>' + esc(t.title) + '</b>' + (!n.read_at ? '<span class="pill warn">' + tr('새 알림', 'New') + '</span>' : '') + '</div><div class="small" style="white-space:pre-wrap;margin-top:6px">' + esc(t.body) + '</div>' + (t.meta ? '<div class="small muted" style="margin-top:2px">' + esc(t.meta) + '</div>' : '') + '<div class="tiny muted">' + dateTime(n.created_at) + '</div></button>'; }).join('') + '</div>' : (showUps && ups.length ? '' : '<p class="empty">' + tr('받은 알림이 없습니다.', 'No notifications yet.') + '</p>'));
+    (INBOX.error ? '<div class="banner warn" role="alert">' + esc(INBOX.error) + '</div>' : rows.length ? '<div class="stack">' + rows.map(n => { const t = notificationText(n); return '<button class="listitem" data-notification-action="item" data-id="' + esc(n.id) + '"><div class="row"><b>' + esc(t.title) + '</b>' + (!n.read_at ? '<span class="pill warn">' + tr('새 알림', 'New') + '</span>' : '') + '</div>' + (t.by ? '<div class="small" style="margin-top:4px"><b>' + esc(t.by) + '</b></div>' : '') + '<div class="small" style="white-space:pre-wrap;margin-top:6px">' + esc(t.body) + '</div>' + (t.meta ? '<div class="small muted" style="margin-top:2px">' + esc(t.meta) + '</div>' : '') + '<div class="tiny muted">' + dateTime(n.created_at) + '</div></button>'; }).join('') + '</div>' : (showUps && ups.length ? '' : '<p class="empty">' + tr('받은 알림이 없습니다.', 'No notifications yet.') + '</p>'));
 }
 function updateItems() {
   const items = visibleUpdates();
@@ -167,7 +172,7 @@ async function viewNotificationDetail(app, v) {
     await loadCommentReplies('note', (rows || []).map(c => c.id));
     comments = noteComments(item);
   }
-  app.innerHTML = '<h1>' + esc(item.title || item.person_name) + '</h1><div id="' + v.kind + '-' + item.id + '" class="card stack"><div class="tiny muted">' + esc(item.author_name) + ' · ' + dateTime(item.created_at) + '</div><div>' + nl2br(item.body || item.content) + '</div>' + (item.prayer ? '<div><b>' + tr('기도제목', 'Prayer') + '</b><div>' + nl2br(item.prayer) + '</div></div>' : '') + comments + '</div>';
+  app.innerHTML = '<h1>' + esc(item.title || item.person_name) + '</h1><div id="' + v.kind + '-' + item.id + '" class="card stack"><div class="small"><b>' + (v.kind === 'note' ? tr('쓴 분: ', 'By ') : '') + esc(item.author_name) + '</b> <span class="tiny muted">· ' + dateTime(item.created_at) + '</span></div><div>' + nl2br(item.body || item.content) + '</div>' + (item.prayer ? '<div><b>' + tr('기도제목', 'Prayer') + '</b><div>' + nl2br(item.prayer) + '</div></div>' : '') + comments + '</div>';
 }
 function replyBlock(kind, parent) {
   const key = kind + ':' + parent;

@@ -2423,11 +2423,11 @@ async function viewNotesHome(app, v) {
     <div id="note-${n.id}" class="card stack" style="gap:6px${noteOpen(n) ? ';border-color:var(--warn)' : ''}">
       <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.08em">${esc(n.person_name)}</b><span class="pill">${noteMethod(n.visit_method)}</span>${noteCats(n).map(k => `<span class="pill">${noteCat(k)}</span>`).join('')}${n.campus && n.campus !== '분당' ? `<span class="pill accent">${campusLabel(n.campus)}</span>` : ''}
         ${ackPills(n)}
-        <span class="spacer"></span><span class="tiny muted">${dayLabel(n.met_on)}</span></div>
+        <span class="spacer"></span><span class="small note-by"><b>${esc(n.author_name || '')}</b> <span class="muted">· ${dayLabel(n.met_on)}</span></span></div>
       <div>${NTX('note:' + n.id, n.content)}</div>
       ${n.prayer ? `<div class="small"><b>${tr('기도제목', 'Prayer')}</b> · ${NTX('noteprayer:' + n.id, n.prayer)}</div>` : ''}
       ${noteComments(n)}
-      <div class="row" style="gap:12px;flex-wrap:wrap"><span class="tiny muted">${tr('쓴 분: ', 'By ')}${esc(n.author_name)} · ${tr('보는 분: ', 'Shared with: ')}${n.visibility === 'all' ? tr('교역자 모두', 'all pastoral staff') : (n.viewer_names ? esc(n.viewer_names) + ' + ' : '') + tr('담임 목사님·담임 사모님', 'Pastor Scott Brenner & Mrs. Sunghee Brenner')}</span><span class="spacer"></span>
+      <div class="row" style="gap:12px;flex-wrap:wrap"><span class="tiny muted">${tr('보는 분: ', 'Shared with: ')}${n.visibility === 'all' ? tr('교역자 모두', 'all pastoral staff') : (n.viewer_names ? esc(n.viewer_names) + ' + ' : '') + tr('담임 목사님·담임 사모님', 'Pastor Scott Brenner & Mrs. Sunghee Brenner')}</span><span class="spacer"></span>
         ${n.mine ? `<button class="link" data-act="note-edit" data-id="${n.id}">${tr('고치기', 'Edit')}</button>` : ''}
 </div>
       ${isSenior() && n.needs_pastor && !n.i_acked ? `<button class="btn ack" data-act="note-ack" data-id="${n.id}">✓ ${tr('확인했습니다', 'Mark as seen')}</button>` : ''}
