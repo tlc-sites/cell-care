@@ -165,3 +165,20 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 새 함수 `report.cellcare_reopen_report(uuid)`(마이그레이션 20261103000000). 운영 `public.reopen_report` 본문과 같되 확인(reviewed)된 보고서도 열고, 그때는 `review_status='pending'`·확인 표시를 지운다. 이전 확인자는 `report_events`의 'reopened' detail에 남긴다. public은 그대로.
 - 다시 제출은 기존 `public.submit_report`가 「확인 대기」로 돌린다(운영 본문 확인).
 - 화면: 보고서 상세의 「보고서 고치기」를 확인 여부와 상관없이 셀리더에게 보이고 새 함수를 부른다. 테스트 `tests/reopen-reviewed.test.mjs`.
+
+## 2026-11-05 셀원 이슈 「내 분파」 · 확인한 보고서 알림 읽음 · 부산 셀 담당 정리
+
+사용자 피드백(알림함·이슈보기·셀 이동 등 6가지) 가운데 먼저 처리한 것. 운영 DB는 읽기 전용으로 원인 확인 → SQL Editor 적용(사용자 Run, 둘 다 Success) → 읽기 전용 확인.
+
+- DB ① `supabase/migrations/20261105000000_issue_scope_review_reads.sql`
+  - 원인: 운영 `public.issue_board`는 「내 분파」에서도 볼 수 있는 성도 동정을 모두 넣음(동정에는 셀·셀원 연결 없이 `person_name`만 있음).
+  - `report.cellcare_issue_board`: `issue_board`를 감싸 「내 분파」의 동정은 내가 쓴 것(`my_area`) + 이름(띄어쓰기 무시)이 내 담당 셀 셀원과 같은 것만. 앱은 `issue_board` 대신 이것을 부름(미리보기는 그대로).
+  - 원인: 제출 알림은 상세 화면을 열 때만 읽음이 됨 → 「확인했습니다」만 누른 보고서 알림이 남음. 앱이 확인 뒤 `markReportOpened`를 부르고, 남은 알림은 「받은 분 본인이 그 알림 뒤에 확인(report_events 'reviewed')·「확인했습니다」」인 것만 한 번 정리(적용 시 안 읽은 제출 알림 101 → 61).
+- DB ② `supabase/migrations/20261105010000_busan_staff.sql` (사용자 결정)
+  - 남장년1 → 이흥배 목사, 여장년1·2 → 황성수 사모: `staff_shared=false` + `leadership_assignments`(2026-11-02부터).
+  - 남장년2는 교역자 8분 모두가 셀리더인 셀(검토 없음)이라 담당을 둘 수 없음(`check_leadership_assignment`). 첫 적용이 이 오류로 통째로 되돌려졌고, 남장년2는 빼고 그대로 둠.
+  - 청년1·2 → 두 분 공동: `staff_shared` 유지 + 새 표 `report.cellcare_shared_staff`(RLS, 직접 접근 막음). `leadership_assignments`는 제외 제약으로 한 셀·한 기간에 한 분만이라 공동은 이 표로만.
+  - `private.is_cell_leadership`: 공동 셀 조건에 「목록이 있으면 목록에 있는 분만」 한 줄 추가(본문은 운영에서 읽음). 목록 없는 공동 셀은 예전처럼 교역자 모두. 다른 교역자는 지난 부산 보고서도 못 봄(사용자 확인).
+  - `report.cellcare_shared_staff_list`(이름 표시), `cellcare_cell_staff`(공동 셀은 목록 이름), `cellcare_my_report_reads`(내가 연 보고서).
+- 화면(`index.html`): 부산을 `campus === '부산'`으로 공동 처리하던 곳을 `isSharedRow`(부산 + 담당 없음)로 바꿈(대신 쓰기·대화·담당 표시·묶음). 교역자 홈에 「함께 맡은 셀 · 아직 안 보신 보고서」(최근 4주, 다른 분이 확인했고 내가 그 제출 뒤로 안 연 것). staff-guide 11/5 소식·본문 NEW.
+- 남은 것: 청년 공동 셀은 제출 휴대폰 알림이 없음(전부터 공동 셀은 `submit_push_targets`가 배정 기준이라 안 감, 알림함에는 옴). 셀원 중복 6명 「같은 분으로 합치기」(5번), 셀별 보고서 모아 보기(6번), 알림함 카테고리(1번), 디자인 개편.
