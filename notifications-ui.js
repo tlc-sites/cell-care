@@ -29,10 +29,10 @@ function visibleUpdates() {
   return APP_UPDATES.filter(u => isStaffUser() || now >= Date.parse(u.publishAt)).map(u => ({ ...u, read: read.has(u.id) }));
 }
 function updateInboxBadge() {
-  const badge = document.getElementById('notification-count');
-  if (!badge) return;
+  const badges = [document.getElementById('notification-count'), ...(document.querySelectorAll ? document.querySelectorAll('[data-inbox-count]') : [])].filter(Boolean);
+  if (!badges.length) return;
   const count = INBOX.rows.filter(n => !n.read_at).length + visibleUpdates().filter(u => !u.read).length;
-  badge.hidden = !count; badge.textContent = count > 99 ? '99+' : String(count);
+  badges.forEach(badge => { badge.hidden = !count; badge.textContent = count > 99 ? '99+' : String(count); });
 }
 async function refreshInboxBadge(force = false) {
   if (!S.ctx || DEMO.role || INBOX.loading || (!force && Date.now() - INBOX.loadedAt < 30000)) { updateInboxBadge(); return; }
