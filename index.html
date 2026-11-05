@@ -1138,6 +1138,11 @@ function renderEditor() {
     if (E.confirm) h += `<div class="banner warn" style="margin-top:16px" role="alertdialog"><b>${E.rep.submission_no > 0 ? '고친 보고서를 다시 제출하시겠어요?' : '제출하시겠어요?'}</b>${E.cell.review_mode === 'none' ? '제출한 뒤에도 보고서를 열어 고칠 수 있습니다.' : '제출한 뒤에도 확인 전까지는 보고서를 열어 직접 고칠 수 있습니다.'}
       <div class="row" style="margin-top:12px"><button class="btn sm" data-act="ed-submit">${E.rep.submission_no > 0 ? '다시 제출합니다' : '제출합니다'}</button><button class="btn quiet sm" data-act="ed-confirm-cancel">다시 볼게요</button></div></div>`;
   }
+  // 한 번도 제출하지 않은 작성 중 보고서는 지울 수 있다 (DB가 다시 확인: 쓸 수 있는 분 + 작성 중 + 제출 0회)
+  if (r.status === 'draft' && !(r.submission_no > 0)) h += E.delAsk
+    ? `<div class="banner warn" style="margin-top:28px"><b>이 작성 중 보고서를 삭제할까요?</b>지금까지 적은 출석·셀 케어·은혜 내용이 모두 지워지고 되돌릴 수 없습니다. 셀리더와 담당 교역자 모두에게서 사라집니다.
+        <div class="row" style="gap:8px;margin-top:10px"><button class="btn warn sm" data-act="ed-del" ${E.deleting ? 'disabled' : ''}>${E.deleting ? '삭제하는 중…' : '삭제'}</button><button class="btn quiet sm" data-act="ed-del-cancel">취소</button></div></div>`
+    : `<div style="text-align:center;margin-top:28px"><button class="link" data-act="ed-del-ask" style="color:var(--danger)">이 작성 중 보고서 삭제</button></div>`;
   app.innerHTML = h;
   showReportErrs();
 
@@ -1156,6 +1161,17 @@ async function saveDraftAndLeave() {
   const ok = await save();
   if (!ok) { toast(E && E.conflict ? '다른 분이 먼저 저장했습니다. 최신 내용을 불러와 주세요.' : '임시저장하지 못했습니다. 인터넷 연결을 확인해 주세요.', 5000); return; }
   E = null; hideFooter(); toast('임시저장했습니다. 다시 열면 이어서 쓰실 수 있습니다.'); back();
+}
+async function deleteDraftReport() {
+  if (!E || E.deleting) return;
+  E.deleting = true; renderEditor();
+  const ed = E; clearTimeout(ed.timer);
+  if (ed.saving) await ed.savingPromise; // 저장 중이면 끝난 뒤에 지운다
+  try {
+    await rpc('cellcare_delete_draft_report', { p_report: ed.id });
+    E = null; hideFooter(); toast('작성 중 보고서를 삭제했습니다.');
+    S.stack = []; S.view = { ...TAB_HOME[S.tab] }; render(); window.scrollTo(0, 0);
+  } catch (e) { ed.deleting = false; ed.delAsk = false; if (E === ed) renderEditor(); toast(errText(e), 5000); }
 }
 async function reopenReport(id) {
   if (DETAIL.busy) return; DETAIL.busy = true;
@@ -2853,7 +2869,7 @@ function demoRpc(name, a) {
   };
   if (Object.prototype.hasOwnProperty.call(R, name)) return Promise.resolve(JSON.parse(JSON.stringify(R[name])));
   if (/^(save_push_subscription|delete_push_subscription)$/.test(name)) return Promise.resolve(null);
-  if (/^(save|submit|request|review|reopen|move|add|member_|cell_|notice_(create|delete)|lr_save|pastor_msg|pastoral_note_(save|delete|ack)|note_comment_(add|delete)|senior_comment_(add|delete)|msg_(start|post)|individual_care_(add|remove)|admin_|cellcare_(reopen_report|talk_(add|delete)|pastoral_note_save|pastoral_alert_ack|move_(create|contact|apply|cancel)))/.test(name)) return Promise.reject(demoErr());
+  if (/^(save|submit|request|review|reopen|move|add|member_|cell_|notice_(create|delete)|lr_save|pastor_msg|pastoral_note_(save|delete|ack)|note_comment_(add|delete)|senior_comment_(add|delete)|msg_(start|post)|individual_care_(add|remove)|admin_|cellcare_(reopen_report|delete_draft_report|talk_(add|delete)|pastoral_note_save|pastoral_alert_ack|move_(create|contact|apply|cancel)))/.test(name)) return Promise.reject(demoErr());
   return Promise.resolve([]);
 }
 function demoTable(p) {
@@ -3574,6 +3590,9 @@ document.addEventListener('click', async (e) => {
     case 'ed-confirm-cancel': E.confirm = false; return renderEditor();
     case 'ed-submit': return submitReport();
     case 'ed-draft': return saveDraftAndLeave();
+    case 'ed-del-ask': E.delAsk = true; renderEditor(); setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 0); return;
+    case 'ed-del-cancel': E.delAsk = false; return renderEditor();
+    case 'ed-del': return deleteDraftReport();
     case 'ed-move-cancel': E.m.meeting_date = ''; return markDirty(true);
     case 'ed-move': {
       if (E.moving) return; E.moving = true; renderEditor();
