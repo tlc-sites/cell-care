@@ -1,5 +1,5 @@
 'use strict';
-const INBOX = { rows: [], loadedAt: 0, loading: false, error: '', pending: CellCareRoutes.parse(location.hash) || CellCareRoutes.parse(new URLSearchParams(location.search).get('notification')), replyRows: {}, replyOpen: '', replyDrafts: {}, replyBusy: false };
+const INBOX = { rows: [], loadedAt: 0, loading: false, error: '', pending: CellCareRoutes.parse(location.hash) || CellCareRoutes.parse(new URLSearchParams(location.search).get('notification')), replyRows: {}, replyOpen: '', replyDrafts: {}, replyBusy: false, cat: 'all' };
 function rememberNotificationRoute(route) {
   const url = new URL(location.href);
   const key = route.kind === 'section' ? 'section' : route.kind;
@@ -34,7 +34,36 @@ function updateInboxBadge() {
   const count = INBOX.rows.filter(n => !n.read_at).length + visibleUpdates().filter(u => !u.read).length;
   badges.forEach(badge => { badge.hidden = !count; badge.textContent = count > 99 ? '99+' : String(count); });
 }
+/* 알림함 카테고리: 알림이 가리키는 곳(url)으로 나눈다. 앱 업데이트 공지는 「공지」 */
+const INBOX_CATS = [
+  ['all', '전체', 'All'], ['report', '셀보고서', 'Reports'], ['talk', '코멘트·대화', 'Comments'], ['msg', '메시지', 'Messages'],
+  ['note', '성도 동정', 'Pastoral notes'], ['notice', '공지', 'Notices'], ['etc', '기타', 'Other']
+];
+function notificationCategory(n) {
+  const url = String(n.url || '');
+  if (url.includes('#thread=')) return 'msg';
+  if (url.includes('#notice=')) return 'notice';
+  if (url.includes('#note=')) return 'note';
+  if (url.includes('#report=')) return /[&?](comment|talk)=/.test(url) ? 'talk' : 'report';
+  return 'etc';
+}
+// 미리보기(DEMO)에서 알림함 모양을 볼 수 있게 보여 주는 예시. 저장되지 않음
+function demoInboxRows() {
+  const at = h => new Date(Date.now() - h * 3600000).toISOString();
+  const r = (id, kind, url, title, body, h, read, extra = {}) => ({ id: 'demo-n' + id, kind, url, title, body, created_at: at(h), read_at: read ? at(h - 1) : null, ...extra });
+  return [
+    r(1, 'REPORT_SUBMITTED', './#report=demo-r2', '', '', 2, false, { author_name: '이성도', cell_name: '샘플 2셀' }),
+    r(2, null, './#report=demo-r1l&talk=demo-t1', '보고서 대화에 새 글이 있습니다', '이번 주 모임 장소가 바뀌었어요.', 5, false),
+    r(3, null, './#thread=demo-th1', '새 메시지가 도착했습니다', '목사님, 다음 주 심방 일정 여쭙니다.', 20, false),
+    r(4, null, './#note=demo-n1', '[성도 동정] 김샘플', '김샘플님의 성도 동정이 공유되었습니다. 열어서 내용을 확인해 주세요.', 30, true),
+    r(5, null, './#notice=demo-x1', '11월 셀리더 모임 안내', '11월 셀리더 모임은 셋째 주 토요일입니다.', 50, true),
+    r(6, null, './#report=demo-r1l&comment=demo-c1', '보고서에 코멘트가 달렸습니다', '수고 많으셨습니다.', 70, true),
+    r(7, null, './#section=leadership', '셀 이동이 등록되었습니다', '샘플 1셀 → 샘플 3셀', 90, true)
+  ];
+}
 async function refreshInboxBadge(force = false) {
+  if (DEMO.role && S.ctx && !INBOX.demo) { INBOX.rows = demoInboxRows(); INBOX.demo = true; }
+  if (!DEMO.role && INBOX.demo) { INBOX.rows = []; INBOX.demo = false; INBOX.loadedAt = 0; }
   if (!S.ctx || DEMO.role || INBOX.loading || (!force && Date.now() - INBOX.loadedAt < 30000)) { updateInboxBadge(); return; }
   INBOX.loading = true;
   const userId = S.me.id;
@@ -68,14 +97,25 @@ async function markReportOpened(reportId) {
   updateInboxBadge();
 }
 function resetInbox() {
-  Object.assign(INBOX, { rows: [], loadedAt: 0, error: '', replyRows: {}, replyOpen: '', replyDrafts: {}, replyBusy: false });
+  Object.assign(INBOX, { rows: [], loadedAt: 0, error: '', replyRows: {}, replyOpen: '', replyDrafts: {}, replyBusy: false, cat: 'all', demo: false });
 }
 async function viewNotifications(app) {
   setTop(tr('알림함', 'Notifications'), true); renderTabs(true);
   await refreshInboxBadge(true);
-  app.innerHTML = '<h1>' + tr('알림함', 'Notifications') + '</h1><div class="row" style="gap:12px;margin-bottom:12px"><button class="btn quiet sm" data-notification-action="refresh">' + tr('새로고침', 'Refresh') + '</button><button class="link" data-notification-action="read-all">' + tr('모두 읽음', 'Mark all read') + '</button></div>' +
-    updateItems() +
-    (INBOX.error ? '<div class="banner warn" role="alert">' + esc(INBOX.error) + '</div>' : INBOX.rows.length ? '<div class="stack">' + INBOX.rows.map(n => { const t = notificationText(n); return '<button class="listitem" data-notification-action="item" data-id="' + esc(n.id) + '"><div class="row"><b>' + esc(t.title) + '</b>' + (!n.read_at ? '<span class="pill warn">' + tr('새 알림', 'New') + '</span>' : '') + '</div><div class="small" style="white-space:pre-wrap;margin-top:6px">' + esc(t.body) + '</div>' + (t.meta ? '<div class="small muted" style="margin-top:2px">' + esc(t.meta) + '</div>' : '') + '<div class="tiny muted">' + dateTime(n.created_at) + '</div></button>'; }).join('') + '</div>' : (visibleUpdates().length ? '' : '<p class="empty">' + tr('받은 알림이 없습니다.', 'No notifications yet.') + '</p>'));
+  // 카테고리: 알림이 있는 것만 보이고, 안 읽은 수를 붙인다. 고른 카테고리에 알림이 없어지면 전체로
+  const ups = visibleUpdates();
+  const all = [...ups.map(u => ({ cat: 'notice', unread: !u.read })), ...INBOX.rows.map(n => ({ cat: notificationCategory(n), unread: !n.read_at }))];
+  const cats = INBOX_CATS.filter(([k]) => k === 'all' || all.some(x => x.cat === k));
+  if (!cats.some(([k]) => k === INBOX.cat)) INBOX.cat = 'all';
+  const cat = INBOX.cat, rows = INBOX.rows.filter(n => cat === 'all' || notificationCategory(n) === cat);
+  const showUps = cat === 'all' || cat === 'notice';
+  const chips = cats.length > 2 ? '<div class="chips inbox-cats" role="group" aria-label="' + tr('알림 종류', 'Notification type') + '" style="margin-bottom:12px">' + cats.map(([k, ko, en]) => {
+    const unread = all.filter(x => (k === 'all' || x.cat === k) && x.unread).length;
+    return '<button class="chip" data-notification-action="cat" data-cat="' + k + '" aria-pressed="' + (k === cat) + '">' + tr(ko, en) + (unread ? ' <span class="pill warn">' + (unread > 99 ? '99+' : unread) + '</span>' : '') + '</button>';
+  }).join('') + '</div>' : '';
+  app.innerHTML = '<h1>' + tr('알림함', 'Notifications') + '</h1>' + chips + '<div class="row" style="gap:12px;margin-bottom:12px"><button class="btn quiet sm" data-notification-action="refresh">' + tr('새로고침', 'Refresh') + '</button><button class="link" data-notification-action="read-all">' + (cat === 'all' ? tr('모두 읽음', 'Mark all read') : tr('이 종류 모두 읽음', 'Mark these read')) + '</button></div>' +
+    (showUps ? updateItems() : '') +
+    (INBOX.error ? '<div class="banner warn" role="alert">' + esc(INBOX.error) + '</div>' : rows.length ? '<div class="stack">' + rows.map(n => { const t = notificationText(n); return '<button class="listitem" data-notification-action="item" data-id="' + esc(n.id) + '"><div class="row"><b>' + esc(t.title) + '</b>' + (!n.read_at ? '<span class="pill warn">' + tr('새 알림', 'New') + '</span>' : '') + '</div><div class="small" style="white-space:pre-wrap;margin-top:6px">' + esc(t.body) + '</div>' + (t.meta ? '<div class="small muted" style="margin-top:2px">' + esc(t.meta) + '</div>' : '') + '<div class="tiny muted">' + dateTime(n.created_at) + '</div></button>'; }).join('') + '</div>' : (showUps && ups.length ? '' : '<p class="empty">' + tr('받은 알림이 없습니다.', 'No notifications yet.') + '</p>'));
 }
 function updateItems() {
   const items = visibleUpdates();
@@ -144,7 +184,20 @@ document.addEventListener('click', async e => {
       const action = n.dataset.notificationAction;
       if (action === 'open') return go({ name: 'notifications' });
       if (action === 'refresh') return render();
-      if (action === 'read-all') { markUpdatesRead(visibleUpdates().map(u => u.id)); await rpc('cellcare_notification_read', { p_id: null }); INBOX.loadedAt = 0; return render(); }
+      if (action === 'cat') { INBOX.cat = n.dataset.cat || 'all'; return render(); }
+      if (action === 'read-all') {
+        // 전체는 한 번에, 카테고리를 골랐으면 그 종류의 안 읽은 알림만 하나씩
+        const cat = INBOX.cat || 'all', now = new Date().toISOString();
+        if (cat === 'all' || cat === 'notice') markUpdatesRead(visibleUpdates().map(u => u.id));
+        const targets = INBOX.rows.filter(x => !x.read_at && (cat === 'all' || notificationCategory(x) === cat));
+        if (!DEMO.role) {
+          if (cat === 'all') await rpc('cellcare_notification_read', { p_id: null });
+          else for (const x of targets) await rpc('cellcare_notification_read', { p_id: x.id });
+        }
+        targets.forEach(x => { x.read_at = now; });
+        if (!DEMO.role) INBOX.loadedAt = 0;
+        return render();
+      }
       if (action === 'update') {
         // 업데이트 공지는 안내 페이지의 「업데이트 소식」으로 연다 (교역자는 교역자 안내)
         markUpdatesRead([n.dataset.id]); updateInboxBadge();
@@ -154,6 +207,7 @@ document.addEventListener('click', async e => {
       if (action === 'item') {
         const row = INBOX.rows.find(x => x.id === n.dataset.id);
         if (!row) return;
+        if (DEMO.role) { row.read_at = new Date().toISOString(); updateInboxBadge(); return render(); }   // 미리보기 예시 알림은 읽음만
         const opened = await openNotificationRoute(CellCareRoutes.parse(row.url));
         if (opened) { await rpc('cellcare_notification_read', { p_id: row.id }); row.read_at = new Date().toISOString(); updateInboxBadge(); }
       }

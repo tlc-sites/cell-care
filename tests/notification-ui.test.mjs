@@ -97,3 +97,28 @@ test('보고서를 열면 내 같은 보고서의 제출 알림만 읽음으로 
  await s.run(`markReportOpened('r2')`);
  assert.equal(s.run('INBOX.rows.filter(n=>!n.read_at).map(n=>n.id).join()'),'b,c');
 });
+test('알림함 카테고리: 알림이 가리키는 곳으로 나누고, 고른 종류만 보이고 그 종류만 읽음으로 바꾼다',async()=>{
+ const s=setup({ctx:{}});const calls=[];
+ s.sandbox.rpc=async(name,args)=>{calls.push([name,args]);return name==='cellcare_notification_list'?s.run('INBOX.rows'):null;};
+ s.sandbox.setTop=()=>{};s.sandbox.renderTabs=()=>{};s.sandbox.weekLabel=x=>x;
+ s.run('APP_UPDATES.splice(0)');
+ const cat=url=>s.run('notificationCategory('+JSON.stringify({url})+')');
+ assert.deepEqual(['./#report=r1','./#report=r1&comment=c','./#report=r1&talk=t','./#thread=t','./#note=n','./#note=n&comment=c','./#notice=x','./#section=leadership',''].map(cat),
+   ['report','talk','talk','msg','note','note','notice','etc','etc']);
+ s.run(`INBOX.rows=[{id:'a',kind:'REPORT_SUBMITTED',url:'./#report=r1',read_at:null,author_name:'가',cell_name:'나'},{id:'b',url:'./#thread=t',title:'메시지',body:'',read_at:null},{id:'c',url:'./#thread=u',title:'메시지2',body:'',read_at:'x'}]`);
+ const app={innerHTML:''};
+ await s.run('viewNotifications')(app);
+ assert.ok(app.innerHTML.includes('data-cat="report"'));assert.ok(app.innerHTML.includes('data-cat="msg"'));
+ assert.ok(!app.innerHTML.includes('data-cat="note"'));   // 알림이 없는 종류는 안 보임
+ s.run(`INBOX.cat='msg'`);
+ await s.run('viewNotifications')(app);
+ assert.ok(app.innerHTML.includes('data-id="b"'));assert.ok(!app.innerHTML.includes('data-id="a"'));
+ assert.ok(app.innerHTML.includes('이 종류 모두 읽음'));
+ s.sandbox.render=async()=>{};calls.length=0;
+ await s.listeners.click({target:{closest:sel=>sel==='[data-notification-action]'?{dataset:{notificationAction:'read-all'}}:null}});
+ assert.equal(JSON.stringify(calls.map(c=>c[1])),JSON.stringify([{p_id:'b'}]));   // 메시지 중 안 읽은 것만
+ assert.equal(s.run(`INBOX.rows.find(n=>n.id==='a').read_at`),null);
+ s.run(`INBOX.cat='note'`);   // 알림이 없는 종류를 골라 두었으면 전체로
+ await s.run('viewNotifications')(app);
+ assert.equal(s.run('INBOX.cat'),'all');
+});
