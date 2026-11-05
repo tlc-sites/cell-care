@@ -182,3 +182,17 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
   - `report.cellcare_shared_staff_list`(이름 표시), `cellcare_cell_staff`(공동 셀은 목록 이름), `cellcare_my_report_reads`(내가 연 보고서).
 - 화면(`index.html`): 부산을 `campus === '부산'`으로 공동 처리하던 곳을 `isSharedRow`(부산 + 담당 없음)로 바꿈(대신 쓰기·대화·담당 표시·묶음). 교역자 홈에 「함께 맡은 셀 · 아직 안 보신 보고서」(최근 4주, 다른 분이 확인했고 내가 그 제출 뒤로 안 연 것). staff-guide 11/5 소식·본문 NEW.
 - 남은 것: 청년 공동 셀은 제출 휴대폰 알림이 없음(전부터 공동 셀은 `submit_push_targets`가 배정 기준이라 안 감, 알림함에는 옴). 셀원 중복 6명 「같은 분으로 합치기」(5번), 셀별 보고서 모아 보기(6번), 알림함 카테고리(1번), 디자인 개편.
+
+## 2026-11-05 화면 개편(PC·다크 모드) · 알림함 종류 · 성도 동정 쓴 분
+
+교회 보고 앱(2026-11-05 개편)과 같은 틀. 남색 팔레트는 그대로. main push로 배포.
+
+- PC(가로 900px 이상, 로그인 뒤 `body.has-side`): 왼쪽 사이드바(`#sidebar`, `renderSidebar()` — `renderTabs` 시작에서 그림: 탭·사용 안내·내 정보·밝기·언어·로그아웃), 위에 붙은 제목 줄, 본문 최대 880px, 촘촘한 버튼. 알림함 종(🔔)은 PC에서도 제목 줄 오른쪽(사용자 요청). 휴대폰 화면은 그대로.
+- 다크 모드: 색은 모두 `:root` 변수(`--nav*`, `--field`, `--mine*`, `--toast-*` 등 추가). `:root[data-theme="dark"]` + `prefers-color-scheme`(`data-theme="light"`가 아니면). 고르기는 `localStorage` `cc-theme`(기기 설정/라이트/다크), `<head>` 스크립트가 그리기 전에 넣어 깜빡임 방지. 휴대폰은 첫 화면 맨 아래 `#appfoot`, PC는 사이드바 아래.
+- `[hidden]{display:none!important}`: `.pill`의 display가 hidden을 이겨 알림 0개인데 「0」이 보이던 문제(운영에도 있던 것) 고침.
+- 알림함 종류(`notifications-ui.js`): `notificationCategory(n)` — 알림 url로 셀보고서(`#report=`) / 코멘트·대화(`#report=…&comment|talk=`) / 메시지(`#thread=`) / 성도 동정(`#note=`) / 공지(`#notice=` + 앱 업데이트 공지) / 기타(셀 이동 `#section=` 등). 알림이 있는 종류만 칩으로, 안 읽은 수 표시. 종류를 고르면 「이 종류 모두 읽음」은 그 종류 알림만 하나씩 `cellcare_notification_read`. 미리보기(DEMO)에서는 예시 알림 7개(저장 안 됨).
+- 성도 동정 쓴 분: 카드 위쪽 오른쪽에 굵게(아래 줄은 「보는 분」만), 알림 상세 「쓴 분: 이름」, 알림함 동정 알림에 「쓴 분 / 코멘트 쓴 분」.
+  - 알림함 이름은 DB `supabase/migrations/20261106010000_note_notification_author.sql`(알림 목록 함수가 `note-`·`ncmt-` 알림에도 `author_name`을 돌려줌, 칸은 그대로) **운영 적용 전**. 적용 전에는 알림함만 예전처럼 이름 없이 보임(깨지지 않음).
+- 안내 페이지 「업데이트 소식」 11월 5일에 추가. 안내 페이지 자체의 다크 모드는 아직 없음.
+- 확인: `npm test` 50개 통과, 로컬 미리보기(데모)로 PC 라이트·다크·휴대폰 폭·로그인 화면·알림함 종류·동정 카드. 실제 계정 화면은 배포 뒤 확인 필요.
+- 남은 것: 같은 분 합치기(브랜치 `feature/member-merge`, 6명 SQL은 저장소에 넣지 않고 SQL Editor로 — 사용자 Run 대기), 셀별 보고서 모아 보기, 청년 공동 셀 제출 휴대폰 알림.
