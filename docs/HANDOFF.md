@@ -201,4 +201,5 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 
 - 임시저장(배포 완료 `2aadefa`, DB 변경 없음): 쓰는 화면 아래 「이전 · 임시저장 · 다음」. `saveDraftAndLeave()` — 바뀐 것이 없어도 `save_report`로 한 번 저장한 뒤 `back()`. 실패·충돌이면 화면에 남고 이유 표시.
 - 작성 중 보고서 삭제: DB `supabase/migrations/20261107000000_delete_draft_report.sql` — `report.cellcare_delete_draft_report(p_report)`(`private.can_write_report` + `status='draft'` + `submission_no=0`), 지운 보고서 줄은 `report.cellcare_deleted_reports`(RLS, 권한 없음 — 관리용)에 남김. 딸린 기록은 운영 외래 키 규칙대로 지워지고, 외래 키가 막으면 아무것도 지우지 않고 막은 테이블 이름을 알려 줌. 화면은 쓰는 화면 맨 아래 「이 작성 중 보고서 삭제」 → 확인 → 홈. **DB 먼저 적용, 그 뒤 앱 배포.**
+- 운영 첫 삭제에서 `public.report_events` 외래 키가 막음 → `20261107010000_delete_draft_report_events.sql`: 그 보고서 이력을 `cellcare_deleted_reports.events`(jsonb)에 옮겨 담고 지운 뒤 보고서 삭제.
 - 확인 못 한 것: 운영 `save_report`가 지난 기도제목 상태(계속/응답/종료)를 저장할 때 바로 바꾸는지(그렇다면 보고서를 지워도 그 변경은 남음).
