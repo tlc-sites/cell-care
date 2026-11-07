@@ -33,6 +33,23 @@ function updateInboxBadge() {
   if (!badges.length) return;
   const count = INBOX.rows.filter(n => !n.read_at).length + visibleUpdates().filter(u => !u.read).length;
   badges.forEach(badge => { badge.hidden = !count; badge.textContent = count > 99 ? '99+' : String(count); });
+  (document.querySelectorAll ? [...document.querySelectorAll('[data-tab-new]')] : []).forEach(el => {
+    const c = tabNewCount(el.dataset.tabNew);
+    el.hidden = !c; el.textContent = c > 99 ? '99+' : String(c);
+  });
+}
+/* 탭 옆 새 글 표시: 그 탭에서 볼 안 읽은 알림 수. 지금은 성도 동정(공유·코멘트)만 */
+function unreadNoteRows() { return INBOX.rows.filter(n => !n.read_at && notificationCategory(n) === 'note'); }
+function tabNewCount(tab) { return tab === 'notes' ? unreadNoteRows().length : 0; }
+function unreadNoteIds() { return new Set(unreadNoteRows().map(n => (String(n.url).match(/#note=([^&]+)/) || [])[1]).filter(Boolean)); }
+// 성도 동정 탭을 열면 그 알림들은 본 것으로(탭 표시가 꺼짐). 이번 화면의 카드 「N」은 열기 전 목록으로 그린다
+async function markNoteNotificationsSeen() {
+  const rows = unreadNoteRows(), now = new Date().toISOString();
+  for (const x of rows) {
+    if (!DEMO.role) { try { await rpc('cellcare_notification_read', { p_id: x.id }); } catch (_) { continue; } }
+    x.read_at = now;
+  }
+  if (rows.length) updateInboxBadge();
 }
 /* 알림함 카테고리: 알림이 가리키는 곳(url)으로 나눈다. 앱 업데이트 공지는 「공지」 */
 const INBOX_CATS = [
@@ -55,7 +72,7 @@ function demoInboxRows() {
     r(1, 'REPORT_SUBMITTED', './#report=demo-r2', '', '', 2, false, { author_name: '이성도', cell_name: '샘플 2셀' }),
     r(2, null, './#report=demo-r1l&talk=demo-t1', '보고서 대화에 새 글이 있습니다', '이번 주 모임 장소가 바뀌었어요.', 5, false),
     r(3, null, './#thread=demo-th1', '새 메시지가 도착했습니다', '목사님, 다음 주 심방 일정 여쭙니다.', 20, false),
-    r(4, null, './#note=demo-n1', '[성도 동정] 김샘플', '김샘플님의 성도 동정이 공유되었습니다. 열어서 내용을 확인해 주세요.', 30, false, { author_name: '정교역 목사' }),
+    r(4, null, './#note=demo-pn1', '[성도 동정] 김샘플', '김샘플님의 성도 동정이 공유되었습니다. 열어서 내용을 확인해 주세요.', 30, false, { author_name: '정교역 목사' }),
     r(5, null, './#notice=demo-x1', '11월 셀리더 모임 안내', '11월 셀리더 모임은 셋째 주 토요일입니다.', 50, true),
     r(6, null, './#report=demo-r1l&comment=demo-c1', '보고서에 코멘트가 달렸습니다', '수고 많으셨습니다.', 70, true),
     r(7, null, './#section=leadership', '셀 이동이 등록되었습니다', '샘플 1셀 → 샘플 3셀', 90, true)
@@ -103,6 +120,7 @@ async function markReportOpened(reportId) {
 }
 function resetInbox() {
   Object.assign(INBOX, { rows: [], loadedAt: 0, error: '', replyRows: {}, replyOpen: '', replyDrafts: {}, replyBusy: false, cat: 'all', demo: false });
+  if (typeof NOTE === 'object' && NOTE) NOTE.fresh = null;   // 다른 분이 로그인하면 새 동정 표시도 새로
 }
 async function viewNotifications(app) {
   setTop(tr('알림함', 'Notifications'), true); renderTabs(true);

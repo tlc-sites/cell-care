@@ -173,6 +173,13 @@ nav.tabs button { min-height: 58px; border: 0; border-radius: 14px; background: 
   font-size: 13.5px; font-weight: 600; padding: 4px 4px; line-height: 1.2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
 nav.tabs button svg { width: 23px; height: 23px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 nav.tabs button:active { transform: scale(.97); }
+/* 탭 옆 새 글 수(빨간 표시). 휴대폰 탭은 아이콘 오른쪽 위, PC 사이드바는 이름 오른쪽 */
+.tab-new { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: #E5484D; color: #fff; font-size: 11px; font-weight: 700; line-height: 1; flex: none; }
+.tab-new[hidden] { display: none; }
+nav.tabs button { position: relative; }
+nav.tabs button .tab-new { position: absolute; top: 5px; left: calc(50% + 6px); box-shadow: 0 0 0 2px var(--nav); }
+.pill.new { background: #E5484D; color: #fff; font-weight: 700; padding: 0 7px; font-size: 12px; }
 nav.tabs button[aria-current=page] { background: var(--nav-on); color: var(--nav-on-ink); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
 .listitem { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); cursor: pointer; text-align: left; width: 100%; }
 .listitem:hover { border-color: var(--focus); }
@@ -502,7 +509,7 @@ function renderSidebar() {
   const name = S.me?.name || '';
   el.innerHTML = '<div class="side-brand">' + BRAND_MARK + '<div><b>' + tr('셀 케어', 'Cell Care') + '</b><small>The Lord\'s Church</small></div></div>' +
     '<div class="side-scroll"><div class="side-title">' + tr('메뉴', 'Menu') + '</div>' +
-    availableTabs().map(t => '<button class="side-item" data-act="tab" data-id="' + t.id + '"' + (S.tab === t.id && !onInbox ? ' aria-current="page"' : '') + '>' + (TAB_ICON[t.id] || '') + '<span>' + esc(t.label) + '</span></button>').join('') +
+    availableTabs().map(t => '<button class="side-item" data-act="tab" data-id="' + t.id + '"' + (S.tab === t.id && !onInbox ? ' aria-current="page"' : '') + '>' + (TAB_ICON[t.id] || '') + '<span>' + esc(t.label) + '</span><span class="tab-new" data-tab-new="' + t.id + '" hidden></span></button>').join('') +
     '<div class="side-title">' + tr('바로 가기', 'Shortcuts') + '</div>' +
     '<a class="side-item" href="' + (isSenior() || hasRole('leadership') || hasRole('admin') ? 'staff-guide.html' : 'guide.html') + '">' + SIDE_ICON.guide + '<span>' + tr('사용 안내', 'Guide') + '</span></a></div>' +
     '<div class="side-foot"><div class="side-me"><span class="side-avatar" aria-hidden="true">' + esc(name.trim().charAt(0) || '·') + '</span><div><b>' + esc(name) + '</b><small>' + myRoleLabel() + '</small></div></div>' +
@@ -519,7 +526,8 @@ function renderTabs(show) {
   if (!show || tabs.length < 2) { nav.hidden = true; document.body.style.paddingBottom = show === 'footer' ? '170px' : '24px'; if (show && tabs.length < 2) document.body.style.paddingBottom = '24px'; return; }
   nav.hidden = false; document.body.style.paddingBottom = '';
   nav.innerHTML = '<div class="in">' + tabs.map(t =>
-    '<button data-act="tab" data-id="' + t.id + '"' + (S.tab === t.id ? ' aria-current="page"' : '') + '>' + (TAB_ICON[t.id] || '') + '<span>' + esc(t.label) + '</span></button>').join('') + '</div>';
+    '<button data-act="tab" data-id="' + t.id + '"' + (S.tab === t.id ? ' aria-current="page"' : '') + '>' + (TAB_ICON[t.id] || '') + '<span>' + esc(t.label) + '</span><span class="tab-new" data-tab-new="' + t.id + '" hidden></span></button>').join('') + '</div>';
+  if (typeof updateInboxBadge === 'function') updateInboxBadge();
 }
 
 async function render() {
@@ -2426,7 +2434,10 @@ async function viewNotesHome(app, v) {
   setTop(tr('성도 동정', 'Pastoral notes'), false); renderTabs(true);
   const weekly = NOTE.filter === 'week';
   if (!NOTE.week) NOTE.week = S.ctx.this_week;
-  const rows = await rpc('pastoral_note_list', { p_limit: weekly ? 200 : 100, p_only_needs: NOTE.filter === 'needs' });
+  const [rows] = await Promise.all([rpc('pastoral_note_list', { p_limit: weekly ? 200 : 100, p_only_needs: NOTE.filter === 'needs' }),
+    typeof refreshInboxBadge === 'function' ? refreshInboxBadge().catch(() => {}) : null]);
+  // 새로 공유되었거나 코멘트가 달린 동정(안 읽은 알림). 이번 화면에서는 N으로 보이고, 알림은 본 것으로 바뀐다
+  if (typeof unreadNoteIds === 'function') { (NOTE.fresh = NOTE.fresh || new Set()); unreadNoteIds().forEach(id => NOTE.fresh.add(id)); markNoteNotificationsSeen(); }
   let list = NOTE.filter === 'mine' ? rows.filter(r => r.mine) : weekly ? rows.filter(r => r.met_on >= NOTE.week && r.met_on <= addDays(NOTE.week, 6)) : rows;
   const hasBusan = rows.some(r => r.campus === '부산');
   if (hasBusan && NOTE.campus) list = list.filter(r => r.campus === NOTE.campus);
@@ -2448,7 +2459,7 @@ async function viewNotesHome(app, v) {
   }
   const noteCard = (n) => `
     <div id="note-${n.id}" class="card stack" style="gap:6px${noteOpen(n) ? ';border-color:var(--warn)' : ''}">
-      <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.08em">${esc(n.person_name)}</b><span class="pill">${noteMethod(n.visit_method)}</span>${noteCats(n).map(k => `<span class="pill">${noteCat(k)}</span>`).join('')}${n.campus && n.campus !== '분당' ? `<span class="pill accent">${campusLabel(n.campus)}</span>` : ''}
+      <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.08em">${esc(n.person_name)}</b>${NOTE.fresh?.has(String(n.id)) ? `<span class="pill new" title="${tr('새 글', 'New')}">N</span>` : ''}<span class="pill">${noteMethod(n.visit_method)}</span>${noteCats(n).map(k => `<span class="pill">${noteCat(k)}</span>`).join('')}${n.campus && n.campus !== '분당' ? `<span class="pill accent">${campusLabel(n.campus)}</span>` : ''}
         ${ackPills(n)}
         <span class="spacer"></span><span class="small note-by"><b>${esc(n.author_name || '')}</b> <span class="muted">· ${dayLabel(n.met_on)}</span></span></div>
       <div>${NTX('note:' + n.id, n.content)}</div>

@@ -130,3 +130,18 @@ test('성도 동정 알림은 쓴 분 이름을 따로 보여 주고, 이름이 
  assert.equal(show({url:'./#note=n1',title:'t',body:'b',author_name:null}).by,'');
  assert.equal(show({url:'./#thread=t',title:'t',body:'b',author_name:'x'}).by,undefined);
 });
+test('성도 동정 탭 옆 새 글 수: 안 읽은 동정 알림만 세고, 탭을 열면 그 알림만 읽음으로',async()=>{
+ const s=setup();
+ const tab={dataset:{tabNew:'notes'},hidden:true,textContent:''}, other={dataset:{tabNew:'leader'},hidden:true,textContent:''};
+ s.sandbox.document.querySelectorAll=sel=>sel==='[data-tab-new]'?[tab,other]:[];
+ const calls=[];s.sandbox.rpc=async(name,args)=>{calls.push([name,args]);return null;};
+ s.run('APP_UPDATES.splice(0)');
+ s.run(`INBOX.rows=[{id:'a',url:'./#note=n1',read_at:null},{id:'b',url:'./#note=n2&comment=c1',read_at:null},{id:'c',url:'./#note=n3',read_at:'x'},{id:'d',url:'./#thread=t',read_at:null}]`);
+ s.run('updateInboxBadge()');
+ assert.equal(tab.hidden,false);assert.equal(tab.textContent,'2');assert.equal(other.hidden,true);
+ assert.equal(JSON.stringify([...s.run('unreadNoteIds()')]),JSON.stringify(['n1','n2']));
+ await s.run('markNoteNotificationsSeen()');
+ assert.equal(JSON.stringify(calls.map(c=>c[1])),JSON.stringify([{p_id:'a'},{p_id:'b'}]));
+ assert.equal(tab.hidden,true);
+ assert.equal(s.run(`INBOX.rows.find(n=>n.id==='d').read_at`),null);   // 다른 알림은 그대로
+});

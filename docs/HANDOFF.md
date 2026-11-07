@@ -209,3 +209,9 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 운영 `public.note_comment_add`가 첫 줄에서 `is_senior()`만 허용하던 것을 `is_senior() or has_role('leadership')`로 넓힘(`supabase/migrations/20261107020000_note_comment_leadership.sql`, 나머지 본문은 운영과 같음 — 2026-11-05 운영에서 읽음). `can_read_pastoral_note` 조건은 그대로.
 - 지우기·목록·푸시 함수는 쓴 분 기준이라 그대로. 푸시(`api/senior-comment.js`의 `note_comment`)는 동정 쓴 분께, 쓴 분이 목사님·사모님이면 푸시 없음(운영 `note_comment_push_targets` 그대로). 알림함은 그 동정을 볼 수 있는 분 모두.
 - 화면: `noteComments()`의 코멘트 칸을 `isSenior() || hasRole('leadership')`에게. 번역 안내 문구는 목사님·사모님에게만.
+
+## 2026-11-07 성도 동정 탭 새 글 표시
+
+- 탭 이름 옆 빨간 숫자(`.tab-new`, `data-tab-new`): PC 사이드바는 이름 오른쪽, 휴대폰 아래 탭은 아이콘 오른쪽 위. `updateInboxBadge()`가 알림함 숫자와 함께 갱신한다.
+- 숫자 = 안 읽은 「성도 동정」 종류 알림(`#note=` 공유·코멘트) 수(`tabNewCount`). 다른 탭은 아직 0(표시 없음). DB 변경 없음.
+- 성도 동정 탭을 열면 알림함도 함께 불러오고, 그 알림의 동정 id를 `NOTE.fresh`에 담아 카드에 「N」을 보인 뒤 알림을 하나씩 읽음으로 바꾼다(`markNoteNotificationsSeen`). 「N」은 이번 로그인 동안 남고 로그아웃하면 지워진다.
