@@ -2413,7 +2413,17 @@ async function noteCommentAdd(id) {
   finally { NCMT.busy = false; render(); }
 }
 document.addEventListener('input', (e) => { if (e.target.dataset && e.target.dataset.ncmt) NCMT.draft = e.target.value; });
-const NOTE = { filter: 'all', list: [], form: null, busy: false, tx: null, txBusy: false, txErr: '', staff: null };
+const NOTE = { filter: 'all', list: [], form: null, busy: false, tx: null, txBusy: false, txErr: '', staff: null, q: '', more: false };
+// 성도 동정 찾기: 이름·쓴 분·내용·기도제목·보는 분에서 띄어쓰기 없이 찾는다(다시 그리지 않고 카드만 숨김)
+const noteKey = (t) => String(t || '').normalize('NFC').toLowerCase().replace(/\s+/g, '');
+function applyNoteSearch() {
+  const t = noteKey(NOTE.q); let n = 0;
+  document.querySelectorAll('[data-nq]').forEach(x => { const on = !t || x.dataset.nq.includes(t); x.hidden = !on; if (on) n++; });
+  // 주간 정리의 구분 제목은 보이는 카드가 없으면 함께 숨김
+  document.querySelectorAll('[data-ngroup]').forEach(g => { const any = !!g.querySelector('[data-nq]:not([hidden])'); g.hidden = !any; if (g.previousElementSibling && g.previousElementSibling.tagName === 'H2') g.previousElementSibling.hidden = !any; });
+  const info = $('#note-q-info'); if (info) { info.hidden = !t; info.querySelector('b').textContent = tr(n + '건', n + ''); }
+}
+document.addEventListener('input', (e) => { if (e.target.id === 'note-q') { NOTE.q = e.target.value; applyNoteSearch(); } });
 // 성도 동정 이슈 구분(여러 개). 목록 함수는 category 하나만 주므로 따로 불러 붙인다
 const noteCats = (n) => (n.categories && n.categories.length ? n.categories : [n.category || 'other']);
 async function attachNoteCats(rows) {
@@ -2434,7 +2444,7 @@ async function viewNotesHome(app, v) {
   setTop(tr('성도 동정', 'Pastoral notes'), false); renderTabs(true);
   const weekly = NOTE.filter === 'week';
   if (!NOTE.week) NOTE.week = S.ctx.this_week;
-  const [rows] = await Promise.all([rpc('pastoral_note_list', { p_limit: weekly ? 200 : 100, p_only_needs: NOTE.filter === 'needs' }),
+  const [rows] = await Promise.all([rpc('pastoral_note_list', { p_limit: weekly ? 200 : NOTE.more ? 1000 : 100, p_only_needs: NOTE.filter === 'needs' }),
     typeof refreshInboxBadge === 'function' ? refreshInboxBadge().catch(() => {}) : null]);
   // 새로 공유되었거나 코멘트가 달린 동정(안 읽은 알림). 이번 화면에서는 N으로 보이고, 알림은 본 것으로 바뀐다
   if (typeof unreadNoteIds === 'function') { (NOTE.fresh = NOTE.fresh || new Set()); unreadNoteIds().forEach(id => NOTE.fresh.add(id)); markNoteNotificationsSeen(); }
@@ -2453,12 +2463,14 @@ async function viewNotesHome(app, v) {
     `<button class="chip" data-act="note-filter" data-v="${k}" aria-pressed="${NOTE.filter === k}">${t}</button>`).join('')}</div>`;
   if (hasBusan) h += `<div class="chips" style="margin-top:8px">${[['', tr('모든 캠퍼스', 'All campuses')], ...CAMPUSES.map(c => [c, campusLabel(c)])].map(([k, t]) =>
     `<button class="chip" data-act="note-campus" data-v="${k}" aria-pressed="${(NOTE.campus || '') === k}">${t}</button>`).join('')}</div>`;
+  h += `<input type="search" id="note-q" value="${esc(NOTE.q)}" placeholder="${tr('성도님 이름이나 내용으로 찾기', 'Search by name or content')}" style="margin:12px 0 0" autocomplete="off">
+    <p id="note-q-info" class="tiny muted" style="margin:6px 0 0" hidden>${tr('찾은 동정', 'Found')} <b></b>${rows.length >= 100 && !NOTE.more && !weekly ? ` · <button class="link" data-act="note-more">${tr('더 오래된 동정까지 찾기', 'Search older notes too')}</button>` : ''}</p>`;
   if (EN() && isSenior() && list.length) {
     h += txStatus(NOTE.tx, NOTE.txBusy, NOTE.txErr, 'note-tx');
     autoTx(NOTE.tx, NOTE.txBusy, NOTE.txErr, () => { if (S.view.name === 'notesHome') noteTranslate(); });
   }
   const noteCard = (n) => `
-    <div id="note-${n.id}" class="card stack" style="gap:6px${noteOpen(n) ? ';border-color:var(--warn)' : ''}">
+    <div id="note-${n.id}" data-nq="${esc(noteKey([n.person_name, n.author_name, n.content, n.prayer, n.viewer_names].join(' ')))}" class="card stack" style="gap:6px${noteOpen(n) ? ';border-color:var(--warn)' : ''}">
       <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.08em">${esc(n.person_name)}</b>${NOTE.fresh?.has(String(n.id)) ? `<span class="pill new" title="${tr('새 글', 'New')}">N</span>` : ''}<span class="pill">${noteMethod(n.visit_method)}</span>${noteCats(n).map(k => `<span class="pill">${noteCat(k)}</span>`).join('')}${n.campus && n.campus !== '분당' ? `<span class="pill accent">${campusLabel(n.campus)}</span>` : ''}
         ${ackPills(n)}
         <span class="spacer"></span><span class="small note-by"><b>${esc(n.author_name || '')}</b> <span class="muted">· ${dayLabel(n.met_on)}</span></span></div>
@@ -2481,13 +2493,13 @@ async function viewNotesHome(app, v) {
         ${list.some(noteOpen) ? `<div style="color:var(--warn)">${tr('확인 필요 ' + list.filter(noteOpen).length + '건', list.filter(noteOpen).length + ' need your review')}</div>` : ''}</div>`;
       for (const k of NOTE_CAT_KEYS) {
         const g = list.filter(n => noteCats(n).map(c => NOTE_CAT_KEYS.includes(c) ? c : 'other').includes(k));
-        if (g.length) h += `<h2>${noteCat(k)} <span class="muted" style="font-weight:400">${g.length}</span></h2><div class="stack">${g.map(noteCard).join('')}</div>`;
+        if (g.length) h += `<h2>${noteCat(k)} <span class="muted" style="font-weight:400">${g.length}</span></h2><div class="stack" data-ngroup="1">${g.map(noteCard).join('')}</div>`;
       }
     } else h += `<p class="empty">${tr('이 주에 만난 분의 동정이 없습니다.', 'No notes for this week.')}</p>`;
-    app.innerHTML = h; return;
+    app.innerHTML = h; applyNoteSearch(); return;
   }
   h += '<div class="stack" style="margin-top:12px">' + (list.length ? list.map(noteCard).join('') : `<p class="empty">${NOTE.filter === 'needs' ? tr('확인할 동정이 없습니다.', isSenior() ? 'Nothing waiting for you.' : 'Nothing waiting for the pastor.') : tr('아직 쓴 동정이 없습니다.', 'No notes yet.')}</p>`) + '</div>';
-  app.innerHTML = h;
+  app.innerHTML = h; applyNoteSearch();
 }
 function viewNoteEdit(app, v) {
   const f = NOTE.form;
@@ -3451,6 +3463,7 @@ document.addEventListener('click', async (e) => {
     case 'note-new': NOTE.form = { id: null, met_on: S.ctx.today, person_name: '', categories: ['update'], visit_method: 'in_person', campus: '분당', content: '', prayer: '', needs_pastor: false, visibility: 'all', viewers: [] }; return go({ name: 'noteEdit' });
     case 'note-edit': { const n = NOTE.list.find(x => x.id === d.id); if (!n) return; NOTE.form = { id: n.id, met_on: n.met_on, person_name: n.person_name, categories: noteCats(n).slice(), content: n.content, prayer: n.prayer || '', needs_pastor: n.needs_pastor, visibility: n.visibility || 'all', viewers: n.viewer_ids || [], visit_method: n.visit_method || 'in_person', campus: n.campus || '분당' }; return go({ name: 'noteEdit' }); }
     case 'note-filter': NOTE.filter = d.v; return render();
+    case 'note-more': NOTE.more = true; return render();
     case 'note-week': { const w = addDays(NOTE.week || S.ctx.this_week, +d.v); NOTE.week = w > S.ctx.this_week ? S.ctx.this_week : w; return render(); }
     case 'note-campus': NOTE.campus = d.v || ''; return render();
     case 'note-tx': return noteTranslate();
