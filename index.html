@@ -1138,10 +1138,10 @@ function renderEditor() {
     <h2>${E.cell.review_mode === 'senior_direct' ? '담임 목사님·담임 사모님께' : '담당 교역자에게'} 특별히 전달하고 싶은 내용이 있나요?</h2>
     <div class="stack">${Object.keys(L.message).filter(k => k !== 'share_up').map(k => `<button class="btn ${m.leader_message === k ? '' : 'quiet'}" data-act="ed-set" data-k="leader_message" data-v="${k}" aria-pressed="${m.leader_message === k}">${LX('message', k)}</button>`).join('')}</div>
     ${m.leader_message && m.leader_message !== 'none' ? `<label class="field" style="margin-top:12px">${m.leader_message === 'contact' ? '연락이나 상담이 필요한 사유' : '자세한 내용'} <span class="tiny muted" style="font-weight:400">${E.cell.review_mode === 'senior_direct' ? '담임 목사님·담임 사모님께' : '담당 교역자에게'} 함께 전달됩니다</span>
-      <textarea data-bind="leader_message_note" rows="3" maxlength="2000" placeholder="${m.leader_message === 'contact' ? '예: 최근 직장 문제로 많이 힘들어하셔서 직접 연락드려 주시면 좋겠습니다.' : '적어 주시면 더 잘 도울 수 있습니다.'}">${esc(m.leader_message_note || '')}</textarea></label>` : ''}
+      <textarea data-bind="leader_message_note" rows="3" placeholder="${m.leader_message === 'contact' ? '예: 최근 직장 문제로 많이 힘들어하셔서 직접 연락드려 주시면 좋겠습니다.' : '적어 주시면 더 잘 도울 수 있습니다.'}">${esc(m.leader_message_note || '')}</textarea></label>` : ''}
     <h2>담임 목사님께 드리는 말씀 <span class="tiny muted" style="font-weight:400">있을 때만</span></h2>
     <p class="sub" style="margin-top:0">담임 목사님께 직접 전하고 싶은 말씀이 있다면 이곳에 작성해 주세요. 작성해 주신 내용은 자동으로 번역되어 담임 목사님께 바로 전달됩니다.</p>
-    <textarea data-pmsg="1" rows="4" maxlength="4000" placeholder="담임 목사님께 전하고 싶은 말씀">${esc(E.pmsg || '')}</textarea>
+    <textarea data-pmsg="1" rows="4" placeholder="담임 목사님께 전하고 싶은 말씀">${esc(E.pmsg || '')}</textarea>
     <p class="tiny muted" style="margin:4px 0 0">담임 목사님·담임 사모님만 보십니다. 담당 교역자에게는 보이지 않습니다.</p>`;
     if (E.confirm) h += `<div class="banner warn" style="margin-top:16px" role="alertdialog"><b>${E.rep.submission_no > 0 ? '고친 보고서를 다시 제출하시겠어요?' : '제출하시겠어요?'}</b>${E.cell.review_mode === 'none' ? '제출한 뒤에도 보고서를 열어 고칠 수 있습니다.' : '제출한 뒤에도 확인 전까지는 보고서를 열어 직접 고칠 수 있습니다.'}
       <div class="row" style="margin-top:12px"><button class="btn sm" data-act="ed-submit">${E.rep.submission_no > 0 ? '다시 제출합니다' : '제출합니다'}</button><button class="btn quiet sm" data-act="ed-confirm-cancel">다시 볼게요</button></div></div>`;
@@ -1457,7 +1457,7 @@ async function viewReportDetail(app, v) {
     h += '<h2>' + tr('교역자가 확인한 내용', 'Leadership review') + '</h2><p class="tiny muted" style="margin:-4px 0 8px">' + tr('교역자가 이 보고서를 확인하며 남긴 메모와 상위 보고 상태입니다. 담임 목사님·담임 사모님과 교역자만 보고, 셀리더에게는 보이지 않습니다.', 'The note and escalation level Leadership left when reviewing this report. Not visible to the cell leader.') + '</p><div class="stack">' + reviews.map(x => `<div class="card small"><div class="row"><b>${tr(x.submission_no + '번째 제출 확인', 'Submission #' + x.submission_no + ' reviewed')}</b><span class="pill ${x.escalation_level === 'normal' ? '' : 'warn'}">${tr('상위 보고: ', 'Escalation: ')}${LX('escalation', x.escalation_level)}</span>${x.submission_no !== rep.submission_no ? '<span class="pill">' + tr('이전 제출', 'Earlier') + '</span>' : ''}</div>
       <div class="muted">${esc(nameOf(x.reviewer_id))} · ${dateTime(x.reviewed_at)}${x.edited_at ? tr(' · ' + dateTime(x.edited_at) + ' 고침', ' · edited ' + dateTime(x.edited_at)) : ''}</div>
       ${RVE.id === x.id ? `<div class="stack" style="margin-top:8px;gap:8px">
-          <textarea id="rve-note" rows="3" maxlength="4000">${esc(RVE.note)}</textarea>
+          <textarea id="rve-note" rows="3">${esc(RVE.note)}</textarea>
           <div class="sel">${Object.keys(L.escalation).map(k => `<button class="chip" data-act="rve-level" data-v="${k}" aria-pressed="${RVE.level === k}">${LX('escalation', k)}</button>`).join('')}</div>
           <div class="row" style="gap:8px"><button class="btn sm" data-act="rve-save" ${RVE.busy ? 'disabled' : ''}>${tr('고친 내용 저장', 'Save')}</button><button class="btn quiet sm" data-act="rve-cancel">${tr('취소', 'Cancel')}</button></div></div>`
         : (x.review_note ? '<div style="margin-top:4px"><b>' + tr('메모', 'Note') + '</b> · ' + nl2br(x.review_note) + '</div>' : '<div class="tiny muted" style="margin-top:4px">' + tr('남긴 메모 없음', 'No note') + '</div>')
@@ -1500,7 +1500,7 @@ function commentBlock(cmts, target, rep) {
     const who = target === 'pastor_msg'
       ? tr('이 말씀을 쓴 셀리더만 봅니다.', 'Only the cell leader who wrote this message will see your reply.')
       : tr('셀리더와 담당 교역자가 봅니다.', 'The cell leader and their Leadership will see this.');
-    h += `<div style="margin-top:10px"><textarea data-cmt="${target}" rows="3" maxlength="3000" style="width:100%" placeholder="${target === 'pastor_msg' ? tr('이 말씀에 답글을 남겨 주세요', 'Reply to this message') : tr('보고서에 코멘트를 남겨 주세요', 'Leave a comment on this report')}">${esc(CMT.draft[target] || '')}</textarea>
+    h += `<div style="margin-top:10px"><textarea data-cmt="${target}" rows="3" style="width:100%" placeholder="${target === 'pastor_msg' ? tr('이 말씀에 답글을 남겨 주세요', 'Reply to this message') : tr('보고서에 코멘트를 남겨 주세요', 'Leave a comment on this report')}">${esc(CMT.draft[target] || '')}</textarea>
       <p class="tiny muted" style="margin:4px 0 8px">${who} ${tr('영어로 쓰시면 한국어 번역이 함께 전달됩니다.', 'Written in English, it will be sent with a Korean translation.')}</p>
       <button class="btn sm" data-act="cmt-add" data-target="${target}" data-id="${rep.id}" ${CMT.busy ? 'disabled' : ''}>${CMT.busy ? tr('보내는 중…', 'Sending…') : target === 'pastor_msg' ? tr('답글 보내기', 'Send reply') : tr('코멘트 남기기', 'Post comment')}</button></div>`;
   } else if (!list.length) return '';
@@ -1540,7 +1540,7 @@ function talkBlock(list, rep, can) {
         ? `<button class="btn warn sm" data-act="talk-del" data-id="${c.id}">${tr('이 글 지우기', 'Delete')}</button><button class="btn quiet sm" data-act="talk-del-cancel">${tr('취소', 'Cancel')}</button>`
         : `<button class="link tiny" data-act="talk-del-ask" data-id="${c.id}">${tr('지우기', 'Delete')}</button>`) + '</div>' : ''}</div>`).join('');
   if (!list.length) h += `<p class="tiny muted" style="margin:0">${tr('아직 나눈 대화가 없습니다.', 'No messages yet.')}</p>`;
-  if (can) h += `<div><textarea data-talk="1" rows="3" maxlength="3000" style="width:100%" placeholder="${row0Placeholder()}">${esc(TALK.draft)}</textarea>
+  if (can) h += `<div><textarea data-talk="1" rows="3" style="width:100%" placeholder="${row0Placeholder()}">${esc(TALK.draft)}</textarea>
     <button class="btn sm" style="margin-top:8px" data-act="talk-add" data-id="${rep.id}" ${TALK.busy ? 'disabled' : ''}>${TALK.busy ? tr('보내는 중…', 'Sending…') : tr('남기기', 'Send')}</button></div>`;
   return h + '</div>';
 }
@@ -2070,7 +2070,7 @@ async function issSendOpen(btn, id, kind) {
   box.innerHTML = `<div class="cellbox stack" style="margin-top:10px">
     <p class="tiny muted" style="margin:0">${hint}</p>
     <div class="chips">${people.map(p => `<button class="chip" data-act="iss-pick" data-id="${p.id}" aria-pressed="${p.on}">${esc(p.name)}</button>`).join('')}</div>
-    <textarea rows="3" maxlength="3000" data-iss-text placeholder="${kind === 'leader' ? tr('예: 이 부분 함께 기도하겠습니다. 다음 주에 어떻게 지내시는지 알려 주세요.', 'e.g. We are praying with you. Please let us know how they are doing next week.') : tr('예: 이 성도님 한번 연락해 주실 수 있을까요?', 'e.g. Could you reach out to this person?')}"></textarea>
+    <textarea rows="3" data-iss-text placeholder="${kind === 'leader' ? tr('예: 이 부분 함께 기도하겠습니다. 다음 주에 어떻게 지내시는지 알려 주세요.', 'e.g. We are praying with you. Please let us know how they are doing next week.') : tr('예: 이 성도님 한번 연락해 주실 수 있을까요?', 'e.g. Could you reach out to this person?')}"></textarea>
     <div class="row" style="gap:8px"><button class="btn sm" data-act="iss-send-go" data-id="${id}">${tr('보내기', 'Send')}</button><button class="btn sm ghost" data-act="iss-send-x" data-id="${id}">${tr('취소', 'Cancel')}</button></div></div>`;
   box.querySelector('[data-iss-text]')?.focus();
 }
@@ -2087,7 +2087,7 @@ async function issSendGo(id) {
     + (r.relation_kind && r.related_name ? relText(r.person_name, r.related_name, r.relation_kind) + '\n' : '') + (r.content || ''); } finally { LANG = L0; }
   const body = text + block;
   try {
-    const res = await rpc('msg_start', { p_to: to, p_body: body.slice(0, 4000), p_report: null });
+    const res = await rpc('msg_start', { p_to: to, p_body: body, p_report: null });
     msgNotify(res.post);
     box.innerHTML = `<p class="small" style="margin:8px 0;color:var(--ok, inherit)">${tr('보냈습니다. 「메시지」에서 답장을 보실 수 있습니다.', 'Sent. Replies will appear in Messages.')}</p>`; box.dataset.kind = '';
     toast(tr('보냈습니다.', 'Sent.'));
@@ -2204,7 +2204,7 @@ async function viewLrEdit(app, v) {
   let h = `<h1>교역자 보고</h1><p class="sub">${weekLabel(LR.week, true)} · 맡으신 분들 가운데 담임 목사님께 전할 소식을 직접 정리해 주세요.</p>`;
   if (sub) h += `<div class="banner" style="margin-top:8px"><b>제출한 보고입니다 · ${dateTime(LR.data.submitted_at)}</b>고친 뒤 「고친 내용 저장」을 누르시면 담임 목사님·담임 사모님께 바로 반영됩니다.</div>`;
   h += `<div class="card stack" style="margin-top:12px"><label class="field">한 주 요약 <span class="tiny muted" style="font-weight:400">쓰고 싶을 때만</span>
-      <textarea id="lr-sum" rows="3" maxlength="4000" placeholder="예) 전반적으로 셀 모임이 잘 진행되었고, 두 가정에 돌봄이 필요합니다.">${esc(LR.summary)}</textarea></label></div>`;
+      <textarea id="lr-sum" rows="3" placeholder="예) 전반적으로 셀 모임이 잘 진행되었고, 두 가정에 돌봄이 필요합니다.">${esc(LR.summary)}</textarea></label></div>`;
   h += `<h2>적은 분 ${LR.items.length}명</h2>`;
   h += LR.items.length ? '<div class="stack">' + LR.items.map((it, i) => `<div class="card stack" style="gap:6px">
       <div class="row" style="flex-wrap:wrap;gap:6px"><b style="font-size:1.05em">${esc(it.person_name)}</b><span class="tiny muted">${esc(it.group_name || '')}</span><span class="spacer"></span><span class="pill">${noteCat(it.category)}</span></div>
@@ -2217,7 +2217,7 @@ async function viewLrEdit(app, v) {
       return `<option value="${k}" ${LR.pick === k ? 'selected' : ''} ${taken ? 'disabled' : ''}>${esc(p.name)}${taken ? ' (적음)' : ''}</option>`; }).join('')}</optgroup>`).join('')}</select></label>
     <div id="lr-ref">${lrRefHtml()}</div>
     <div><div style="font-weight:500;margin-bottom:6px">이슈 구분</div><div class="chips">${NOTE_CAT_KEYS.map(k => `<button class="chip" data-act="lr-cat" data-v="${k}" aria-pressed="${LR.cat === k}">${noteCat(k)}</button>`).join('')}</div></div>
-    <label class="field">내용<textarea id="lr-content" rows="5" maxlength="4000" placeholder="담임 목사님께 전할 내용을 직접 적어 주세요.">${esc(LR.content)}</textarea></label>
+    <label class="field">내용<textarea id="lr-content" rows="5" placeholder="담임 목사님께 전할 내용을 직접 적어 주세요.">${esc(LR.content)}</textarea></label>
     <button class="btn ghost" data-act="lr-add">${LR.editing ? '고친 내용 반영' : '+ 이 분 추가'}</button></div>`;
   h += `<details class="cellbox" style="margin-top:12px"><summary class="small">개별 케어 명단 (${inds.length}명)</summary><div class="stack" style="margin-top:8px;gap:6px">
     <p class="tiny muted" style="margin:0">셀에 속하지 않고 따로 돌보시는 분입니다. 본인만 보고 고를 수 있습니다.</p>
@@ -2390,7 +2390,7 @@ function noteComments(n) {
   }).join('');
   if (isSenior() || hasRole('leadership')) {
     h += NCMT.open === n.id
-      ? `<div><textarea data-ncmt="1" rows="3" maxlength="3000" style="width:100%" placeholder="${tr('이 동정에 코멘트를 남겨 주세요', 'Leave a comment on this note')}">${esc(NCMT.draft)}</textarea>
+      ? `<div><textarea data-ncmt="1" rows="3" style="width:100%" placeholder="${tr('이 동정에 코멘트를 남겨 주세요', 'Leave a comment on this note')}">${esc(NCMT.draft)}</textarea>
           <p class="tiny muted" style="margin:4px 0 8px">${isSenior() ? tr('이 동정을 볼 수 있는 분이 함께 보고, 쓴 분께 알림이 갑니다. 영어로 쓰시면 한국어 번역이 함께 전달됩니다.', 'Everyone who can see this note will see it, and the writer gets a notification. Written in English, it will be sent with a Korean translation.') : '이 동정을 볼 수 있는 분이 함께 보고, 쓴 분께 알림이 갑니다.'}</p>
           <div class="row" style="gap:8px"><button class="btn sm" data-act="ncmt-add" data-id="${n.id}" ${NCMT.busy ? 'disabled' : ''}>${NCMT.busy ? tr('보내는 중…', 'Sending…') : tr('코멘트 남기기', 'Post comment')}</button><button class="btn quiet sm" data-act="ncmt-cancel">${tr('취소', 'Cancel')}</button></div></div>`
       : `<div><button class="link" data-act="ncmt-open" data-id="${n.id}">💬 ${tr('코멘트 남기기', 'Comment')}</button></div>`;
@@ -2503,8 +2503,8 @@ function viewNoteEdit(app, v) {
         `<button class="chip" data-act="nt-method" data-v="${k}" aria-pressed="${f.visit_method === k}">${noteMethod(k)}</button>`).join('')}</div></div>
       <div><div style="font-weight:500;margin-bottom:6px">${tr('이슈 구분', 'Topic')} <span class="tiny muted" style="font-weight:400">${tr('여러 개 선택', 'Choose all that apply')}</span></div><div class="chips">${NOTE_CAT_KEYS.map(k =>
         `<button class="chip" data-act="nt-cat" data-v="${k}" aria-pressed="${f.categories.includes(k)}">${noteCat(k)}</button>`).join('')}</div></div>
-      <label class="field">${tr('내용', 'What happened')}<textarea id="nt-content" rows="6" maxlength="4000" placeholder="${tr('어떤 일로 만나셨고, 어떤 이야기를 나누셨는지 적어 주세요.', 'Why you met and what you talked about.')}">${esc(f.content)}</textarea></label>
-      <label class="field">${tr('기도제목', 'Prayer request')} <span class="tiny muted" style="font-weight:400">${tr('있으면 적어 주세요', 'optional')}</span><textarea id="nt-prayer" rows="3" maxlength="2000">${esc(f.prayer || '')}</textarea></label>
+      <label class="field">${tr('내용', 'What happened')}<textarea id="nt-content" rows="6" placeholder="${tr('어떤 일로 만나셨고, 어떤 이야기를 나누셨는지 적어 주세요.', 'Why you met and what you talked about.')}">${esc(f.content)}</textarea></label>
+      <label class="field">${tr('기도제목', 'Prayer request')} <span class="tiny muted" style="font-weight:400">${tr('있으면 적어 주세요', 'optional')}</span><textarea id="nt-prayer" rows="3">${esc(f.prayer || '')}</textarea></label>
       <div><div style="font-weight:500;margin-bottom:6px">${tr('누가 볼 수 있나요?', 'Who can see this?')}</div>
         <div class="seg" style="grid-template-columns:1fr 1fr">
           <button class="segbutton" data-act="nt-vis" data-v="all" aria-pressed="${f.visibility === 'all'}">${tr('교역자 모두', 'All staff')}</button>
@@ -2585,7 +2585,7 @@ async function viewMoves(app, v) {
           ${MV.opts.cells.filter(c => c.id !== (mem ? mem.cell_id : f.from)).map(c => `<option value="${c.id}" ${c.id === f.to ? 'selected' : ''}>${esc(c.name)}${c.campus && c.campus !== '분당' ? ' · ' + esc(c.campus) : ''}</option>`).join('')}</select></label>
         ${mem ? `<div class="banner small" style="margin:0"><b>${esc(mem.name)} · ${esc(from.name || '')} → ${esc(to.name || tr('(이동할 셀)', '(target)'))}</b>${tr('기존 담당', 'From')}: ${esc(from.staff || tr('없음', 'none'))}${f.to ? ' · ' + tr('이동 담당', 'To') + ': ' + esc(to.staff || tr('없음', 'none')) : ''}<div class="tiny muted">${tr('담당 교역자는 지금 셀 정보에서 자동으로 연결됩니다.', 'Staff are linked from current cell assignments.')}</div></div>` : ''}
         <label class="field">${tr('이동 결정일', 'Decided on')}<input type="date" id="mv-date" max="${S.ctx.today}" value="${esc(f.date)}"></label>
-        <label class="field">${tr('메모', 'Memo')} <span class="tiny muted" style="font-weight:400">${tr('필요할 때만', 'optional')}</span><textarea id="mv-memo" rows="2" maxlength="1000">${esc(f.memo)}</textarea></label>
+        <label class="field">${tr('메모', 'Memo')} <span class="tiny muted" style="font-weight:400">${tr('필요할 때만', 'optional')}</span><textarea id="mv-memo" rows="2">${esc(f.memo)}</textarea></label>
         <p class="tiny muted" style="margin:0">${tr('등록해도 바로 옮겨지지 않습니다. 「연락 필요」 상태로 시작합니다.', 'Registering does not move the member yet.')}</p>
         <div class="row" style="gap:8px"><button class="btn sm" data-act="mv-create" ${MV.busy ? 'disabled' : ''}>${tr('등록하기', 'Register')}</button><button class="btn quiet sm" data-act="mv-form-close">${tr('취소', 'Cancel')}</button></div></div>`;
     } else if (MV.opts.members.length) h += `<div style="margin-top:12px"><button class="btn" data-act="mv-form-open">${tr('+ 셀 이동 등록', '+ New move')}</button></div>`;
@@ -2986,7 +2986,7 @@ async function viewNotices(app) {
   let h = `<h1>${tr('공지', 'Notices')}${info('notice')[0]}</h1>${info('notice')[1]}`;
   if (canPost === true) h += `<div class="card stack" style="margin-top:8px"><h3 style="margin:0">${tr('새 공지 쓰기', 'New notice')}</h3>
       <label class="field" style="margin:0">${tr('제목', 'Title')}<input type="text" id="nt-title" maxlength="80" value="${esc(NOTICE.title)}" placeholder="${tr('예: 이번 주 셀보고서는 토요일까지 받습니다', 'Title')}"></label>
-      <label class="field" style="margin:0">${tr('내용', 'Message')}<textarea id="nt-body" rows="5" maxlength="3000" placeholder="${tr('자세한 내용을 적어 주세요 (선택)', 'Details (optional)')}">${esc(NOTICE.body)}</textarea></label>
+      <label class="field" style="margin:0">${tr('내용', 'Message')}<textarea id="nt-body" rows="5" placeholder="${tr('자세한 내용을 적어 주세요 (선택)', 'Details (optional)')}">${esc(NOTICE.body)}</textarea></label>
       <p class="tiny muted" style="margin:0">${tr('올리면 앱을 쓰는 모든 분(셀리더·교역자·담임 목사님·담임 사모님)의 첫 화면에 보이고, 알림을 켠 분께는 휴대폰 알림이 갑니다.', 'Everyone will see it on their home screen and get a notification.')}</p>
       <button class="btn" data-act="notice-post" ${NOTICE.busy ? 'disabled' : ''}>${tr('공지 올리기', 'Post notice')}</button></div>`;
   h += `<h2>${tr('지난 공지', 'All notices')} <span class="muted" style="font-weight:400">${(list || []).length}</span></h2>`;
@@ -3042,7 +3042,7 @@ async function viewMsgNew(app, v) {
   if (staff.length) h += (leaders.length ? `<h3 style="margin:8px 0">${tr('교역자·담임 목사님·담임 사모님', 'Staff')}</h3>` : '') + '<div class="stack" style="gap:8px">' + staff.map(row).join('') + '</div>';
   if (leaders.length) h += `<h3 style="margin:16px 0 8px">${tr('셀리더', 'Cell leaders')}</h3><div class="stack" style="gap:8px">` + leaders.map(row).join('') + '</div>';
   if (!C.length) h += '<p class="empty">' + tr('메시지를 보낼 수 있는 분이 없습니다.', 'No one to send to.') + '</p>';
-  h += `<h2>${tr('내용', 'Message')}</h2><textarea id="msg-body" rows="6" maxlength="4000" placeholder="${tr('전하고 싶은 내용을 적어 주세요', 'Write your message')}">${esc(MSG.draft)}</textarea>
+  h += `<h2>${tr('내용', 'Message')}</h2><textarea id="msg-body" rows="6" placeholder="${tr('전하고 싶은 내용을 적어 주세요', 'Write your message')}">${esc(MSG.draft)}</textarea>
     <button class="btn" style="margin-top:12px" data-act="msg-send" data-report="${v.report || ''}" ${MSG.busy ? 'disabled' : ''}>${tr('보내기', 'Send')}</button>`;
   app.innerHTML = h;
 }
@@ -3059,7 +3059,7 @@ async function viewThread(app, v) {
   if (t.report_id) h += `<button class="listitem" data-act="open-detail" data-id="${t.report_id}" style="margin:8px 0"><span class="top"><b>📎 ${esc((t.report_label || '').replace(/\d{4}-\d{2}-\d{2}/, (m) => weekLabel(m)))}</b><span class="small muted">${tr('보고서 보기 →', 'Open report →')}</span></span></button>`;
   h += '<div class="stack" style="gap:10px;margin-top:12px">' + (t.posts || []).map(x => `<div class="bubble ${x.mine ? 'mine' : ''}">
       <div class="tiny muted" style="margin-bottom:4px">${x.mine ? tr('나', 'Me') : esc(x.author)} · ${dateTime(x.at)}</div>${msgText(x.body, x.body_tr)}</div>`).join('') + '</div>';
-  h += `<div class="card stack" style="margin-top:16px"><label class="field">${tr('답장', 'Reply')}<textarea id="msg-reply" rows="3" maxlength="4000">${esc(MSG.reply)}</textarea></label>
+  h += `<div class="card stack" style="margin-top:16px"><label class="field">${tr('답장', 'Reply')}<textarea id="msg-reply" rows="3">${esc(MSG.reply)}</textarea></label>
     <button class="btn" data-act="msg-reply" data-id="${t.id}" ${MSG.busy ? 'disabled' : ''}>${tr('보내기', 'Send')}</button></div>`;
   app.innerHTML = h;
 }

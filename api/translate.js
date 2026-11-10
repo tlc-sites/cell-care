@@ -25,7 +25,41 @@ Rules:
 - Translate faithfully; do not add, soften or summarize. Keep line breaks.
 - Reply with JSON only: an object mapping each given key to its English translation.`;
 
+// 글자 수 제한이 없으므로(2026-11-10) 긴 글은 나눠 보낸다: 한 묶음 PIECE자 안팎, 한 글이 길면 줄바꿈에서 잘라 따로 번역한 뒤 이어 붙임
+const PIECE = 6000, PARALLEL = 4;
+function splitText(text) {
+  const out = []; let rest = String(text);
+  while (rest.length > PIECE) {
+    const nl = rest.lastIndexOf('\n', PIECE);
+    if (nl >= PIECE / 2) { out.push({ text: rest.slice(0, nl), sep: '\n' }); rest = rest.slice(nl + 1); }
+    else { out.push({ text: rest.slice(0, PIECE), sep: '' }); rest = rest.slice(PIECE); }
+  }
+  out.push({ text: rest, sep: '' });
+  return out;
+}
 async function translate(key, items, system) {
+  const pieces = [], plan = {};
+  for (const [k, v] of Object.entries(items)) {
+    const ps = splitText(v);
+    plan[k] = ps.map((p, i) => ({ id: ps.length > 1 ? k + '~part' + i : k, sep: p.sep }));
+    ps.forEach((p, i) => pieces.push([plan[k][i].id, p.text]));
+  }
+  const batches = [];
+  for (const [id, text] of pieces) {
+    const last = batches[batches.length - 1];
+    if (last && last.size + text.length <= PIECE) { last.items[id] = text; last.size += text.length; }
+    else batches.push({ items: { [id]: text }, size: text.length });
+  }
+  const done = {};
+  for (let i = 0; i < batches.length; i += PARALLEL)
+    (await Promise.all(batches.slice(i, i + PARALLEL).map(b => translateOnce(key, b.items, system)))).forEach(r => Object.assign(done, r));
+  const translations = {};
+  for (const [k, parts] of Object.entries(plan))
+    if (parts.every(p => typeof done[p.id] === 'string')) translations[k] = parts.map(p => done[p.id] + p.sep).join('');
+  return translations;
+}
+
+async function translateOnce(key, items, system) {
   if (!Object.keys(items).length) return {};
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -61,7 +95,7 @@ module.exports = async (req, res) => {
     if (!roles.includes('senior_pastor') && !roles.includes('samonim')) return res.status(403).json({ error: 'Not allowed' });
 
     const items = {};
-    const add = (k, v) => { if (v && String(v).trim()) items[k] = String(v).slice(0, 4000); };
+    const add = (k, v) => { if (v && String(v).trim()) items[k] = String(v); };
 
     if (UUID.test(lrId)) {
       const lr = await asUser(token, 'rpc/lr_read', { p_id: lrId });
@@ -70,7 +104,7 @@ module.exports = async (req, res) => {
       (lr.items || []).forEach(i => add('lri:' + i.id, i.content));
     } else if (body.issues) {
       const rows = await asUser(token, 'rpc/issue_board', { p_weeks: Math.min(26, Math.max(1, +body.issues || 8)), p_scope: 'all' });
-      rows.slice(0, 120).forEach(r => { if (r.content) items['iss:' + r.source + ':' + r.item_id] = String(r.content).slice(0, 1500); });
+      rows.slice(0, 120).forEach(r => { if (r.content) items['iss:' + r.source + ':' + r.item_id] = String(r.content); });
     } else if (body.notes) {
       const notes = await asUser(token, 'rpc/pastoral_note_list', { p_limit: 30, p_only_needs: false });
       notes.forEach(n => { add('note:' + n.id, n.content); add('noteprayer:' + n.id, n.prayer); });
