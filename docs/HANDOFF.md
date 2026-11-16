@@ -237,3 +237,8 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 
 - 사이드바 위 `.side-toggle`(data-act=side-toggle)로 248px ↔ 64px. 접힌 상태는 `<html data-side="mini">` + localStorage `cc-side`, <head> 스크립트가 그리기 전에 넣는다.
 - 접히면 메뉴 이름·밝기·로그아웃을 숨기고 아이콘에 title 도움말, 성도 동정 새 글 수는 아이콘 오른쪽 위. 아래 내 이름 칸(아바타)을 눌러도 펼친다. 휴대폰 화면은 그대로.
+
+## 2026-11-16 성도 동정 캠퍼스 구분
+- 쓰기: 새 동정은 캠퍼스가 비어 있고(`NOTE.form.campus=''`), 분당·부산을 고르지 않으면 저장 전에 「캠퍼스(분당·부산)를 골라 주세요」. 고치기는 저장된 값(없으면 분당) 그대로.
+- 목록: 모든 카드에 캠퍼스 표시(`noteCampus` — 비어 있으면 분당, 부산은 강조색). 위에 항상 「전체 / 분당 n / 부산 n」 토글(`NOTE.campus`, 기기에 `cc_note_campus`로 기억), 주간 정리에도 적용.
+- DB 변경 없음(`cellcare_pastoral_note_save`의 `p_campus`를 그대로 씀). staff-guide 11/16 소식.
