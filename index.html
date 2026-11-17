@@ -214,6 +214,8 @@ details.cellbox summary { cursor: pointer; min-height: 32px; }
 .ref { background: var(--accent-soft); border-radius: 10px; padding: 8px 10px; }
 .ref > div { margin-top: 2px; }
 .loading { text-align: center; color: var(--muted); padding: 48px 8px; }
+/* 화면을 불러오는 동안: 지난 화면을 누르지 못하게 하고, 조금 걸리면 흐리게 */
+#app.busy { pointer-events: none; opacity: .45; transition: opacity .15s ease .2s; }
 .sel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } h1 { font-size: 23px; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
@@ -455,12 +457,25 @@ function clientLog(kind, msg) {
 }
 window.addEventListener('error', (e) => clientLog('error', (e.message || '') + (e.filename ? ' @' + String(e.filename).split('/').pop() + ':' + e.lineno : '')));
 window.addEventListener('unhandledrejection', (e) => clientLog('rejection', (e.reason && (e.reason.stack || e.reason.message)) || e.reason));
-async function rpc(name, args) {
-  if (DEMO.role) return demoRpc(name, args || {});
+/* 주간 현황(get_week_status)은 무겁고 한 화면에서 여러 번 부르므로 30초 동안 같은 결과를 다시 쓴다.
+   읽기가 아닌 함수(저장·제출·확인 등)를 부르면 바로 비운다 */
+const RPC_CACHE = new Map();
+const READ_RPC = /^(get_|lr_(get|read|overview|people)$|msg_(unread|list|thread|contacts)$|notice_(list|can_post)$|pastor_msgs?_(get|week)$|senior_comment_list$|cellcare_(talk_list|reply_list|my_report_reads|notification_(list|detail|can_open|read)|report_open|senior_acks|shared_staff_list|note_categories|move_(list|options)|pastoral_board)$|my_report_weeks$|member_list$|member_move_targets$|cell_(admin_info|deadline|schedule)$|issue_reach$|pastoral_staff$|pastoral_note_list$|note_comments_for$|admin_(overview|alerts|push_stats)$)/;
+async function rpcRaw(name, args) {
   const client = name.startsWith('cellcare_') ? sb.schema('report') : sb;
   const { data, error } = await client.rpc(name, args || {});
   if (error) throw error;
   return data;
+}
+async function rpc(name, args) {
+  if (DEMO.role) return demoRpc(name, args || {});
+  if (!READ_RPC.test(name)) RPC_CACHE.clear();
+  if (name !== 'get_week_status') return rpcRaw(name, args);
+  const key = name + JSON.stringify(args || {}), hit = RPC_CACHE.get(key);
+  let p = hit && Date.now() - hit.at < 30000 ? hit.p : null;
+  if (!p) { p = rpcRaw(name, args); RPC_CACHE.set(key, { p, at: Date.now() }); p.catch(() => { if (RPC_CACHE.get(key)?.p === p) RPC_CACHE.delete(key); }); }
+  const rows = await p;
+  return Array.isArray(rows) ? rows.map(r => ({ ...r })) : rows;   // 화면마다 고쳐 써도 저장본은 그대로
 }
 async function q(promise) { if (DEMO.role) return demoTable(promise); const { data, error } = await promise; if (error) throw error; return data; }
 
@@ -576,8 +591,27 @@ function renderTabs(show) {
   if (typeof updateInboxBadge === 'function') updateInboxBadge();
 }
 
+/* 여러 화면을 빠르게 눌렀을 때 늦게 끝난 앞 화면이 뒤에 연 화면을 덮지 않게: 가장 마지막에 부른 화면만 그린다 */
+let RSEQ = 0, RDONE = 0, RKEEP = null;
+const _setTop = setTop, _renderTabs = renderTabs;
+let LAST_TOP = ['', false], LAST_TABS = true;
+setTop = (title, canBack) => { LAST_TOP = [title, canBack]; _setTop(title, canBack); };
+renderTabs = (show) => { LAST_TABS = show; _renderTabs(show); };
+function settleRender(v) {
+  if (v.name !== 'report') { hideFooter(); E = null; }   // 늦게 끝난 작성 화면이 남긴 아래 막대·편집 상태 정리
+  if (RKEEP) { _setTop(...RKEEP.top); _renderTabs(RKEEP.tabs); }
+}
 async function render() {
-  const v = S.view; const app = $('#app');
+  const v = S.view; const seq = ++RSEQ; const real = $('#app');
+  const app = new Proxy(real, { set(t, k, val) { if (seq === RSEQ) t[k] = val; return true; }, get(t, k) { const x = t[k]; return typeof x === 'function' ? x.bind(t) : x; } });
+  real.classList.add('busy');
+  try { return await renderView(v, app, seq); }
+  finally {
+    if (seq === RSEQ) { real.classList.remove('busy'); RDONE = seq; RKEEP = { top: LAST_TOP, tabs: LAST_TABS }; }
+    else if (RDONE === RSEQ) settleRender(S.view);
+  }
+}
+async function renderView(v, app, seq) {
   // 보고서 작성 화면을 벗어나면 (뒤로가기 버튼·휴대폰 뒤로가기 포함) 아래 「이전/다음」 막대를 항상 닫음
   if (v.name !== 'report') { if (E) { try { await save(); } catch (_) {} E = null; } hideFooter(); }
   document.documentElement.classList.toggle('no-ptr', v.name === 'notesHome');
@@ -607,6 +641,7 @@ async function render() {
   } catch (e) {
     console.error(e);
     clientLog('render', v.name + ': ' + errText(e));
+    if (seq !== RSEQ) return;
     setTop('', S.stack.length > 0); renderTabs(true);
     app.innerHTML = '<div class="banner danger" role="alert"><b>화면을 불러오지 못했습니다.</b>' + esc(errText(e)) +
       '</div><div style="margin-top:12px"><button class="btn ghost" data-act="reload">다시 시도</button></div>';
@@ -767,17 +802,19 @@ function leaderCardState(r) {
 }
 
 async function viewLeaderHome(app) {
-  await loadSched();
+  // 서로 기다릴 필요 없는 조회는 한꺼번에 시작한다
+  const noticesP = rpc('notice_list', { p_limit: 3 }).catch(() => []);
+  const unreadP = rpc('msg_unread').catch(() => 0);
+  const weeksP = rpc('my_report_weeks').catch(() => []);
+  await Promise.all([loadSched(), refreshContext()]);
   setTop('셀리더', false); renderTabs(true);
-  await refreshContext();
   const ctx = S.ctx; const thisWeek = ctx.this_week; const lastWeek = addDays(thisWeek, -7);
   const cellIds = ctx.leader_cells.map(c => c.cell_id);
   let reports = [], pastWeeks = [];
   if (cellIds.length) {
-    pastWeeks = await rpc('my_report_weeks').catch(() => []);
-    reports = await q(sb.from('weekly_reports')
+    [pastWeeks, reports] = await Promise.all([weeksP, q(sb.from('weekly_reports')
       .select('id, cell_id, week_start, status, review_status, review_mode, submitted_at, submission_no')
-      .in('cell_id', cellIds).order('week_start', { ascending: false }).limit(30));
+      .in('cell_id', cellIds).order('week_start', { ascending: false }).limit(30))]);
   }
   const find = (cell, w) => reports.find(r => r.cell_id === cell && r.week_start === w);
   const revs = (ctx.my_open_reports || []).filter(r => r.status === 'revision_requested' && !(cellIds.includes(r.cell_id) && (r.week_start === thisWeek || r.week_start === lastWeek)));
@@ -791,8 +828,8 @@ async function viewLeaderHome(app) {
     return Date.now() > new Date(d).getTime() ? ' 마감이 지났지만 지금이라도 작성해 주세요.' : ' 마감: ' + dayLabel(kstDate(d)) + ' 낮 12시까지';
   };
   let h = `<h1>안녕하세요, ${esc(honorific(S.me.name))}</h1>`;
-  h += noticeCard(await rpc('notice_list', { p_limit: 3 }).catch(() => []), false);
-  h += msgEntry(await rpc('msg_unread').catch(() => 0), '담임 목사님, 담임 사모님, 교역자들에게 셀 보고서에 담지 못한 내용을 직접 전달하실 수 있습니다.');
+  h += noticeCard(await noticesP, false);
+  h += msgEntry(await unreadP, '담임 목사님, 담임 사모님, 교역자들에게 셀 보고서에 담지 못한 내용을 직접 전달하실 수 있습니다.');
   if (revs.length) {
     h += '<div class="stack" style="margin-top:12px">' + revs.map(r => `
       <div class="banner warn"><b>${esc(r.cell_name)} · ${weekLabel(r.week_start)} 보고서에 수정 요청이 있습니다</b>
@@ -937,10 +974,11 @@ function timeText(t) { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); if (!m) ret
 const SCHED = { map: null, at: 0 };
 async function loadSched(force) {
   if (!force && SCHED.map && Date.now() - SCHED.at < 60000) return;
+  // 함께 맡는 셀(부산 청년 등)의 담당 교역자 이름은 같이 불러온다. DB 적용 전이면 비어 있음
+  const shared = DEMO.role ? null : rpc('cellcare_shared_staff_list').catch(() => null);
   try { const rows = await q(sb.from('cells').select('id, meet_day, meet_time')); SCHED.map = {}; (rows || []).forEach(c => { SCHED.map[c.id] = c; }); SCHED.at = Date.now(); }
   catch (_) { SCHED.map = SCHED.map || {}; }
-  // 함께 맡는 셀(부산 청년 등)의 담당 교역자 이름. DB 적용 전이면 비어 있음
-  if (!DEMO.role) try { SCHED.shared = {}; ((await rpc('cellcare_shared_staff_list')) || []).forEach(x => { SCHED.shared[x.cell_id] = x.names; }); } catch (_) { SCHED.shared = SCHED.shared || {}; }
+  if (!DEMO.role) { const x = await shared; if (x) { SCHED.shared = {}; x.forEach(r => { SCHED.shared[r.cell_id] = r.names; }); } else SCHED.shared = SCHED.shared || {}; }
 }
 // 담당 배정 없이 여러 교역자가 함께 맡는 셀(부산). 담당이 정해진 부산 셀은 분당 셀과 같게
 const isSharedRow = (r) => !!r && r.campus === '부산' && !r.responsible_leadership_id && r.review_mode !== 'senior_direct';
@@ -1391,11 +1429,9 @@ document.addEventListener('change', (e) => {
    ===================================================================== */
 async function viewReportDetail(app, v) {
   hideFooter();
-  const [rep] = await q(sb.from('weekly_reports').select('*').eq('id', v.id));
-  if (!rep) throw new Error(tr('보고서를 찾을 수 없거나 볼 권한이 없습니다.', 'Report not found, or you do not have access.'));
-  markReportOpened(rep.id);   // 기다리지 않음: 실패해도 보고서는 그대로 보임
-  const [cell] = await q(sb.from('cells').select('id, name, review_mode').eq('id', rep.cell_id));
-  const [roster, prayers, notes, revisions, reviews, people, newPrayers, wk] = await Promise.all([
+  // 보고서 번호만 있으면 되는 조회는 보고서와 함께 한꺼번에 시작한다(예전에는 하나씩 차례로 불러 느렸음)
+  const repP = q(sb.from('weekly_reports').select('*').eq('id', v.id));
+  const byId = Promise.all([
     rpc('get_report_roster', { p_report: v.id }),
     rpc('get_open_prayers', { p_report: v.id }),
     q(sb.from('care_notes').select('*').eq('report_id', v.id).order('created_at')),
@@ -1403,13 +1439,24 @@ async function viewReportDetail(app, v) {
     q(sb.from('leadership_reviews').select('*').eq('report_id', v.id).order('submission_no', { ascending: false })),
     rpc('get_report_people', { p_report: v.id }),
     q(sb.from('prayer_requests').select('id, member_id, content').eq('report_id', v.id)),
-    rpc('get_week_status', { p_week_start: rep.week_start })
+    rpc('pastor_msg_get', { p_report: v.id }).then(x => x && x[0]).catch(() => null),
+    rpc('senior_comment_list', { p_report: v.id }).catch(() => []),
+    // 담당 교역자 ↔ 셀리더 대화: 불러오지 못하면(아직 DB 적용 전 등) 칸을 숨긴다
+    rpc('cellcare_talk_list', { p_report: v.id }).catch(() => null)
   ]);
-  const pmsg = await rpc('pastor_msg_get', { p_report: v.id }).then(x => x && x[0]).catch(() => null);
-  const cmts = rep.submitted_at ? ((await rpc('senior_comment_list', { p_report: v.id }).catch(() => [])) || []) : [];
+  byId.catch(() => {});   // 보고서가 없을 때 아래에서 먼저 멈춰도 처리되지 않은 오류로 남지 않게
+  const [rep] = await repP;
+  if (!rep) throw new Error(tr('보고서를 찾을 수 없거나 볼 권한이 없습니다.', 'Report not found, or you do not have access.'));
+  markReportOpened(rep.id);   // 기다리지 않음: 실패해도 보고서는 그대로 보임
+  const sepP = rpc('separate_members', { p_cell: rep.cell_id }).catch(() => []);
+  const [[cell], wk, [roster, prayers, notes, revisions, reviews, people, newPrayers, pmsg, cmtRows, talkRows]] = await Promise.all([
+    q(sb.from('cells').select('id, name, review_mode').eq('id', rep.cell_id)),
+    rpc('get_week_status', { p_week_start: rep.week_start }),
+    byId
+  ]);
+  const cmts = rep.submitted_at ? (cmtRows || []) : [];
   await loadCommentReplies('report', cmts.map(c => c.id));
-  // 담당 교역자 ↔ 셀리더 대화: 불러오지 못하면(아직 DB 적용 전 등) 칸을 숨긴다
-  const talk = rep.submitted_at ? await rpc('cellcare_talk_list', { p_report: v.id }).catch(() => null) : null;
+  const talk = rep.submitted_at ? talkRows : null;
   if (TALK.id !== rep.id) Object.assign(TALK, { id: rep.id, draft: '', busy: false, del: null });
   if (CMT.id !== rep.id) Object.assign(CMT, { id: rep.id, draft: { report: '', pastor_msg: '' }, busy: false, del: null });
   const row = (wk || []).find(x => x.cell_id === rep.cell_id) || {};
@@ -1454,7 +1501,7 @@ async function viewReportDetail(app, v) {
       attn.map(n => `<div><b>${esc(memName(n.member_id))}</b> · ${catsLabel(n)}<div class="small">${TX('care:' + n.id, n.content)}</div></div>`).join('') + '</div>';
   }
 
-  const sepIds = new Set(((await rpc('separate_members', { p_cell: rep.cell_id }).catch(() => [])) || []).map(x => x.member_id));
+  const sepIds = new Set(((await sepP) || []).map(x => x.member_id));
   const att = roster.filter(x => x.attendance && !sepIds.has(x.member_id));
   const sepMet = roster.filter(x => sepIds.has(x.member_id) && x.attendance === 'present');
   const listedAtt = att.filter(x => x.type_in_week === 'member');
@@ -1733,15 +1780,19 @@ async function reviewBacklog(exceptWeek) {
    Leadership 홈
    ===================================================================== */
 async function viewLeadershipHome(app, v) {
-  await loadSched();
-  setTop(S.me?.name || tr('교역자', 'Pastoral staff'), false); renderTabs(true);
   const week = v.week || S.ctx.this_week;
-  const [rows, asg, lr, unread] = await Promise.all([
+  // 서로 기다릴 필요 없는 조회는 한꺼번에 시작한다
+  const noticesP = rpc('notice_list', { p_limit: 3 }).catch(() => []);
+  const backlogP = reviewBacklog(week).catch(() => []);
+  const [, rows, asg, lr, unread] = await Promise.all([
+    loadSched(),
     rpc('get_week_status', { p_week_start: week }),
     q(sb.from('leadership_assignments').select('cell_id, start_date, end_date').eq('leadership_user_id', S.me.id)),
     rpc('lr_get', { p_week: week }).catch(() => null),
     rpc('msg_unread').catch(() => 0)
   ]);
+  const unseenP = sharedUnseen(week, rows).catch(() => []);
+  setTop(S.me?.name || tr('교역자', 'Pastoral staff'), false); renderTabs(true);
   const today = S.ctx.today;
   const current = new Set(asg.filter(a => a.start_date <= today && (!a.end_date || a.end_date >= today)).map(a => a.cell_id));
   const busan = rows.filter(r => r.campus === '부산' && !r.i_am_leader).sort((a, b) => a.cell_name.localeCompare(b.cell_name, 'ko'));
@@ -1759,7 +1810,7 @@ async function viewLeadershipHome(app, v) {
   mine.sort((a, b) => order(a) - order(b) || a.cell_name.localeCompare(b.cell_name, 'ko'));
 
   let h = `<h1>${esc(S.me.name)}</h1>` + weekNav(week, 'lh-week') + (showBusan ? campusSeg() : '');
-  h += noticeCard(await rpc('notice_list', { p_limit: 3 }).catch(() => []), true);
+  h += noticeCard(await noticesP, true);
   {
     const st = !lr ? ['pill warn', '아직 작성 전'] : lr.status === 'submitted' ? ['pill ok', '제출 완료 · ' + (lr.items || []).length + '명'] : ['pill accent', '작성 중'];
     h += `<div class="card stack" style="margin-bottom:12px"><div class="row"><h3 style="margin:0">교역자 보고</h3><span class="spacer"></span><span class="${st[0]}">${st[1]}</span></div>
@@ -1769,14 +1820,14 @@ async function viewLeadershipHome(app, v) {
       <button class="listitem" data-act="open-moves" style="margin-bottom:12px"><span class="top"><b>셀 이동 관리</b><span class="small muted">등록 · 연락 · 적용 · 이력 →</span></span><span class="small muted">교역자 회의에서 결정된 셀 이동을 등록하고, 연락을 마친 뒤 실제로 옮깁니다.</span></button>` + msgEntry(unread, '셀리더나 담임 목사님·담임 사모님께서 보낸 메시지를 보고 답장할 수 있습니다.');
   }
   // 확인할 보고서: 주차와 상관없이 「제출됐는데 내가 아직 확인하지 않은」 보고서. 최근 제출 순
-  const queue = [...new Map([...need.map(r => ({ ...r, week_start: r.week_start || week })), ...(await reviewBacklog(week))].map(r => [r.report_id, r])).values()]
+  const queue = [...new Map([...need.map(r => ({ ...r, week_start: r.week_start || week })), ...(await backlogP)].map(r => [r.report_id, r])).values()]
     .sort((a, b) => String(b.submitted_at || '').localeCompare(String(a.submitted_at || '')));
   h += queue.length
     ? `<div class="banner warn"><b>확인이 필요한 보고서가 ${queue.length}건 있습니다</b><div class="stack" style="gap:6px;margin-top:10px">${queue.slice(0, 10).map(r =>
         `<button class="listitem" data-act="open-detail" data-id="${r.report_id}" style="background:var(--card, #fff)"><span class="top"><b>${esc(r.cell_name)}${schedTag(r.cell_id)}</b><span class="pill ${r.week_start === week ? 'warn' : 'accent'}">${weekLabel(r.week_start)}</span></span><span class="small muted">${r.submitted_at ? dateTime(r.submitted_at) + ' 제출' : ''}${r.week_start < week ? ' · 지난 주차 보고서' : ''}</span></button>`).join('')}</div>
         ${queue.length > 10 ? `<p class="tiny muted" style="margin:6px 0 0">최근 제출 10건만 보여 드립니다.</p>` : ''}</div>`
     : mine.length ? '<div class="banner"><b>지금 확인할 보고서가 없습니다</b>제출되는 대로 여기에 표시됩니다.</div>' : '';
-  const unseen = await sharedUnseen(week, rows);
+  const unseen = await unseenP;
   if (unseen.length) h += `<div class="banner" style="margin-top:12px"><b>함께 맡은 셀 · 아직 안 보신 보고서 ${unseen.length}건</b><span class="small">다른 분이 먼저 확인했습니다. 열어 보시면 여기서 사라집니다.</span><div class="stack" style="gap:6px;margin-top:10px">${unseen.slice(0, 10).map(r =>
       `<button class="listitem" data-act="open-detail" data-id="${r.report_id}" style="background:var(--card, #fff)"><span class="top"><b>${esc(r.cell_name)}${schedTag(r.cell_id)}</b><span class="pill accent">${weekLabel(r.week_start)}</span></span><span class="small muted">${esc(r.reviewed_by_name || '다른 교역자')} 확인${r.reviewed_at ? ' · ' + dateTime(r.reviewed_at) : ''}</span></button>`).join('')}</div></div>`;
   h += `<div class="stats" style="margin-top:12px">
@@ -1955,10 +2006,11 @@ function pastoralCareCard(b) {
     </div></details>`;
 }
 async function viewDashboard(app, v) {
-  await loadSched();
-  setTop(tr('전체 현황', 'Overview'), false); renderTabs(true);
   const week = v.week || S.ctx.this_week;
-  const [allRows, lrs, wkNotes, pmsgsAll, todo, care] = await Promise.all([
+  const unreadP = rpc('msg_unread').catch(() => 0);
+  const noticesP = rpc('notice_list', { p_limit: 3 }).catch(() => []);
+  const [, allRows, lrs, wkNotes, pmsgsAll, todo, care] = await Promise.all([
+    loadSched(),
     rpc('get_week_status', { p_week_start: week }),
     rpc('lr_overview', { p_week: week }).catch(() => []),
     rpc('pastoral_note_list', { p_limit: 200, p_only_needs: false }).then(x => x.filter(n => n.met_on >= week && n.met_on <= addDays(week, 6))).catch(() => []),
@@ -1967,11 +2019,12 @@ async function viewDashboard(app, v) {
     // 목회적 케어 보고: 불러오지 못하면(DB 적용 전 등) 칸을 숨긴다
     isSenior() ? rpc('cellcare_pastoral_board').catch(e => { console.warn('목회적 케어 보고 불러오기 실패', e); return null; }) : null
   ]);
+  setTop(tr('전체 현황', 'Overview'), false); renderTabs(true);
   const hasBusan = allRows.some(r => campusOf(r) === '부산');
   const rows = hasBusan ? allRows.filter(r => campusOf(r) === CAMP.v) : allRows;
   const cellCampus = new Map(allRows.map(r => [r.cell_name, campusOf(r)]));
   const pmsgs = hasBusan ? pmsgsAll.filter(x => (cellCampus.get(x.cell_name) || '분당') === CAMP.v) : pmsgsAll;
-  const unread = await rpc('msg_unread').catch(() => 0);
+  const unread = await unreadP;
   const N = rows.length;
   const sub = rows.filter(r => r.status === 'submitted');
   // 직접 확인하는 셀은 「확인하실 것」에서 따로 보여 주므로 교역자 확인 숫자에서 뺀다
@@ -1996,7 +2049,7 @@ async function viewDashboard(app, v) {
 
   let h = `<h1>${tr('전체 현황', 'Overview')}</h1>` + pastoralCareCard(care) + seniorTodoCard(todo) + weekNav(week, 'db-week');
   if (hasBusan) h += campusSeg();
-  h += noticeCard(await rpc('notice_list', { p_limit: 3 }).catch(() => []), true);
+  h += noticeCard(await noticesP, true);
   h += msgEntry(unread, tr('셀리더에게 보고서와 상관없이 직접 말씀을 전하고, 셀리더가 보낸 메시지와 답장을 봅니다.', 'Send a note to cell leaders anytime and read their messages and replies.'));
   if (pmsgs.length) {
     const short = (t) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > 70 ? t.slice(0, 68) + '…' : t; };
@@ -2510,10 +2563,10 @@ async function viewNotesHome(app, v) {
   if (typeof unreadNoteIds === 'function') { (NOTE.fresh = NOTE.fresh || new Set()); unreadNoteIds().forEach(id => NOTE.fresh.add(id)); markNoteNotificationsSeen(); }
   let list = NOTE.filter === 'mine' ? rows.filter(r => r.mine) : weekly ? rows.filter(r => r.met_on >= NOTE.week && r.met_on <= addDays(NOTE.week, 6)) : rows;
   if (NOTE.campus) list = list.filter(r => noteCampus(r) === NOTE.campus);
-  await attachNoteCats(rows);
+  const [, cmtRows] = await Promise.all([attachNoteCats(rows), rows.length ? rpc('note_comments_for', { p_notes: rows.map(r => r.id) }).catch(() => []) : []]);
   NOTE.list = rows;
   NOTE.cmts = {};
-  if (rows.length) ((await rpc('note_comments_for', { p_notes: rows.map(r => r.id) }).catch(() => [])) || []).forEach(c => { (NOTE.cmts[c.note_id] = NOTE.cmts[c.note_id] || []).push(c); });
+  (cmtRows || []).forEach(c => { (NOTE.cmts[c.note_id] = NOTE.cmts[c.note_id] || []).push(c); });
   await loadCommentReplies('note', Object.values(NOTE.cmts).flat().map(c => c.id));
   let h = `<h1>${tr('성도 동정', 'Pastoral notes')}${info('notes')[0]}</h1>${info('notes')[1]}
     <p class="sub">${tr('교역자가 특별히 만난 분들의 소식을 나눕니다. 담임 목사님·담임 사모님은 모든 동정을 보시고, 다른 교역자는 쓴 분이 고른 분만 봅니다.', 'Pastoral staff share news about people they met. Pastor Scott Brenner & Mrs. Sunghee Brenner see every note; other staff see only what is shared with them.')}</p>
