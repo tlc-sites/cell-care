@@ -1768,6 +1768,14 @@ async function sharedUnseen(week, rows) {
 
 /* 다른 주차에 늦게 제출돼 아직 확인 전인 보고서. 확인 권한은 그 주의 get_week_status(i_can_review)로 판단 */
 async function reviewBacklog(exceptWeek) {
+  // 확인 대기 보고서 목록(평균 1초)은 주간 현황처럼 30초 재사용, 저장·확인 등을 하면 비워짐
+  const key = 'backlog' + exceptWeek, hit = RPC_CACHE.get(key);
+  if (!DEMO.role && hit && Date.now() - hit.at < 30000) return hit.p;
+  const p = reviewBacklogLoad(exceptWeek);
+  if (!DEMO.role) RPC_CACHE.set(key, { p, at: Date.now() });
+  return p;
+}
+async function reviewBacklogLoad(exceptWeek) {
   const pend = await q(sb.from('weekly_reports').select('id, week_start, submitted_at').eq('status', 'submitted').eq('review_status', 'pending')
     .neq('week_start', exceptWeek).order('submitted_at', { ascending: false }).limit(80)).catch(() => []);
   const ids = new Set((pend || []).map(r => r.id));
@@ -1898,8 +1906,8 @@ function groupRows(rows) {
 }
 async function signals(week) {
   const w1 = addDays(week, -7), w2 = addDays(week, -14);
-  const [prev, prev2, cells] = await Promise.all([rpc('get_week_status', { p_week_start: w1 }), rpc('get_week_status', { p_week_start: w2 }),
-    q(sb.from('cells').select('id, created_at'))]);
+  const [prev, prev2, cells, cur] = await Promise.all([rpc('get_week_status', { p_week_start: w1 }), rpc('get_week_status', { p_week_start: w2 }),
+    q(sb.from('cells').select('id, created_at')), rpc('get_week_status', { p_week_start: week })]);
   const made = {}; cells.forEach(c => { made[c.id] = kstDate(c.created_at); });
   const out = [];
   for (const r of prev) {
@@ -1914,13 +1922,17 @@ async function signals(week) {
   }
   try {
     const weeks = [week, w1, w2];
-    const rows = await q(sb.from('attendance').select('member_id, status, weekly_reports!inner(week_start, cell_id, status)').in('weekly_reports.week_start', weeks).eq('weekly_reports.status', 'submitted'));
+    // 제출된 보고서 번호를 이미 받은 주간 현황에서 골라 출석만 읽는다(예전: 보고서 표와 엮어 읽어 평균 3초)
+    const repOf = new Map();
+    [[cur, week], [prev, w1], [prev2, w2]].forEach(([set, w]) => (set || []).forEach(r => { if (r.report_id && r.status === 'submitted') repOf.set(r.report_id, { week_start: w, cell_id: r.cell_id }); }));
+    const ids = [...repOf.keys()], parts = [];
+    for (let i = 0; i < ids.length; i += 60) parts.push(ids.slice(i, i + 60));   // 주소가 너무 길어지지 않게 60개씩
+    const rows = (await Promise.all(parts.map(x => q(sb.from('attendance').select('member_id, status, report_id').in('report_id', x))))).flat();
     const by = new Map();
-    for (const a of rows) { const k = a.member_id; if (!by.has(k)) by.set(k, { cell: a.weekly_reports.cell_id, weeks: new Set() }); if (a.status === 'absent') by.get(k).weeks.add(a.weekly_reports.week_start); }
+    for (const a of rows) { const wr = repOf.get(a.report_id); if (!wr) continue; const k = a.member_id; if (!by.has(k)) by.set(k, { cell: wr.cell_id, weeks: new Set() }); if (a.status === 'absent') by.get(k).weeks.add(wr.week_start); }
     const hit = [...by.entries()].filter(([, x]) => weeks.every(w => x.weeks.has(w)));
     if (hit.length) {
       const mem = await q(sb.from('cell_members').select('id, name, cell_id').in('id', hit.map(([id]) => id)));
-      const cur = await rpc('get_week_status', { p_week_start: week });
       for (const [id, x] of hit) {
         const mm = mem.find(m => m.id === id); const c = cur.find(r => r.cell_id === x.cell);
         out.push({ cell: c ? c.cell_name : '', text: (mm ? mm.name : tr('셀원', 'Member')) + tr(' 3주 연속 결석', ' — absent 3 weeks in a row'), id: c ? c.report_id : null });

@@ -257,3 +257,6 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 운영 로그: 사모님 휴대폰 보고서 상세에서 `canceling statement due to statement timeout`. 교역자 홈이 `get_week_status`를 최대 16번(이번 주 + 지난 3주 + 확인 대기 주차 12개) 동시에 부름.
 - `rpc()`: `get_week_status`는 같은 인자를 30초 재사용(진행 중인 조회도 함께 씀). `READ_RPC`에 없는 함수(저장·제출·확인 등)를 부르면 바로 비움. 다른 사람이 바꾼 현황은 최대 30초 늦게 보일 수 있음.
 - 차례로 기다리던 조회를 한꺼번에: 보고서 상세(차례로 기다리는 왕복 약 8번 → 4번), 교역자 홈, 셀리더 홈, 전체 현황, 성도 동정, `loadSched`.
+- 운영 `pg_stat_statements`(11/17): `get_week_status` 9,202회 평균 0.73초·최대 8초, `cellcare_notification_list` 약 9,000회 평균 0.9초·최대 7.9초(부를 때마다 `cellcare_sync_notifications()`), 전체 현황 결석 신호의 `attendance`+`weekly_reports!inner` 조회 평균 3초, 확인 대기 `weekly_reports` 조회 평균 1초.
+- 그래서: 결석 신호는 이미 받은 주간 현황의 제출 보고서 번호로 `attendance.in('report_id')`만 읽음(60개씩 나눔). `reviewBacklog`도 30초 재사용. 알림 목록은 띄워 둔 동안 3분마다(예전 1분), 화면을 옮길 때는 90초 지나야(예전 30초) 다시 부름.
+- DB 쪽은 손대지 않음. 더 줄이려면 `get_week_status` 자체·알림 동기화·RLS를 봐야 함(DB 변경이라 확인 필요).

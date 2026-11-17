@@ -81,7 +81,7 @@ function demoInboxRows() {
 async function refreshInboxBadge(force = false) {
   if (DEMO.role && S.ctx && !INBOX.demo) { INBOX.rows = demoInboxRows(); INBOX.demo = true; }
   if (!DEMO.role && INBOX.demo) { INBOX.rows = []; INBOX.demo = false; INBOX.loadedAt = 0; }
-  if (!S.ctx || DEMO.role || INBOX.loading || (!force && Date.now() - INBOX.loadedAt < 30000)) { updateInboxBadge(); return; }
+  if (!S.ctx || DEMO.role || INBOX.loading || (!force && Date.now() - INBOX.loadedAt < 90000)) { updateInboxBadge(); return; }
   INBOX.loading = true;
   const userId = S.me.id;
   try {
@@ -261,5 +261,6 @@ window.addEventListener('hashchange', () => { const route = CellCareRoutes.parse
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
   if (e.data?.type === 'cellcare-notification-open') openNotificationRoute(CellCareRoutes.parse(e.data.url)).catch(err => toast(errText(err)));
 });
+// 알림 목록은 부를 때마다 알림을 다시 맞추느라 무거워(평균 0.9초) 화면을 띄워 둔 동안 3분마다만 새로 본다. 푸시 알림은 따로 바로 온다
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.ctx) refreshInboxBadge(true); });
-window.setInterval(() => { if (document.visibilityState === 'visible' && S.ctx) refreshInboxBadge(true); }, 60000);
+window.setInterval(() => { if (document.visibilityState === 'visible' && S.ctx) refreshInboxBadge(true); }, 180000);
