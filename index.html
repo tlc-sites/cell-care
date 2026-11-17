@@ -2558,7 +2558,13 @@ async function viewNotesHome(app, v) {
     app.innerHTML = h; applyNoteSearch(); return;
   }
   h += '<div class="stack" style="margin-top:12px">' + (list.length ? list.map(noteCard).join('') : `<p class="empty">${NOTE.campus && rows.length ? tr(campusLabel(NOTE.campus) + ' 캠퍼스 동정이 없습니다.', 'No notes for ' + campusLabel(NOTE.campus) + '.') : NOTE.filter === 'needs' ? tr('확인할 동정이 없습니다.', isSenior() ? 'Nothing waiting for you.' : 'Nothing waiting for the pastor.') : tr('아직 쓴 동정이 없습니다.', 'No notes yet.')}</p>`) + '</div>';
-  app.innerHTML = h; applyNoteSearch();
+  app.innerHTML = h; applyNoteSearch(); focusNote();
+}
+function focusNote() {
+  if (!NOTE.focus) return;
+  const el = document.getElementById('note-' + NOTE.focus); NOTE.focus = null;
+  if (!el) return toast(tr('이 동정은 이미 확인하셨거나 볼 수 없습니다. 「최근 순」에서 찾아 주세요.', 'This note is no longer in this list. Please look under Latest.'), 5000);
+  el.scrollIntoView({ block: 'center' }); el.classList.add('notification-highlight');
 }
 function viewNoteEdit(app, v) {
   const f = NOTE.form;
@@ -3530,7 +3536,8 @@ document.addEventListener('click', async (e) => {
     case 'note-tx': return noteTranslate();
     case 'sack': return seniorAck(d.kind, d.id, d.review === '1');
     case 'pcare-ack': try { await rpc('cellcare_pastoral_alert_ack', { p_alert: d.id }); CARE.open = true; toast(tr('케어 보고를 확인했습니다. 셀모임을 다시 진행할 때까지 목록에 남습니다.', 'Marked as seen. It stays listed until the cell meets again.')); } catch (e) { toast(errText(e)); } return render();
-    case 'todo-notes': NOTE.filter = 'needs'; return switchTab('notes');
+    // 「확인하실 것」의 동정 열어 보기: 그 동정이 보이도록 캠퍼스·검색 거르기를 풀고 그 카드로 이동
+    case 'todo-notes': NOTE.filter = 'needs'; if (d.id) { NOTE.focus = d.id; NOTE.campus = ''; NOTE.q = ''; } return switchTab('notes');
     case 'note-ack': try { await rpc('pastoral_note_ack', { p_id: d.id }); toast(tr('확인 표시를 했습니다.', 'Marked as seen.')); } catch (e) { toast(errText(e)); } return render();
     case 'nt-cat': { noteFormSync(); const cs = NOTE.form.categories; const k = cs.indexOf(d.v); if (k >= 0) cs.splice(k, 1); else cs.push(d.v); return render(); }
     case 'nt-vis': noteFormSync(); NOTE.form.visibility = d.v; return render();

@@ -248,3 +248,4 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 다시 열리면 보던 탭으로: `render()`가 sessionStorage `cc_last`({tab, view})를 남기고, `loadContext()`가 처음 한 번 그 탭을 고른다(`REOPEN`).
 - 성도 동정 화면에서는 `<html class="no-ptr">` → `overscroll-behavior-y: contain`(당겨서 새로고침 막기).
 - 기록: `clientLog(kind,msg)` → `api/notify-request`의 `{ clientLog }` → Vercel 로그 `[client-log]`(알림 없음, 화면당 5건까지, 이름·내용 없이 오류 문구·화면·역할·기기). 종류: `reopen`(reload/navigate · 보던 화면), `error`, `rejection`, `render`. Vercel 로그는 1시간만 남음.
+- 같은 날 사모님 「김○○ 성도 동정을 보려 하면 다른 화면으로 감」: 전체 현황 「확인하실 것」의 동정 「열어 보기」(`todo-notes`)가 동정 id를 버리고 성도 동정 목록만 열고 있었음. 이제 `NOTE.focus`로 그 카드까지 내려가 테두리 강조(`focusNote`), 캠퍼스 토글·검색은 그때만 풀림. 목록에 없으면 안내 문구.
