@@ -597,6 +597,8 @@ const _setTop = setTop, _renderTabs = renderTabs;
 let LAST_TOP = ['', false], LAST_TABS = true;
 setTop = (title, canBack) => { LAST_TOP = [title, canBack]; _setTop(title, canBack); };
 renderTabs = (show) => { LAST_TABS = show; _renderTabs(show); };
+// 로그인 화면·처음 불러오기처럼 render() 밖에서 화면을 바꿀 때: 불러오던 화면은 버리고, 다른 계정의 재사용 데이터도 비운다
+function cancelRenders() { RSEQ++; RPC_CACHE.clear(); const a = $('#app'); if (a) a.classList.remove('busy'); }
 function settleRender(v) {
   if (v.name !== 'report') { hideFooter(); E = null; }   // 늦게 끝난 작성 화면이 남긴 아래 막대·편집 상태 정리
   if (RKEEP) { _setTop(...RKEEP.top); _renderTabs(RKEEP.tabs); }
@@ -620,7 +622,7 @@ async function renderView(v, app, seq) {
     if (v.name === 'notifications') return await viewNotifications(app);
     if (v.name === 'notificationDetail') return await viewNotificationDetail(app, v);
     if (v.name === 'leaderHome') return await viewLeaderHome(app);
-    if (v.name === 'report') return await viewReportEditor(app, v);
+    if (v.name === 'report') return await viewReportEditor(app, v, seq);
     if (v.name === 'leadershipHome') return await viewLeadershipHome(app, v);
     if (v.name === 'detail') return await viewReportDetail(app, v);
     if (v.name === 'dashboard') return await viewDashboard(app, v);
@@ -655,6 +657,7 @@ const BRAND_MARK = document.querySelector('.brand img').outerHTML;
 const LOGIN = { email: '', sent: false, busy: false, msg: '', mode: 'login', regName: '', regDone: false, notApproved: false };
 
 function viewLogin() {
+  cancelRenders();
   S.ctx = null; setTop(''); renderTabs(false);
   const app = $('#app');
   if (LOGIN.mode === 'register') return viewRegister(app);
@@ -757,6 +760,7 @@ async function verifyCode() {
 }
 
 async function loadContext() {
+  cancelRenders();
   const ctx = await rpc('get_my_context');
   if (!ctx) {
     S.ctx = null; setTop(''); renderTabs(false);
@@ -1077,8 +1081,10 @@ async function loadEditor(id) {
   };
 }
 
-async function viewReportEditor(app, v) {
-  E = await loadEditor(v.id);
+async function viewReportEditor(app, v, seq) {
+  const ed = await loadEditor(v.id);
+  if (seq !== RSEQ) return;   // 불러오는 사이 다른 화면을 눌렀으면 작성 화면을 그리지 않음(작성 화면은 #app에 바로 그림)
+  E = ed;
   if (E.rep.status === 'submitted') { E = null; S.view = { name: 'detail', id: v.id, mine: true }; return render(); }
   renderEditor();
 }
