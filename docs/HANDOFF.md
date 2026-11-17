@@ -242,3 +242,9 @@ Claude(웹) 세션에서 2026-10-14 ~ 10-21에 만든 부분의 정리입니다.
 - 쓰기: 새 동정은 캠퍼스가 비어 있고(`NOTE.form.campus=''`), 분당·부산을 고르지 않으면 저장 전에 「캠퍼스(분당·부산)를 골라 주세요」. 고치기는 저장된 값(없으면 분당) 그대로.
 - 목록: 모든 카드에 캠퍼스 표시(`noteCampus` — 비어 있으면 분당, 부산은 강조색). 위에 항상 「전체 / 분당 n / 부산 n」 토글(`NOTE.campus`, 기기에 `cc_note_campus`로 기억), 주간 정리에도 적용.
 - DB 변경 없음(`cellcare_pastoral_note_save`의 `p_campus`를 그대로 씀). staff-guide 11/16 소식.
+
+## 2026-11-17 휴대폰에서 성도 동정이 홈으로 튕김 (사모님, 안드로이드 설치 앱)
+- 재현 못 함(휴대폰 흉내·동정 100건). 앱 스스로 홈으로 보내는 길은 없어서, 페이지가 통째로 다시 열린 것으로 봄(당겨서 새로고침 의심).
+- 다시 열리면 보던 탭으로: `render()`가 sessionStorage `cc_last`({tab, view})를 남기고, `loadContext()`가 처음 한 번 그 탭을 고른다(`REOPEN`).
+- 성도 동정 화면에서는 `<html class="no-ptr">` → `overscroll-behavior-y: contain`(당겨서 새로고침 막기).
+- 기록: `clientLog(kind,msg)` → `api/notify-request`의 `{ clientLog }` → Vercel 로그 `[client-log]`(알림 없음, 화면당 5건까지, 이름·내용 없이 오류 문구·화면·역할·기기). 종류: `reopen`(reload/navigate · 보던 화면), `error`, `rejection`, `render`. Vercel 로그는 1시간만 남음.

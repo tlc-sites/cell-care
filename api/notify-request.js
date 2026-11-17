@@ -5,6 +5,12 @@ module.exports = async (req, res) => {
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    // 화면 오류·다시 열림 기록 → Vercel 로그에만 남김(알림 없음). 이름·내용은 오지 않음
+    if (body.clientLog) {
+      const c = body.clientLog || {}, cut = (v, n) => String(v == null ? '' : v).slice(0, n);
+      console.error('[client-log] ' + JSON.stringify({ kind: cut(c.kind, 20), msg: cut(c.msg, 400), view: cut(c.view, 40), tab: cut(c.tab, 20), role: cut(c.role, 80), ua: cut(c.ua, 160) }));
+      return res.status(200).json({ ok: true });
+    }
     // 로그인 메일 문제 → 관리자(간사) 휴대폰으로 (10분에 한 번)
     if (body.alert) {
       const t = await serviceRpc('alert_notify_targets', {});

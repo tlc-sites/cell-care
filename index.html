@@ -47,6 +47,8 @@
 /* hidden 속성은 늘 숨김(알약 등 display를 정한 요소도). 알림 0개인데 「0」이 보이던 것 */
 [hidden] { display: none !important; }
 html, body { margin: 0; }
+/* 긴 목록(성도 동정)에서 맨 위를 끌어 내려도 페이지가 새로고침되지 않게 */
+html.no-ptr, html.no-ptr body { overscroll-behavior-y: contain; }
 body {
   background: var(--bg); color: var(--ink);
   font-family: var(--font-body); font-size: 17px; line-height: 1.6;
@@ -439,6 +441,20 @@ function errText(e) {
   if (/JWT|jwt expired|invalid claim/i.test(m)) return '로그인이 만료되었습니다. 다시 로그인해 주세요.';
   return m.replace(/^VERSION_CONFLICT:\s*/, '');
 }
+/* 화면이 다시 열렸을 때(새로고침·브라우저가 다시 띄움) 보던 탭으로 돌아가고, 화면 오류와 함께 서버 로그에 남긴다.
+   이름·내용은 보내지 않고 오류 문구·화면 이름·역할·기기 종류만 보낸다 */
+let REOPEN = (() => { try { return JSON.parse(sessionStorage.getItem('cc_last') || 'null'); } catch (_) { return null; } })();
+let CLIENT_LOGS = 0;
+function clientLog(kind, msg) {
+  if (DEMO.role || CLIENT_LOGS >= 5) return;
+  CLIENT_LOGS++;
+  try {
+    fetch('api/notify-request', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientLog: { kind, msg: String(msg || '').slice(0, 400), view: S.view?.name || '', tab: S.tab || '', role: (S.roles || []).join(','), ua: navigator.userAgent.slice(0, 160) } }) }).catch(() => {});
+  } catch (_) {}
+}
+window.addEventListener('error', (e) => clientLog('error', (e.message || '') + (e.filename ? ' @' + String(e.filename).split('/').pop() + ':' + e.lineno : '')));
+window.addEventListener('unhandledrejection', (e) => clientLog('rejection', (e.reason && (e.reason.stack || e.reason.message)) || e.reason));
 async function rpc(name, args) {
   if (DEMO.role) return demoRpc(name, args || {});
   const client = name.startsWith('cellcare_') ? sb.schema('report') : sb;
@@ -564,6 +580,8 @@ async function render() {
   const v = S.view; const app = $('#app');
   // 보고서 작성 화면을 벗어나면 (뒤로가기 버튼·휴대폰 뒤로가기 포함) 아래 「이전/다음」 막대를 항상 닫음
   if (v.name !== 'report') { if (E) { try { await save(); } catch (_) {} E = null; } hideFooter(); }
+  document.documentElement.classList.toggle('no-ptr', v.name === 'notesHome');
+  if (!DEMO.role) { try { sessionStorage.setItem('cc_last', JSON.stringify({ tab: S.tab, view: v.name })); } catch (_) {} }
   try {
     if (v.name === 'notifications') return await viewNotifications(app);
     if (v.name === 'notificationDetail') return await viewNotificationDetail(app, v);
@@ -588,6 +606,7 @@ async function render() {
     if (v.name === 'thread') return await viewThread(app, v);
   } catch (e) {
     console.error(e);
+    clientLog('render', v.name + ': ' + errText(e));
     setTop('', S.stack.length > 0); renderTabs(true);
     app.innerHTML = '<div class="banner danger" role="alert"><b>화면을 불러오지 못했습니다.</b>' + esc(errText(e)) +
       '</div><div style="margin-top:12px"><button class="btn ghost" data-act="reload">다시 시도</button></div>';
@@ -718,6 +737,13 @@ async function loadContext() {
     setTop(''); renderTabs(false);
     $('#app').innerHTML = `<h1>${esc(S.me.name)}님, 반갑습니다</h1><div class="card">아직 맡으신 셀이나 역할이 없습니다. 담당 교역자에게 문의해 주세요.</div>`;
     return;
+  }
+  if (REOPEN && !DEMO.role) {
+    // 같은 창에서 다시 열림: 보던 탭으로. 어떻게 다시 열렸는지(reload·navigate) 기록
+    const nav = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0] || {}).type || '';
+    if (!S.tab && tabs.find(t => t.id === REOPEN.tab)) S.tab = REOPEN.tab;
+    clientLog('reopen', nav + ' · 보던 화면 ' + (REOPEN.view || ''));
+    REOPEN = null;
   }
   if (!S.tab || !tabs.find(t => t.id === S.tab)) S.tab = tabs[0].id;
   S.stack = []; S.view = { ...TAB_HOME[S.tab] };
